@@ -1,0 +1,27 @@
+# Build outputs
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# dotnet publish / tools
+publish/
+*.nupkg
+
+# EF Core migrations snapshot (optional — remove if you want to track)
+# HorseRace.DAL/Migrations/
+
+# Environment / secrets
+appsettings.Development.json
+appsettings.local.json
+*.env
+
+# Claude Code
+.claude/
+
+# OS
+Thumbs.db
+.DS_Store
