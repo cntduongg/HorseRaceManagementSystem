@@ -8,9 +8,9 @@ public class PredictionSettlement
 
     public Guid PredictionId { get; set; }
 
-    public Guid RaceId { get; set; }
+    public int RaceId { get; set; }
 
-    public Guid SpectatorId { get; set; }
+    public int SpectatorId { get; set; }
 
     public int MatchedCount { get; set; }
 

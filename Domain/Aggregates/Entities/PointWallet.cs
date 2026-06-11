@@ -4,7 +4,7 @@ public class PointWallet
 {
     public Guid WalletId { get; set; }
 
-    public Guid SpectatorId { get; set; }
+    public int SpectatorId { get; set; }
 
     public decimal Balance { get; set; } = 100;
 

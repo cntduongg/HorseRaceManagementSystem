@@ -2,7 +2,7 @@ namespace Domain.Aggregates.Entities;
 
 public class Spectator
 {
-    public Guid UserId { get; set; }
+    public int UserId { get; set; }
 
     public DateTime RegisteredAt { get; set; } = DateTime.UtcNow;
 

@@ -6,13 +6,13 @@ public class WalletTransaction
 
     public Guid WalletId { get; set; }
 
-    public Guid SpectatorId { get; set; }
+    public int SpectatorId { get; set; }
 
     public Guid? PredictionId { get; set; }
 
     public Guid? SettlementRunId { get; set; }
 
-    public Guid? AdminId { get; set; }
+    public int? AdminId { get; set; }
 
     public string Type { get; set; } = string.Empty;
 

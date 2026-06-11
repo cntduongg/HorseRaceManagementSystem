@@ -2,7 +2,7 @@ namespace Domain.Aggregates.Entities;
 
 public class JockeyProfile
 {
-    public Guid UserId { get; set; }
+    public int UserId { get; set; }
 
     public string? LicenseNumber { get; set; }
 
@@ -23,6 +23,4 @@ public class JockeyProfile
     public DateTime? UpdatedAt { get; set; }
 
     public User? User { get; set; }
-
-    public ICollection<Entry> Entries { get; set; } = new List<Entry>();
 }

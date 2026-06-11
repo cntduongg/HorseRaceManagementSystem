@@ -35,7 +35,7 @@ public class PredictionConfiguration : IEntityTypeConfiguration<Prediction>
             "\"FirstEntryId\" <> \"SecondEntryId\" AND \"FirstEntryId\" <> \"ThirdEntryId\" AND \"SecondEntryId\" <> \"ThirdEntryId\"");
 
         builder.HasOne(p => p.Race)
-            .WithMany()
+            .WithMany(r => r.Predictions)
             .HasForeignKey(p => p.RaceId)
             .OnDelete(DeleteBehavior.Restrict);
 

@@ -4,7 +4,7 @@ public class SettlementRun
 {
     public Guid SettlementRunId { get; set; }
 
-    public Guid RaceId { get; set; }
+    public int RaceId { get; set; }
 
     public string Type { get; set; } = "Publish";
 
@@ -16,7 +16,7 @@ public class SettlementRun
 
     public decimal TotalPayoutAmount { get; set; }
 
-    public Guid? TriggeredByAdminId { get; set; }
+    public int? TriggeredByAdminId { get; set; }
 
     public DateTime CreatedAt { get; set; }
 

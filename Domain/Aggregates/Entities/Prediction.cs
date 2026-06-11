@@ -4,15 +4,15 @@ public class Prediction
 {
     public Guid PredictionId { get; set; }
 
-    public Guid RaceId { get; set; }
+    public int RaceId { get; set; }
 
-    public Guid SpectatorId { get; set; }
+    public int SpectatorId { get; set; }
 
-    public Guid FirstEntryId { get; set; }
+    public int FirstEntryId { get; set; }
 
-    public Guid SecondEntryId { get; set; }
+    public int SecondEntryId { get; set; }
 
-    public Guid ThirdEntryId { get; set; }
+    public int ThirdEntryId { get; set; }
 
     public decimal BetAmount { get; set; }
 

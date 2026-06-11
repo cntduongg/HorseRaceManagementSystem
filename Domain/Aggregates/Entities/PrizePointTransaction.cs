@@ -4,15 +4,13 @@ public class PrizePointTransaction
 {
     public Guid PrizePointTransactionId { get; set; }
 
-    public Guid RaceResultId { get; set; }
+    public int TournamentId { get; set; }
 
-    public Guid TournamentId { get; set; }
+    public int RaceId { get; set; }
 
-    public Guid RaceId { get; set; }
+    public int EntryId { get; set; }
 
-    public Guid EntryId { get; set; }
-
-    public Guid UserId { get; set; }
+    public int UserId { get; set; }
 
     public string EntityType { get; set; } = string.Empty;
 
