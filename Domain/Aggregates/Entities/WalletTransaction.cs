@@ -2,17 +2,17 @@ namespace Domain.Aggregates.Entities;
 
 public class WalletTransaction
 {
-    public Guid WalletTransactionId { get; set; }
+    public int WalletTransactionId { get; set; }
 
-    public Guid WalletId { get; set; }
+    public int WalletId { get; set; }
 
-    public Guid SpectatorId { get; set; }
+    public int SpectatorId { get; set; }
 
-    public Guid? PredictionId { get; set; }
+    public int? PredictionId { get; set; }
 
-    public Guid? SettlementRunId { get; set; }
+    public int? SettlementRunId { get; set; }
 
-    public Guid? AdminId { get; set; }
+    public int? AdminId { get; set; }
 
     public string Type { get; set; } = string.Empty;
 
@@ -22,7 +22,7 @@ public class WalletTransaction
 
     public string? Reason { get; set; }
 
-    public Guid? RollbackOfTransactionId { get; set; }
+    public int? RollbackOfTransactionId { get; set; }
 
     public DateTime CreatedAt { get; set; }
 
@@ -38,5 +38,6 @@ public class WalletTransaction
 
     public WalletTransaction? RollbackOfTransaction { get; set; }
 
-    public ICollection<WalletTransaction> RollbackTransactions { get; set; } = new List<WalletTransaction>();
+    public ICollection<WalletTransaction> RollbackTransactions { get; set; }
+        = new List<WalletTransaction>();
 }

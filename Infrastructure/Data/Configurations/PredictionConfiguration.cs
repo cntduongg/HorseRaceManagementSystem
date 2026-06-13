@@ -32,10 +32,12 @@ public class PredictionConfiguration : IEntityTypeConfiguration<Prediction>
 
         builder.HasCheckConstraint(
             "CK_Predictions_DifferentEntries",
-            "\"FirstEntryId\" <> \"SecondEntryId\" AND \"FirstEntryId\" <> \"ThirdEntryId\" AND \"SecondEntryId\" <> \"ThirdEntryId\"");
+            "\"FirstEntryId\" <> \"SecondEntryId\" AND " +
+            "\"FirstEntryId\" <> \"ThirdEntryId\" AND " +
+            "\"SecondEntryId\" <> \"ThirdEntryId\"");
 
         builder.HasOne(p => p.Race)
-            .WithMany()
+            .WithMany(r => r.Predictions)
             .HasForeignKey(p => p.RaceId)
             .OnDelete(DeleteBehavior.Restrict);
 
