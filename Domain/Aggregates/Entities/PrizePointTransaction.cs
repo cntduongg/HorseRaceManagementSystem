@@ -2,17 +2,17 @@ namespace Domain.Aggregates.Entities;
 
 public class PrizePointTransaction
 {
-    public Guid PrizePointTransactionId { get; set; }
+    public int PrizePointTransactionId { get; set; }
 
-    public Guid RaceResultId { get; set; }
+    public int RaceResultId { get; set; }
 
-    public Guid TournamentId { get; set; }
+    public int TournamentId { get; set; }
 
-    public Guid RaceId { get; set; }
+    public int RaceId { get; set; }
 
-    public Guid EntryId { get; set; }
+    public int EntryId { get; set; }
 
-    public Guid UserId { get; set; }
+    public int UserId { get; set; }
 
     public string EntityType { get; set; } = string.Empty;
 
@@ -22,7 +22,7 @@ public class PrizePointTransaction
 
     public string Type { get; set; } = "Awarded";
 
-    public Guid? RollbackOfId { get; set; }
+    public int? RollbackOfId { get; set; }
 
     public DateTime CreatedAt { get; set; }
 
@@ -38,5 +38,6 @@ public class PrizePointTransaction
 
     public PrizePointTransaction? RollbackOf { get; set; }
 
-    public ICollection<PrizePointTransaction> Rollbacks { get; set; } = new List<PrizePointTransaction>();
+    public ICollection<PrizePointTransaction> Rollbacks { get; set; }
+        = new List<PrizePointTransaction>();
 }
