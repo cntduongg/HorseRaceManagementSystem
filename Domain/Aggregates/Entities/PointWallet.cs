@@ -2,9 +2,9 @@ namespace Domain.Aggregates.Entities;
 
 public class PointWallet
 {
-    public Guid WalletId { get; set; }
+    public int WalletId { get; set; }
 
-    public Guid SpectatorId { get; set; }
+    public int SpectatorId { get; set; }
 
     public decimal Balance { get; set; } = 100;
 
@@ -16,5 +16,6 @@ public class PointWallet
 
     public Spectator? Spectator { get; set; }
 
-    public ICollection<WalletTransaction> Transactions { get; set; } = new List<WalletTransaction>();
-}   
+    public ICollection<WalletTransaction> Transactions { get; set; }
+        = new List<WalletTransaction>();
+}

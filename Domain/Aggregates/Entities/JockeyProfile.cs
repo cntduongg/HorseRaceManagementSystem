@@ -2,7 +2,7 @@ namespace Domain.Aggregates.Entities;
 
 public class JockeyProfile
 {
-    public Guid UserId { get; set; }
+    public int UserId { get; set; }
 
     public string? LicenseNumber { get; set; }
 
