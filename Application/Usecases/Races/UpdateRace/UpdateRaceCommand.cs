@@ -1,8 +1,9 @@
 using MediatR;
 
-namespace Application.Usecases.Races.CreateRace;
+namespace Application.Usecases.Races.UpdateRace;
 
-public sealed record CreateRaceCommand(
+public sealed record UpdateRaceCommand(
+    int RaceId,
     int TournamentId,
     string Name,
     DateTime ScheduledStartTime,
@@ -11,4 +12,4 @@ public sealed record CreateRaceCommand(
     string RoundType,
     int Referee1Id,
     int Referee2Id
-) : IRequest<int>;
+) : IRequest<bool>;
