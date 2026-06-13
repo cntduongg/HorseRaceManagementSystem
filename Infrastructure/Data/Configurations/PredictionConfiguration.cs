@@ -32,7 +32,9 @@ public class PredictionConfiguration : IEntityTypeConfiguration<Prediction>
 
         builder.HasCheckConstraint(
             "CK_Predictions_DifferentEntries",
-            "\"FirstEntryId\" <> \"SecondEntryId\" AND \"FirstEntryId\" <> \"ThirdEntryId\" AND \"SecondEntryId\" <> \"ThirdEntryId\"");
+            "\"FirstEntryId\" <> \"SecondEntryId\" AND " +
+            "\"FirstEntryId\" <> \"ThirdEntryId\" AND " +
+            "\"SecondEntryId\" <> \"ThirdEntryId\"");
 
         builder.HasOne(p => p.Race)
             .WithMany(r => r.Predictions)

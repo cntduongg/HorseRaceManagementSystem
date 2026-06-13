@@ -4,7 +4,8 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Infrastructure.Data.Configurations;
 
-public class WalletTransactionConfiguration : IEntityTypeConfiguration<WalletTransaction>
+public class WalletTransactionConfiguration
+    : IEntityTypeConfiguration<WalletTransaction>
 {
     public void Configure(EntityTypeBuilder<WalletTransaction> builder)
     {
