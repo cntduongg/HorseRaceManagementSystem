@@ -28,7 +28,7 @@ public class PrizePointTransactionConfiguration : IEntityTypeConfiguration<Prize
 
         builder.HasOne(p => p.RaceResult)
             .WithMany()
-            .HasForeignKey(p => p.RaceResultId)
+            .HasForeignKey(p => new { p.RaceId, p.EntryId })
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(p => p.Tournament)
@@ -57,7 +57,6 @@ builder.HasOne(p => p.User)
     .HasConstraintName("FK_PrizePointTransactions_RollbackOf")
     .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(p => p.RaceResultId);
         builder.HasIndex(p => p.TournamentId);
         builder.HasIndex(p => p.RaceId);
         builder.HasIndex(p => p.EntryId);
