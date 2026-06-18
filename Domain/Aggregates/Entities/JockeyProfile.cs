@@ -23,6 +23,4 @@ public class JockeyProfile
     public DateTime? UpdatedAt { get; set; }
 
     public User? User { get; set; }
-
-    public ICollection<Entry> Entries { get; set; } = new List<Entry>();
 }

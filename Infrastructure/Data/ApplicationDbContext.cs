@@ -22,6 +22,7 @@ public class ApplicationDbContext
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<User> Users => Set<User>();
     public DbSet<PasswordResetOtp> PasswordResetOtps => Set<PasswordResetOtp>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     public DbSet<Spectator> Spectators => Set<Spectator>();
     public DbSet<JockeyProfile> JockeyProfiles => Set<JockeyProfile>();

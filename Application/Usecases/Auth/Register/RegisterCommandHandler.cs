@@ -1,0 +1,86 @@
+using Application.Common;
+using Domain.Aggregates.Entities;
+using MediatR;
+using ShareKernel.UnitOfWork;
+
+namespace Application.Usecases.Auth.Register;
+
+public sealed class RegisterCommandHandler : IRequestHandler<RegisterCommand, RegisterResponse>
+{
+    private static readonly Dictionary<string, int> AllowedRoles = new()
+    {
+        ["SPECTATOR"]   = 4,
+        ["HORSE_OWNER"] = 1,
+        ["JOCKEY"]      = 2,
+    };
+
+    private readonly IUserRepository _userRepository;
+    private readonly IPasswordHasher _passwordHasher;
+    private readonly IUnitOfWork _unitOfWork;
+
+    public RegisterCommandHandler(
+        IUserRepository userRepository,
+        IPasswordHasher passwordHasher,
+        IUnitOfWork unitOfWork)
+    {
+        _userRepository = userRepository;
+        _passwordHasher = passwordHasher;
+        _unitOfWork = unitOfWork;
+    }
+
+    public async Task<RegisterResponse> Handle(RegisterCommand request, CancellationToken cancellationToken)
+    {
+        var roleCode = request.RoleCode?.ToUpperInvariant() ?? "SPECTATOR";
+
+        if (!AllowedRoles.TryGetValue(roleCode, out var roleId))
+        {
+            throw new InvalidOperationException($"Role '{request.RoleCode}' is not allowed for self-registration.");
+        }
+
+        if (roleCode == "JOCKEY")
+        {
+            if (string.IsNullOrWhiteSpace(request.LicenseNumber))
+                throw new InvalidOperationException("LicenseNumber is required for Jockey registration.");
+            if (request.Weight is null or <= 0)
+                throw new InvalidOperationException("Weight must be a positive number for Jockey registration.");
+        }
+
+        var emailExists = await _userRepository.ExistsByEmailAsync(request.Email, cancellationToken);
+        if (emailExists)
+            throw new InvalidOperationException($"Email '{request.Email}' is already registered.");
+
+        var requiresApproval = roleCode is "HORSE_OWNER" or "JOCKEY";
+
+        var user = new User
+        {
+            Email             = request.Email.ToLowerInvariant(),
+            PasswordHash      = _passwordHasher.Hash(request.Password),
+            FullName          = request.FullName,
+            PhoneNumber       = request.PhoneNumber,
+            RoleId            = roleId,
+            IsActive          = !requiresApproval,
+            Status            = requiresApproval ? "Pending" : "Active",
+            IsProfileComplete = false,
+        };
+
+        if (roleCode == "JOCKEY")
+        {
+            user.LicenseNumber = request.LicenseNumber!.Trim();
+            user.Weight        = request.Weight;
+            user.Bio           = request.Bio?.Trim();
+        }
+
+        await _userRepository.AddAsync(user, cancellationToken);
+
+        // Save explicitly so EF Core populates the DB-generated UserId before returning
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return new RegisterResponse(
+            UserId:          user.UserId,
+            Email:           user.Email,
+            FullName:        user.FullName,
+            Status:          user.Status,
+            RequiresApproval: requiresApproval
+        );
+    }
+}

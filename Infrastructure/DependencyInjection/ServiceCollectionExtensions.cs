@@ -1,5 +1,7 @@
+using Application.Common;
 using Infrastructure.Data;
 using Infrastructure.Repositories;
+using Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -30,6 +32,11 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<ApplicationDbContext>());
 
         services.AddScoped(typeof(IRepository<,>), typeof(EfRepository<,>));
+
+        services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+        services.AddScoped<IJwtTokenService, JwtTokenService>();
+        services.AddScoped<IPasswordHasher, PasswordHasher>();
 
         return services;
     }
