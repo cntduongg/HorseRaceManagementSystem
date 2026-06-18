@@ -1,3 +1,5 @@
+using Domain.Aggregates.Entities;
+
 namespace Domain.Aggregates.Entities;
 
 public class RaceResult
@@ -18,7 +20,6 @@ public class RaceResult
     // Navigation
     public Race Race { get; set; } = null!;
     public Entry Entry { get; set; } = null!;
-
 
     public ICollection<PrizePointTransaction> PrizePointTransactions { get; set; }
         = new List<PrizePointTransaction>();

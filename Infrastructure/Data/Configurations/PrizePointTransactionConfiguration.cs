@@ -70,9 +70,10 @@ public class PrizePointTransactionConfiguration : IEntityTypeConfiguration<Prize
 
         // ⚠️ KEEP ONLY IF RaceResult is truly composite key
         builder.HasOne(p => p.RaceResult)
-            .WithMany(r => r.PrizePointTransactions)
-            .HasForeignKey(p => new { p.RaceId, p.EntryId })
-            .OnDelete(DeleteBehavior.Restrict);
+    .WithMany(r => r.PrizePointTransactions)
+    .HasForeignKey(p => new { p.RaceId, p.EntryId })
+    .HasPrincipalKey(r => new { r.RaceId, r.EntryId })
+    .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(p => p.RollbackOf)
             .WithMany(p => p.Rollbacks)

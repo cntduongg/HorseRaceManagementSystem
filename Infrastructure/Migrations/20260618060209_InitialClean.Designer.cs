@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260617131243_InitialCreate")]
-    partial class InitialCreate
+    [Migration("20260618060209_InitialClean")]
+    partial class InitialClean
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -54,9 +54,6 @@ namespace Infrastructure.Migrations
                     b.Property<int>("JockeyId")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("JockeyProfileUserId")
-                        .HasColumnType("integer");
-
                     b.Property<int>("RaceId")
                         .HasColumnType("integer");
 
@@ -82,8 +79,6 @@ namespace Infrastructure.Migrations
                     b.HasIndex("HorseOwnerId");
 
                     b.HasIndex("JockeyId");
-
-                    b.HasIndex("JockeyProfileUserId");
 
                     b.HasIndex("RaceId", "GateNumber")
                         .IsUnique()
@@ -506,9 +501,6 @@ namespace Infrastructure.Migrations
                     b.Property<int>("ThirdEntryId")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("UserId")
-                        .HasColumnType("integer");
-
                     b.HasKey("PredictionId");
 
                     b.HasIndex("FirstEntryId");
@@ -522,8 +514,6 @@ namespace Infrastructure.Migrations
                     b.HasIndex("Status");
 
                     b.HasIndex("ThirdEntryId");
-
-                    b.HasIndex("UserId");
 
                     b.HasIndex("RaceId", "SpectatorId", "Status");
 
@@ -630,12 +620,9 @@ namespace Infrastructure.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("PrizePointTransactionId"));
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("EntityType")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("NOW()");
 
                     b.Property<int>("EntryId")
                         .HasColumnType("integer");
@@ -649,42 +636,45 @@ namespace Infrastructure.Migrations
                     b.Property<int>("RaceId")
                         .HasColumnType("integer");
 
-                    b.Property<int>("RaceResultId")
-                        .HasColumnType("integer");
-
                     b.Property<int?>("RollbackOfId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("SourceType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
 
                     b.Property<int>("TournamentId")
                         .HasColumnType("integer");
 
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
+                    b.Property<int>("TransactionType")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("UserId")
                         .HasColumnType("integer");
 
                     b.HasKey("PrizePointTransactionId");
 
-                    b.HasIndex("EntityType");
+                    b.HasIndex("CreatedAt");
 
                     b.HasIndex("EntryId");
 
                     b.HasIndex("RaceId");
 
-                    b.HasIndex("RaceResultId");
-
                     b.HasIndex("RollbackOfId");
 
                     b.HasIndex("TournamentId");
 
-                    b.HasIndex("Type");
-
                     b.HasIndex("UserId");
 
-                    b.HasIndex("RaceId", "EntryId", "UserId", "Type");
+                    b.HasIndex("RaceId", "EntryId");
+
+                    b.HasIndex("UserId", "TransactionType");
+
+                    b.HasIndex("UserId", "TournamentId", "RaceId");
 
                     b.ToTable("PrizePointTransactions", t =>
                         {
@@ -768,51 +758,85 @@ namespace Infrastructure.Migrations
 
             modelBuilder.Entity("Domain.Aggregates.Entities.RaceResult", b =>
                 {
-                    b.Property<int>("RaceResultId")
-                        .ValueGeneratedOnAdd()
+                    b.Property<int>("RaceId")
                         .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("RaceResultId"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("EntryId")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int?>("FinalPosition")
                         .HasColumnType("integer");
 
                     b.Property<bool>("IsRaceDQ")
-                        .HasColumnType("boolean");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<int>("LegTop3Count")
-                        .HasColumnType("integer");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.Property<int>("LegWinCount")
-                        .HasColumnType("integer");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.Property<DateTime?>("PublishedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("RaceId")
-                        .HasColumnType("integer");
-
                     b.Property<int>("TotalPoints")
-                        .HasColumnType("integer");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.HasKey("RaceResultId");
+                    b.HasKey("RaceId", "EntryId");
 
-                    b.HasIndex("EntryId")
-                        .IsUnique();
+                    b.HasIndex("EntryId");
 
                     b.HasIndex("RaceId", "EntryId")
                         .IsUnique();
 
                     b.ToTable("RaceResults");
+                });
+
+            modelBuilder.Entity("Domain.Aggregates.Entities.RefreshToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("RefreshTokens");
                 });
 
             modelBuilder.Entity("Domain.Aggregates.Entities.Role", b =>
@@ -1038,11 +1062,12 @@ namespace Infrastructure.Migrations
                     b.Property<string>("PhoneNumber")
                         .HasColumnType("text");
 
-                    b.Property<int?>("PointWalletWalletId")
-                        .HasColumnType("integer");
-
                     b.Property<int>("RoleId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -1059,8 +1084,6 @@ namespace Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("\"LicenseNumber\" IS NOT NULL");
 
-                    b.HasIndex("PointWalletWalletId");
-
                     b.HasIndex("RoleId");
 
                     b.ToTable("Users");
@@ -1075,7 +1098,8 @@ namespace Infrastructure.Migrations
                             IsActive = true,
                             IsProfileComplete = false,
                             PasswordHash = "$2a$11$cHcPtVLvCvKHR/30b2HuQOMs7GqrfTEAr5FcjLqCQzf9zCECIqqmW",
-                            RoleId = 5
+                            RoleId = 5,
+                            Status = "Active"
                         });
                 });
 
@@ -1231,10 +1255,6 @@ namespace Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("FK_Entries_Jockey");
-
-                    b.HasOne("Domain.Aggregates.Entities.JockeyProfile", null)
-                        .WithMany("Entries")
-                        .HasForeignKey("JockeyProfileUserId");
 
                     b.HasOne("Domain.Aggregates.Entities.Race", "Race")
                         .WithMany("Entries")
@@ -1431,10 +1451,6 @@ namespace Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("FK_Predictions_ThirdEntry");
 
-                    b.HasOne("Domain.Aggregates.Entities.User", null)
-                        .WithMany("Predictions")
-                        .HasForeignKey("UserId");
-
                     b.Navigation("FirstEntry");
 
                     b.Navigation("Race");
@@ -1511,12 +1527,6 @@ namespace Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("Domain.Aggregates.Entities.RaceResult", "RaceResult")
-                        .WithMany()
-                        .HasForeignKey("RaceResultId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
                     b.HasOne("Domain.Aggregates.Entities.PrizePointTransaction", "RollbackOf")
                         .WithMany("Rollbacks")
                         .HasForeignKey("RollbackOfId")
@@ -1532,6 +1542,12 @@ namespace Infrastructure.Migrations
                     b.HasOne("Domain.Aggregates.Entities.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Aggregates.Entities.RaceResult", "RaceResult")
+                        .WithMany("PrizePointTransactions")
+                        .HasForeignKey("RaceId", "EntryId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -1578,8 +1594,8 @@ namespace Infrastructure.Migrations
             modelBuilder.Entity("Domain.Aggregates.Entities.RaceResult", b =>
                 {
                     b.HasOne("Domain.Aggregates.Entities.Entry", "Entry")
-                        .WithOne("RaceResult")
-                        .HasForeignKey("Domain.Aggregates.Entities.RaceResult", "EntryId")
+                        .WithMany("RaceResults")
+                        .HasForeignKey("EntryId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -1592,6 +1608,17 @@ namespace Infrastructure.Migrations
                     b.Navigation("Entry");
 
                     b.Navigation("Race");
+                });
+
+            modelBuilder.Entity("Domain.Aggregates.Entities.RefreshToken", b =>
+                {
+                    b.HasOne("Domain.Aggregates.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Domain.Aggregates.Entities.SettlementRun", b =>
@@ -1626,17 +1653,11 @@ namespace Infrastructure.Migrations
 
             modelBuilder.Entity("Domain.Aggregates.Entities.User", b =>
                 {
-                    b.HasOne("Domain.Aggregates.Entities.PointWallet", "PointWallet")
-                        .WithMany()
-                        .HasForeignKey("PointWalletWalletId");
-
                     b.HasOne("Domain.Aggregates.Entities.Role", "Role")
                         .WithMany("Users")
                         .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.Navigation("PointWallet");
 
                     b.Navigation("Role");
                 });
@@ -1724,7 +1745,7 @@ namespace Infrastructure.Migrations
 
                     b.Navigation("LegRefereeEntries");
 
-                    b.Navigation("RaceResult");
+                    b.Navigation("RaceResults");
                 });
 
             modelBuilder.Entity("Domain.Aggregates.Entities.Horse", b =>
@@ -1732,11 +1753,6 @@ namespace Infrastructure.Migrations
                     b.Navigation("Entries");
 
                     b.Navigation("Invitations");
-                });
-
-            modelBuilder.Entity("Domain.Aggregates.Entities.JockeyProfile", b =>
-                {
-                    b.Navigation("Entries");
                 });
 
             modelBuilder.Entity("Domain.Aggregates.Entities.Leg", b =>
@@ -1774,6 +1790,11 @@ namespace Infrastructure.Migrations
                     b.Navigation("RaceResults");
                 });
 
+            modelBuilder.Entity("Domain.Aggregates.Entities.RaceResult", b =>
+                {
+                    b.Navigation("PrizePointTransactions");
+                });
+
             modelBuilder.Entity("Domain.Aggregates.Entities.Role", b =>
                 {
                     b.Navigation("Users");
@@ -1801,8 +1822,6 @@ namespace Infrastructure.Migrations
             modelBuilder.Entity("Domain.Aggregates.Entities.User", b =>
                 {
                     b.Navigation("OwnedHorses");
-
-                    b.Navigation("Predictions");
 
                     b.Navigation("ReceivedInvitations");
 
