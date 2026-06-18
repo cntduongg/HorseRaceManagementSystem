@@ -1,29 +1,32 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.LegOfficialResults.GetLegOfficialResultList;
 
 public sealed class GetLegOfficialResultListQueryHandler
-    : IRequestHandler<
-        GetLegOfficialResultListQuery,
-        List<LegOfficialResultListItemResponse>>
+    : IRequestHandler<GetLegOfficialResultListQuery, List<LegOfficialResultListItemResponse>>
 {
-    public Task<List<LegOfficialResultListItemResponse>> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public GetLegOfficialResultListQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<List<LegOfficialResultListItemResponse>> Handle(
         GetLegOfficialResultListQuery request,
         CancellationToken cancellationToken)
     {
-        // TODO: Load from database
-
-        var result = new List<LegOfficialResultListItemResponse>
-        {
-            new(
-                1,
-                1,
-                1,
-                1,
-                "Finished"
-            )
-        };
-
-        return Task.FromResult(result);
+        return await _context.LegOfficialResults
+            .AsNoTracking()
+            .Select(x => new LegOfficialResultListItemResponse(
+                x.RaceId,
+                x.LegNumber,
+                x.EntryId,
+                x.FinishPosition,
+                x.ResultStatus
+            ))
+            .ToListAsync(cancellationToken);
     }
 }

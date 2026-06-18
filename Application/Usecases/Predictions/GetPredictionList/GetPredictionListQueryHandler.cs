@@ -1,35 +1,31 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.Predictions.GetPredictionList;
 
 public sealed class GetPredictionListQueryHandler
-    : IRequestHandler<GetPredictionListQuery,
-        List<PredictionListItemResponse>>
+    : IRequestHandler<GetPredictionListQuery, List<PredictionListItemResponse>>
 {
-    public Task<List<PredictionListItemResponse>> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public GetPredictionListQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<List<PredictionListItemResponse>> Handle(
         GetPredictionListQuery request,
         CancellationToken cancellationToken)
     {
-        // TODO: Load predictions from database
-
-        var predictions = new List<PredictionListItemResponse>
-        {
-            new(
-                1,
-                1,
-                1,
-                100,
-                "Pending"
-            ),
-            new(
-                2,
-                1,
-                2,
-                200,
-                "Pending"
-            )
-        };
-
-        return Task.FromResult(predictions);
+        return await _context.Predictions
+            .Select(x => new PredictionListItemResponse(
+                x.PredictionId,
+                x.RaceId,
+                x.SpectatorId,
+                x.BetAmount,
+                x.Status
+            ))
+            .ToListAsync(cancellationToken);
     }
 }

@@ -1,4 +1,6 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.PrizePointTransactions.GetPrizePointTransactionDetail;
 
@@ -6,25 +8,32 @@ public sealed class GetPrizePointTransactionDetailQueryHandler
     : IRequestHandler<GetPrizePointTransactionDetailQuery,
         PrizePointTransactionDetailResponse?>
 {
-    public Task<PrizePointTransactionDetailResponse?> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public GetPrizePointTransactionDetailQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<PrizePointTransactionDetailResponse?> Handle(
         GetPrizePointTransactionDetailQuery request,
         CancellationToken cancellationToken)
     {
-        // TODO: Load from database
-
-        var response = new PrizePointTransactionDetailResponse(
-            request.PrizePointTransactionId,
-            1,
-            1,
-            1,
-            1,
-            1,
-            "HorseOwner",
-            1,
-            100,
-            "Awarded"
-        );
-
-        return Task.FromResult<PrizePointTransactionDetailResponse?>(response);
+        return await _context.PrizePointTransactions
+            .AsNoTracking()
+            .Where(x => x.PrizePointTransactionId == request.PrizePointTransactionId)
+            .Select(x => new PrizePointTransactionDetailResponse(
+                x.PrizePointTransactionId,
+                x.TournamentId,
+                x.RaceId,
+                x.EntryId,
+                x.UserId,
+                x.SourceType,
+                x.FinalPosition,
+                x.Points,
+                x.TransactionType.ToString(),
+                x.RollbackOfId
+            ))
+            .FirstOrDefaultAsync(cancellationToken);
     }
 }

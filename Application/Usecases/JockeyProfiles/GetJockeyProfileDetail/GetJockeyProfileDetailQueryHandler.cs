@@ -1,29 +1,35 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.JockeyProfiles.GetJockeyProfileDetail;
 
 public sealed class GetJockeyProfileDetailQueryHandler
-	: IRequestHandler<
-		GetJockeyProfileDetailQuery,
-		JockeyProfileDetailResponse?>
+    : IRequestHandler<GetJockeyProfileDetailQuery, JockeyProfileDetailResponse?>
 {
-	public Task<JockeyProfileDetailResponse?> Handle(
-		GetJockeyProfileDetailQuery request,
-		CancellationToken cancellationToken)
-	{
-		// TODO: Load from database
+    private readonly IApplicationDbContext _context;
 
-		var response = new JockeyProfileDetailResponse(
-			request.UserId,
-			"JOCKEY-001",
-			54.5m,
-			"Professional jockey",
-			100,
-			25,
-			40,
-			500
-		);
+    public GetJockeyProfileDetailQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
 
-		return Task.FromResult<JockeyProfileDetailResponse?>(response);
-	}
+    public async Task<JockeyProfileDetailResponse?> Handle(
+        GetJockeyProfileDetailQuery request,
+        CancellationToken cancellationToken)
+    {
+        return await _context.JockeyProfiles
+            .Where(x => x.UserId == request.UserId)
+            .Select(x => new JockeyProfileDetailResponse(
+                x.UserId,
+                x.LicenseNumber,
+                x.Weight,
+                x.Bio,
+                x.TotalRaces,
+                x.TotalWins,
+                x.TotalTop3,
+                x.CareerPrizePoints
+            ))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
 }

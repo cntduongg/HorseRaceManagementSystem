@@ -1,30 +1,38 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.Horses.GetHorseDetail;
 
 public sealed class GetHorseDetailQueryHandler
     : IRequestHandler<GetHorseDetailQuery, HorseDetailResponse?>
 {
-    public Task<HorseDetailResponse?> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public GetHorseDetailQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<HorseDetailResponse?> Handle(
         GetHorseDetailQuery request,
         CancellationToken cancellationToken)
     {
         if (request.HorseId <= 0)
-        {
-            return Task.FromResult<HorseDetailResponse?>(null);
-        }
+            return null;
 
-        var response = new HorseDetailResponse(
-            HorseId: request.HorseId,
-            OwnerId: 1,
-            Name: "Demo Horse",
-            Breed: "Arabian",
-            BirthYear: 2020,
-            Color: "Brown",
-            Status: "Pending",
-            ImageUrl: null
-        );
-
-        return Task.FromResult<HorseDetailResponse?>(response);
+        return await _context.Horses
+            .Where(x => x.HorseId == request.HorseId)
+            .Select(x => new HorseDetailResponse(
+                x.HorseId,
+                x.OwnerId,
+                x.Name,
+                x.Breed,
+                x.BirthYear,
+                x.Color,
+                x.Status,
+                x.ImageUrl
+            ))
+            .FirstOrDefaultAsync(cancellationToken);
     }
 }

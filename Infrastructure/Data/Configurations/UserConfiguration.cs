@@ -27,8 +27,8 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         {
             UserId       = 1,
             Email        = "admin@horserace.com",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin@123"),
-            FullName     = "System Admin",
+            PasswordHash = "$2a$11$cHcPtVLvCvKHR/30b2HuQOMs7GqrfTEAr5FcjLqCQzf9zCECIqqmW",
+            FullName = "System Admin",
             RoleId       = 5,
             IsActive     = true,
             CreatedAt    = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)

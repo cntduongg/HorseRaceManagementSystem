@@ -1,22 +1,29 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.Legs.GetLegList;
 
 public sealed class GetLegListQueryHandler
     : IRequestHandler<GetLegListQuery, List<LegListItemResponse>>
 {
-    public Task<List<LegListItemResponse>> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public GetLegListQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<List<LegListItemResponse>> Handle(
         GetLegListQuery request,
         CancellationToken cancellationToken)
     {
-        // TODO: Load from database
-
-        var result = new List<LegListItemResponse>
-        {
-            new(1, 1, "Pending"),
-            new(1, 2, "Confirmed")
-        };
-
-        return Task.FromResult(result);
+        return await _context.Legs
+            .Select(x => new LegListItemResponse(
+                x.RaceId,
+                x.LegNumber,
+                x.Status
+            ))
+            .ToListAsync(cancellationToken);
     }
 }

@@ -1,16 +1,32 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.Violations.DeleteViolation;
 
 public sealed class DeleteViolationCommandHandler
     : IRequestHandler<DeleteViolationCommand, bool>
 {
-    public Task<bool> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public DeleteViolationCommandHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<bool> Handle(
         DeleteViolationCommand request,
         CancellationToken cancellationToken)
     {
-        // TODO: Delete from database
+        var violation = await _context.Violations
+            .FirstOrDefaultAsync(x => x.ViolationId == request.ViolationId, cancellationToken);
 
-        return Task.FromResult(true);
+        if (violation is null)
+            return false;
+
+        _context.Violations.Remove(violation);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return true;
     }
 }

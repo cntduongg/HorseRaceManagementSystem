@@ -10,13 +10,31 @@ public class PrizePointTransactionConfiguration : IEntityTypeConfiguration<Prize
     {
         builder.HasKey(p => p.PrizePointTransactionId);
 
-        builder.Property(p => p.EntityType)
+        // =====================================================
+        // CORE FIELDS
+        // =====================================================
+
+        builder.Property(p => p.SourceType)
             .HasMaxLength(30)
             .IsRequired();
 
-        builder.Property(p => p.Type)
-            .HasMaxLength(30)
+        builder.Property(p => p.TransactionType)
             .IsRequired();
+
+        builder.Property(p => p.Points)
+            .IsRequired();
+
+        builder.Property(p => p.FinalPosition)
+            .IsRequired();
+
+        builder.Property(p => p.CreatedAt)
+            .HasDefaultValueSql("NOW()");
+
+        builder.Property(p => p.UpdatedAt);
+
+        // =====================================================
+        // CHECK CONSTRAINTS (SAFE RULES)
+        // =====================================================
 
         builder.HasCheckConstraint(
             "CK_PrizePointTransactions_FinalPosition",
@@ -26,10 +44,9 @@ public class PrizePointTransactionConfiguration : IEntityTypeConfiguration<Prize
             "CK_PrizePointTransactions_Points",
             "\"Points\" >= 0");
 
-        builder.HasOne(p => p.RaceResult)
-            .WithMany()
-            .HasForeignKey(p => p.RaceResultId)
-            .OnDelete(DeleteBehavior.Restrict);
+        // =====================================================
+        // RELATIONSHIPS
+        // =====================================================
 
         builder.HasOne(p => p.Tournament)
             .WithMany()
@@ -42,35 +59,47 @@ public class PrizePointTransactionConfiguration : IEntityTypeConfiguration<Prize
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(p => p.Entry)
-    .WithMany()
-    .HasForeignKey(p => p.EntryId)
-    .OnDelete(DeleteBehavior.Restrict);
+            .WithMany()
+            .HasForeignKey(p => p.EntryId)
+            .OnDelete(DeleteBehavior.Restrict);
 
-builder.HasOne(p => p.User)
-    .WithMany()
-    .HasForeignKey(p => p.UserId)
-    .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(p => p.User)
+            .WithMany()
+            .HasForeignKey(p => p.UserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // ⚠️ KEEP ONLY IF RaceResult is truly composite key
+        builder.HasOne(p => p.RaceResult)
+            .WithMany(r => r.PrizePointTransactions)
+            .HasForeignKey(p => new { p.RaceId, p.EntryId })
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(p => p.RollbackOf)
-    .WithMany(p => p.Rollbacks)
-    .HasForeignKey(p => p.RollbackOfId)
-    .HasConstraintName("FK_PrizePointTransactions_RollbackOf")
-    .OnDelete(DeleteBehavior.Restrict);
+            .WithMany(p => p.Rollbacks)
+            .HasForeignKey(p => p.RollbackOfId)
+            .HasConstraintName("FK_PrizePointTransactions_RollbackOf")
+            .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(p => p.RaceResultId);
-        builder.HasIndex(p => p.TournamentId);
-        builder.HasIndex(p => p.RaceId);
-        builder.HasIndex(p => p.EntryId);
+  
+      
+
         builder.HasIndex(p => p.UserId);
-        builder.HasIndex(p => p.EntityType);
-        builder.HasIndex(p => p.Type);
+        builder.HasIndex(p => p.RaceId);
+        builder.HasIndex(p => p.TournamentId);
 
         builder.HasIndex(p => new
         {
-            p.RaceId,
-            p.EntryId,
             p.UserId,
-            p.Type
+            p.TournamentId,
+            p.RaceId
         });
+
+        builder.HasIndex(p => new
+        {
+            p.UserId,
+            p.TransactionType
+        });
+
+        builder.HasIndex(p => p.CreatedAt);
     }
 }

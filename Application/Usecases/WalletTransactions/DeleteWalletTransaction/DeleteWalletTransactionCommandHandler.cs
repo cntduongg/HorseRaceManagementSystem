@@ -1,16 +1,33 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.WalletTransactions.DeleteWalletTransaction;
 
 public sealed class DeleteWalletTransactionCommandHandler
     : IRequestHandler<DeleteWalletTransactionCommand, bool>
 {
-    public Task<bool> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public DeleteWalletTransactionCommandHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<bool> Handle(
         DeleteWalletTransactionCommand request,
         CancellationToken cancellationToken)
     {
-        // TODO: Delete from database
+        var entity = await _context.WalletTransactions
+            .FirstOrDefaultAsync(x => x.WalletTransactionId == request.WalletTransactionId,
+                cancellationToken);
 
-        return Task.FromResult(true);
+        if (entity is null)
+            return false;
+
+        _context.WalletTransactions.Remove(entity);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return true;
     }
 }

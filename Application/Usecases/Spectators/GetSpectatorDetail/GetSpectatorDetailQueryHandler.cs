@@ -1,22 +1,30 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.Spectators.GetSpectatorDetail;
 
 public sealed class GetSpectatorDetailQueryHandler
     : IRequestHandler<GetSpectatorDetailQuery, SpectatorDetailResponse?>
 {
-    public Task<SpectatorDetailResponse?> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public GetSpectatorDetailQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<SpectatorDetailResponse?> Handle(
         GetSpectatorDetailQuery request,
         CancellationToken cancellationToken)
     {
-        // TODO: Load spectator from database
-
-        var response = new SpectatorDetailResponse(
-            request.UserId,
-            DateTime.UtcNow,
-            true
-        );
-
-        return Task.FromResult<SpectatorDetailResponse?>(response);
+        return await _context.Spectators
+            .Where(x => x.UserId == request.UserId)
+            .Select(x => new SpectatorDetailResponse(
+                x.UserId,
+                x.RegisteredAt,
+                x.IsActive
+            ))
+            .FirstOrDefaultAsync(cancellationToken);
     }
 }

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using ShareKernel.Repository;
 using ShareKernel.UnitOfWork;
+using Application.Common.Interfaces;
 
 namespace Infrastructure.DependencyInjection;
 
@@ -22,6 +23,8 @@ public static class ServiceCollectionExtensions
         {
             options.UseNpgsql(connectionString);
         });
+        services.AddScoped<IApplicationDbContext>(sp =>
+    sp.GetRequiredService<ApplicationDbContext>());
 
         services.AddScoped<IUnitOfWork, ApplicationDbContext>(sp =>
             sp.GetRequiredService<ApplicationDbContext>());

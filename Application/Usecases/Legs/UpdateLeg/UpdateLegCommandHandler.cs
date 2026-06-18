@@ -1,16 +1,42 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.Legs.UpdateLeg;
 
 public sealed class UpdateLegCommandHandler
     : IRequestHandler<UpdateLegCommand, bool>
 {
-    public Task<bool> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public UpdateLegCommandHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<bool> Handle(
         UpdateLegCommand request,
         CancellationToken cancellationToken)
     {
-        // TODO: Update leg in database
+        var leg = await _context.Legs.FirstOrDefaultAsync(
+            x => x.RaceId == request.RaceId &&
+                 x.LegNumber == request.LegNumber,
+            cancellationToken);
 
-        return Task.FromResult(true);
+        if (leg is null)
+            return false;
+
+        if (!string.IsNullOrWhiteSpace(request.Status))
+            leg.Status = request.Status;
+
+        if (!string.IsNullOrWhiteSpace(request.ConfirmationType))
+            leg.ConfirmationType = request.ConfirmationType;
+
+        if (!string.IsNullOrWhiteSpace(request.AdminOverrideReason))
+            leg.AdminOverrideReason = request.AdminOverrideReason;
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return true;
     }
 }

@@ -8,5 +8,6 @@ public sealed record RaceResultDetailResponse(
     bool IsRaceDQ,
     int LegWinCount,
     int LegTop3Count,
-    DateTime? PublishedAt
+    DateTime CreatedAt,
+    DateTime? UpdatedAt
 );

@@ -9,8 +9,7 @@ public sealed class UpdateLegRefereeEntryCommandHandler
         UpdateLegRefereeEntryCommand request,
         CancellationToken cancellationToken)
     {
-        // TODO: Update database
-
-        return Task.FromResult(true);
+        throw new InvalidOperationException(
+            "LegRefereeEntry is append-only. Updates are not allowed.");
     }
 }

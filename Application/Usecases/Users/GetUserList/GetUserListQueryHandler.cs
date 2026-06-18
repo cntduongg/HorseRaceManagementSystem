@@ -1,32 +1,31 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.Users.GetUserList;
 
 public sealed class GetUserListQueryHandler
     : IRequestHandler<GetUserListQuery, List<UserListItemResponse>>
 {
-    public Task<List<UserListItemResponse>> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public GetUserListQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<List<UserListItemResponse>> Handle(
         GetUserListQuery request,
         CancellationToken cancellationToken)
     {
-        var users = new List<UserListItemResponse>
-        {
-            new(
-                1,
-                "admin@horserace.com",
-                "System Admin",
-                5,
-                true
-            ),
-            new(
-                2,
-                "jockey1@horserace.com",
-                "Nguyen Van A",
-                2,
-                true
-            )
-        };
-
-        return Task.FromResult(users);
+        return await _context.Users
+            .Select(x => new UserListItemResponse(
+                x.UserId,
+                x.Email,
+                x.FullName,
+                x.RoleId,
+                x.IsActive
+            ))
+            .ToListAsync(cancellationToken);
     }
 }

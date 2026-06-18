@@ -1,27 +1,36 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.RaceResults.GetRaceResultDetail;
 
 public sealed class GetRaceResultDetailQueryHandler
-	: IRequestHandler<GetRaceResultDetailQuery, RaceResultDetailResponse?>
+    : IRequestHandler<GetRaceResultDetailQuery, RaceResultDetailResponse?>
 {
-	public Task<RaceResultDetailResponse?> Handle(
-		GetRaceResultDetailQuery request,
-		CancellationToken cancellationToken)
-	{
-		// TODO: Load from database
+    private readonly IApplicationDbContext _context;
 
-		var response = new RaceResultDetailResponse(
-			request.RaceId,
-			request.EntryId,
-			30,
-			1,
-			false,
-			2,
-			3,
-			DateTime.UtcNow
-		);
+    public GetRaceResultDetailQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
 
-		return Task.FromResult<RaceResultDetailResponse?>(response);
-	}
+    public async Task<RaceResultDetailResponse?> Handle(
+        GetRaceResultDetailQuery request,
+        CancellationToken cancellationToken)
+    {
+        return await _context.RaceResults
+            .Where(x => x.RaceId == request.RaceId && x.EntryId == request.EntryId)
+            .Select(x => new RaceResultDetailResponse(
+                x.RaceId,
+                x.EntryId,
+                x.TotalPoints,
+                x.FinalPosition,
+                x.IsRaceDQ,
+                x.LegWinCount,
+                x.LegTop3Count,
+                x.CreatedAt,
+                x.UpdatedAt
+            ))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
 }
