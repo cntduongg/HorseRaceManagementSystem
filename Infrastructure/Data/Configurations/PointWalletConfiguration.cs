@@ -20,9 +20,12 @@ public class PointWalletConfiguration : IEntityTypeConfiguration<PointWallet>
         builder.Property(w => w.IsFrozen)
             .HasDefaultValue(false);
 
-        builder.HasCheckConstraint(
-            "CK_PointWallets_Balance",
-            "\"Balance\" >= 0");
+        builder.ToTable(t =>
+        {
+            t.HasCheckConstraint(
+                "CK_PointWallets_Balance",
+                "\"Balance\" >= 0");
+        });
 
         builder.HasOne(w => w.Spectator)
             .WithOne(s => s.PointWallet)
