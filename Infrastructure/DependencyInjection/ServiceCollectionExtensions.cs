@@ -34,7 +34,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IPasswordHasher, PasswordHasher>();
-
+        services.AddScoped<IRaceResultReadService, RaceResultReadService>();
         return services;
     }
 }
