@@ -63,6 +63,7 @@ namespace Infrastructure.Migrations
                     AvatarUrl = table.Column<string>(type: "text", nullable: true),
                     RoleId = table.Column<int>(type: "integer", nullable: false),
                     IsActive = table.Column<bool>(type: "boolean", nullable: false),
+                    Status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "Active"),
                     LockedUntil = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     LicenseNumber = table.Column<string>(type: "text", nullable: true),
                     Weight = table.Column<decimal>(type: "numeric", nullable: true),
@@ -382,7 +383,8 @@ namespace Infrastructure.Migrations
                 name: "SettlementRuns",
                 columns: table => new
                 {
-                    SettlementRunId = table.Column<Guid>(type: "uuid", nullable: false),
+                    SettlementRunId = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     RaceId = table.Column<int>(type: "integer", nullable: false),
                     Type = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: false),
                     Status = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: false),
@@ -413,7 +415,8 @@ namespace Infrastructure.Migrations
                 name: "PointWallets",
                 columns: table => new
                 {
-                    WalletId = table.Column<Guid>(type: "uuid", nullable: false),
+                    WalletId = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     SpectatorId = table.Column<int>(type: "integer", nullable: false),
                     Balance = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false, defaultValue: 100m),
                     IsFrozen = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
@@ -436,7 +439,8 @@ namespace Infrastructure.Migrations
                 name: "Predictions",
                 columns: table => new
                 {
-                    PredictionId = table.Column<Guid>(type: "uuid", nullable: false),
+                    PredictionId = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     RaceId = table.Column<int>(type: "integer", nullable: false),
                     SpectatorId = table.Column<int>(type: "integer", nullable: false),
                     FirstEntryId = table.Column<int>(type: "integer", nullable: false),
@@ -634,17 +638,18 @@ namespace Infrastructure.Migrations
                 name: "WalletTransactions",
                 columns: table => new
                 {
-                    WalletTransactionId = table.Column<Guid>(type: "uuid", nullable: false),
-                    WalletId = table.Column<Guid>(type: "uuid", nullable: false),
+                    WalletTransactionId = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    WalletId = table.Column<int>(type: "integer", nullable: false),
                     SpectatorId = table.Column<int>(type: "integer", nullable: false),
-                    PredictionId = table.Column<Guid>(type: "uuid", nullable: true),
-                    SettlementRunId = table.Column<Guid>(type: "uuid", nullable: true),
+                    PredictionId = table.Column<int>(type: "integer", nullable: true),
+                    SettlementRunId = table.Column<int>(type: "integer", nullable: true),
                     AdminId = table.Column<int>(type: "integer", nullable: true),
                     Type = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: false),
                     Amount = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
                     BalanceAfter = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
                     Reason = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
-                    RollbackOfTransactionId = table.Column<Guid>(type: "uuid", nullable: true),
+                    RollbackOfTransactionId = table.Column<int>(type: "integer", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
@@ -692,7 +697,9 @@ namespace Infrastructure.Migrations
                 name: "PrizePointTransactions",
                 columns: table => new
                 {
-                    PrizePointTransactionId = table.Column<Guid>(type: "uuid", nullable: false),
+                    PrizePointTransactionId = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    RaceResultId = table.Column<int>(type: "integer", nullable: false),
                     TournamentId = table.Column<int>(type: "integer", nullable: false),
                     RaceId = table.Column<int>(type: "integer", nullable: false),
                     EntryId = table.Column<int>(type: "integer", nullable: false),
@@ -701,7 +708,7 @@ namespace Infrastructure.Migrations
                     FinalPosition = table.Column<int>(type: "integer", nullable: false),
                     Points = table.Column<int>(type: "integer", nullable: false),
                     Type = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: false),
-                    RollbackOfId = table.Column<Guid>(type: "uuid", nullable: true),
+                    RollbackOfId = table.Column<int>(type: "integer", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
@@ -751,9 +758,10 @@ namespace Infrastructure.Migrations
                 name: "PredictionSettlements",
                 columns: table => new
                 {
-                    PredictionSettlementId = table.Column<Guid>(type: "uuid", nullable: false),
-                    SettlementRunId = table.Column<Guid>(type: "uuid", nullable: false),
-                    PredictionId = table.Column<Guid>(type: "uuid", nullable: false),
+                    PredictionSettlementId = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    SettlementRunId = table.Column<int>(type: "integer", nullable: false),
+                    PredictionId = table.Column<int>(type: "integer", nullable: false),
                     RaceId = table.Column<int>(type: "integer", nullable: false),
                     SpectatorId = table.Column<int>(type: "integer", nullable: false),
                     MatchedCount = table.Column<int>(type: "integer", nullable: false),
@@ -762,8 +770,8 @@ namespace Infrastructure.Migrations
                     OddsAverage = table.Column<decimal>(type: "numeric(10,4)", precision: 10, scale: 4, nullable: false),
                     PayoutAmount = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
                     NetAmount = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
-                    PayoutTransactionId = table.Column<Guid>(type: "uuid", nullable: true),
-                    RollbackOfSettlementId = table.Column<Guid>(type: "uuid", nullable: true),
+                    PayoutTransactionId = table.Column<int>(type: "integer", nullable: true),
+                    RollbackOfSettlementId = table.Column<int>(type: "integer", nullable: true),
                     IsRollbacked = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     SettledAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     RollbackAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
@@ -824,8 +832,8 @@ namespace Infrastructure.Migrations
 
             migrationBuilder.InsertData(
                 table: "Users",
-                columns: new[] { "UserId", "AvatarUrl", "Bio", "CreatedAt", "Email", "FullName", "IsActive", "IsProfileComplete", "LicenseNumber", "LockedUntil", "PasswordHash", "PhoneNumber", "RoleId", "UpdatedAt", "Weight" },
-                values: new object[] { 1, null, null, new DateTime(2025, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "admin@horserace.com", "System Admin", true, false, null, null, "$2a$12$QqfH5MsD9ZWO1A9UcXq/8edFa/8DR6cN4t.KfrUlOvl5F658ZJeZC", null, 5, null, null });
+                columns: new[] { "UserId", "AvatarUrl", "Bio", "CreatedAt", "Email", "FullName", "IsActive", "IsProfileComplete", "LicenseNumber", "LockedUntil", "PasswordHash", "PhoneNumber", "RoleId", "Status", "UpdatedAt", "Weight" },
+                values: new object[] { 1, null, null, new DateTime(2025, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "admin@gmail.com", "System Admin", true, false, null, null, "$2a$11$Ov6QpkCSImsKhGQUK9vOauXi6RdzBBjnT01qi7Mbgs/lPBAh/bmRe", null, 5, "Active", null, null });
 
             migrationBuilder.CreateIndex(
                 name: "IX_Entries_ApprovedBy",
