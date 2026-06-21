@@ -3,12 +3,12 @@ using MediatR;
 namespace Application.Usecases.Races.CreateRace;
 
 public sealed record CreateRaceCommand(
-    Guid TournamentId,
+    int TournamentId,
     string Name,
-    DateTime ScheduledAt,
+    DateTime ScheduledStartTime,
     int NumberOfLegs,
     int MaxHorses,
-    string? RoundType,
-    Guid Referee1Id,
-    Guid Referee2Id
-) : IRequest<Guid>;
+    string RoundType,
+    int Referee1Id,
+    int Referee2Id
+) : IRequest<int>;

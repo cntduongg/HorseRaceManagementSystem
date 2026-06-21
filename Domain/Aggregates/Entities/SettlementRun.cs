@@ -2,7 +2,7 @@ namespace Domain.Aggregates.Entities;
 
 public class SettlementRun
 {
-    public Guid SettlementRunId { get; set; }
+    public int SettlementRunId { get; set; }
 
     public int RaceId { get; set; }
 
@@ -24,5 +24,6 @@ public class SettlementRun
 
     public User? TriggeredByAdmin { get; set; }
 
-    public ICollection<PredictionSettlement> PredictionSettlements { get; set; } = new List<PredictionSettlement>();
+    public ICollection<PredictionSettlement> PredictionSettlements { get; set; }
+        = new List<PredictionSettlement>();
 }

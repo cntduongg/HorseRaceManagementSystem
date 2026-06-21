@@ -411,9 +411,11 @@ namespace Infrastructure.Migrations
 
             modelBuilder.Entity("Domain.Aggregates.Entities.PointWallet", b =>
                 {
-                    b.Property<Guid>("WalletId")
+                    b.Property<int>("WalletId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("WalletId"));
 
                     b.Property<decimal>("Balance")
                         .ValueGeneratedOnAdd()
@@ -448,9 +450,11 @@ namespace Infrastructure.Migrations
 
             modelBuilder.Entity("Domain.Aggregates.Entities.Prediction", b =>
                 {
-                    b.Property<Guid>("PredictionId")
+                    b.Property<int>("PredictionId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("PredictionId"));
 
                     b.Property<decimal>("BetAmount")
                         .HasPrecision(18, 2)
@@ -520,9 +524,11 @@ namespace Infrastructure.Migrations
 
             modelBuilder.Entity("Domain.Aggregates.Entities.PredictionSettlement", b =>
                 {
-                    b.Property<Guid>("PredictionSettlementId")
+                    b.Property<int>("PredictionSettlementId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("PredictionSettlementId"));
 
                     b.Property<decimal>("BetAmount")
                         .HasPrecision(18, 2)
@@ -553,11 +559,11 @@ namespace Infrastructure.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
-                    b.Property<Guid?>("PayoutTransactionId")
-                        .HasColumnType("uuid");
+                    b.Property<int?>("PayoutTransactionId")
+                        .HasColumnType("integer");
 
-                    b.Property<Guid>("PredictionId")
-                        .HasColumnType("uuid");
+                    b.Property<int>("PredictionId")
+                        .HasColumnType("integer");
 
                     b.Property<int>("RaceId")
                         .HasColumnType("integer");
@@ -565,14 +571,14 @@ namespace Infrastructure.Migrations
                     b.Property<DateTime?>("RollbackAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid?>("RollbackOfSettlementId")
-                        .HasColumnType("uuid");
+                    b.Property<int?>("RollbackOfSettlementId")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime>("SettledAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid>("SettlementRunId")
-                        .HasColumnType("uuid");
+                    b.Property<int>("SettlementRunId")
+                        .HasColumnType("integer");
 
                     b.Property<int>("SpectatorId")
                         .HasColumnType("integer");
@@ -604,9 +610,11 @@ namespace Infrastructure.Migrations
 
             modelBuilder.Entity("Domain.Aggregates.Entities.PrizePointTransaction", b =>
                 {
-                    b.Property<Guid>("PrizePointTransactionId")
+                    b.Property<int>("PrizePointTransactionId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("PrizePointTransactionId"));
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -628,8 +636,11 @@ namespace Infrastructure.Migrations
                     b.Property<int>("RaceId")
                         .HasColumnType("integer");
 
-                    b.Property<Guid?>("RollbackOfId")
-                        .HasColumnType("uuid");
+                    b.Property<int>("RaceResultId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("RollbackOfId")
+                        .HasColumnType("integer");
 
                     b.Property<int>("TournamentId")
                         .HasColumnType("integer");
@@ -873,9 +884,11 @@ namespace Infrastructure.Migrations
 
             modelBuilder.Entity("Domain.Aggregates.Entities.SettlementRun", b =>
                 {
-                    b.Property<Guid>("SettlementRunId")
+                    b.Property<int>("SettlementRunId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("SettlementRunId"));
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -1138,9 +1151,11 @@ namespace Infrastructure.Migrations
 
             modelBuilder.Entity("Domain.Aggregates.Entities.WalletTransaction", b =>
                 {
-                    b.Property<Guid>("WalletTransactionId")
+                    b.Property<int>("WalletTransactionId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("WalletTransactionId"));
 
                     b.Property<int?>("AdminId")
                         .HasColumnType("integer");
@@ -1156,18 +1171,18 @@ namespace Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid?>("PredictionId")
-                        .HasColumnType("uuid");
+                    b.Property<int?>("PredictionId")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Reason")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
-                    b.Property<Guid?>("RollbackOfTransactionId")
-                        .HasColumnType("uuid");
+                    b.Property<int?>("RollbackOfTransactionId")
+                        .HasColumnType("integer");
 
-                    b.Property<Guid?>("SettlementRunId")
-                        .HasColumnType("uuid");
+                    b.Property<int?>("SettlementRunId")
+                        .HasColumnType("integer");
 
                     b.Property<int>("SpectatorId")
                         .HasColumnType("integer");
@@ -1177,8 +1192,8 @@ namespace Infrastructure.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
 
-                    b.Property<Guid>("WalletId")
-                        .HasColumnType("uuid");
+                    b.Property<int>("WalletId")
+                        .HasColumnType("integer");
 
                     b.HasKey("WalletTransactionId");
 

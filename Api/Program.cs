@@ -16,7 +16,20 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
 builder.Services.AddControllers();
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("FrontendPolicy", policy =>
+    {
+        policy
+            .AllowAnyOrigin()
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
+
 builder.Services.AddEndpointsApiExplorer();
+
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new()
@@ -67,6 +80,7 @@ builder.Services
             {
                 context.HandleResponse();
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+
                 var problem = new ProblemDetails
                 {
                     Status = StatusCodes.Status401Unauthorized,
@@ -76,11 +90,13 @@ builder.Services
                         : context.ErrorDescription,
                     Instance = context.Request.Path
                 };
+
                 await context.Response.WriteAsJsonAsync(problem);
             },
             OnForbidden = async context =>
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
+
                 var problem = new ProblemDetails
                 {
                     Status = StatusCodes.Status403Forbidden,
@@ -88,6 +104,7 @@ builder.Services
                     Detail = "You do not have permission to access this resource.",
                     Instance = context.Request.Path
                 };
+
                 await context.Response.WriteAsJsonAsync(problem);
             }
         };
@@ -103,11 +120,12 @@ using (var scope = app.Services.CreateScope())
     await db.Database.MigrateAsync();
 }
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+app.UseSwagger();
+app.UseSwaggerUI();
+
+app.MapGet("/", () => Results.Redirect("/swagger"));
+
+app.UseCors("FrontendPolicy");
 
 app.UseExceptionHandler();
 

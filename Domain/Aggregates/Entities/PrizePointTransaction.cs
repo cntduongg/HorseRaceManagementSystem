@@ -2,7 +2,9 @@ namespace Domain.Aggregates.Entities;
 
 public class PrizePointTransaction
 {
-    public Guid PrizePointTransactionId { get; set; }
+    public int PrizePointTransactionId { get; set; }
+
+    public int RaceResultId { get; set; }
 
     public int TournamentId { get; set; }
 
@@ -20,7 +22,7 @@ public class PrizePointTransaction
 
     public string Type { get; set; } = "Awarded";
 
-    public Guid? RollbackOfId { get; set; }
+    public int? RollbackOfId { get; set; }
 
     public DateTime CreatedAt { get; set; }
 
@@ -36,5 +38,6 @@ public class PrizePointTransaction
 
     public PrizePointTransaction? RollbackOf { get; set; }
 
-    public ICollection<PrizePointTransaction> Rollbacks { get; set; } = new List<PrizePointTransaction>();
+    public ICollection<PrizePointTransaction> Rollbacks { get; set; }
+        = new List<PrizePointTransaction>();
 }
