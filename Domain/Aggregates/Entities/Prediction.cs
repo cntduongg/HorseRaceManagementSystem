@@ -2,7 +2,7 @@ namespace Domain.Aggregates.Entities;
 
 public class Prediction
 {
-    public Guid PredictionId { get; set; }
+    public int PredictionId { get; set; }
 
     public int RaceId { get; set; }
 
