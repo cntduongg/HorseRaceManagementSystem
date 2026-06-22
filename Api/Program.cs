@@ -9,6 +9,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using Application.Common;
+using Infrastructure.Data.Seed;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -117,7 +119,18 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+
     await db.Database.MigrateAsync();
+
+    var shouldSeedTestData =
+        app.Environment.IsDevelopment()
+        || builder.Configuration.GetValue<bool>("SeedTestData");
+
+    if (shouldSeedTestData)
+    {
+        await DatabaseSeeder.SeedAsync(db, passwordHasher);
+    }
 }
 
 app.UseSwagger();
