@@ -35,6 +35,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IPasswordHasher, PasswordHasher>();
         services.AddScoped<IRaceResultReadService, RaceResultReadService>();
+        services.AddScoped<ITournamentReadService, TournamentReadService>();
+        services.AddScoped<IRaceReadService, RaceReadService>();
+        services.AddScoped<IEntryReadService, EntryReadService>();
         return services;
     }
 }
