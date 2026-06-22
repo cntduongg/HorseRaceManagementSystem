@@ -13,6 +13,11 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.PasswordHash).HasMaxLength(255).IsRequired();
         builder.Property(u => u.FullName).HasMaxLength(150).IsRequired();
 
+        builder.Property(u => u.Status)
+            .HasMaxLength(20)
+            .IsRequired()
+            .HasDefaultValue("Active");
+
         builder.HasIndex(u => u.Email).IsUnique();
         builder.HasIndex(u => u.LicenseNumber)
             .IsUnique()
@@ -31,6 +36,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             FullName = "System Admin",
             RoleId       = 5,
             IsActive     = true,
+            Status       = "Active",
             CreatedAt    = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)
         });
     }
