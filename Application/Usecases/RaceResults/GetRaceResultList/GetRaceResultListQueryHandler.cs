@@ -1,23 +1,22 @@
+using Application.Common;
 using MediatR;
 
 namespace Application.Usecases.RaceResults.GetRaceResultList;
 
 public sealed class GetRaceResultListQueryHandler
-	: IRequestHandler<GetRaceResultListQuery,
-		List<RaceResultListItemResponse>>
+    : IRequestHandler<GetRaceResultListQuery, List<RaceResultListItemResponse>>
 {
-	public Task<List<RaceResultListItemResponse>> Handle(
-		GetRaceResultListQuery request,
-		CancellationToken cancellationToken)
-	{
-		// TODO: Load from database
+    private readonly IRaceResultReadService _raceResultReadService;
 
-		var result = new List<RaceResultListItemResponse>
-		{
-			new(1, 1, 1, 30),
-			new(1, 2, 2, 24)
-		};
+    public GetRaceResultListQueryHandler(IRaceResultReadService raceResultReadService)
+    {
+        _raceResultReadService = raceResultReadService;
+    }
 
-		return Task.FromResult(result);
-	}
+    public Task<List<RaceResultListItemResponse>> Handle(
+        GetRaceResultListQuery request,
+        CancellationToken cancellationToken)
+    {
+        return _raceResultReadService.GetListAsync(cancellationToken);
+    }
 }
