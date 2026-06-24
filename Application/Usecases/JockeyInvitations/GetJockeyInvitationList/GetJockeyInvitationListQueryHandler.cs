@@ -19,10 +19,23 @@ public sealed class GetJockeyInvitationListQueryHandler
         CancellationToken cancellationToken)
     {
         return await _context.JockeyInvitations
+            .AsNoTracking()
+            .OrderByDescending(x => x.SentAt)
             .Select(x => new JockeyInvitationListItemResponse(
                 x.InvitationId,
+
                 x.HorseOwnerId,
+                x.HorseOwner.FullName,
+
                 x.JockeyId,
+                x.Jockey.FullName,
+
+                x.RaceId,
+                x.Race.Name,
+
+                x.HorseId,
+                x.Horse.Name,
+
                 x.Status,
                 x.SentAt
             ))

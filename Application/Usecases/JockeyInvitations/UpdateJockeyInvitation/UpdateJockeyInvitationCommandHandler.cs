@@ -9,7 +9,8 @@ public sealed class UpdateJockeyInvitationCommandHandler
 {
     private readonly IApplicationDbContext _context;
 
-    public UpdateJockeyInvitationCommandHandler(IApplicationDbContext context)
+    public UpdateJockeyInvitationCommandHandler(
+        IApplicationDbContext context)
     {
         _context = context;
     }
@@ -18,30 +19,90 @@ public sealed class UpdateJockeyInvitationCommandHandler
         UpdateJockeyInvitationCommand request,
         CancellationToken cancellationToken)
     {
-        var invitation = await _context.JockeyInvitations.FirstOrDefaultAsync(
-            x => x.InvitationId == request.InvitationId,
-            cancellationToken);
+        if (request.InvitationId <= 0)
+            throw new InvalidOperationException("InvitationId is required.");
+
+        if (string.IsNullOrWhiteSpace(request.Status))
+            throw new InvalidOperationException("Status is required.");
+
+        request = request with { Status = request.Status.Trim() };
+
+        var validStatuses = new[]
+        {
+            "Pending",
+            "Accepted",
+            "Declined",
+            "Confirmed",
+            "Cancelled",
+            "Expired"
+        };
+
+        if (!validStatuses.Contains(request.Status))
+            throw new InvalidOperationException("Invalid invitation status.");
+
+        var invitation = await _context.JockeyInvitations
+            .FirstOrDefaultAsync(
+                x => x.InvitationId == request.InvitationId,
+                cancellationToken);
 
         if (invitation is null)
             return false;
 
-        // prevent invalid state transition
-        if (invitation.Status == "Cancelled" || invitation.Status == "Expired")
-            throw new InvalidOperationException("Cannot update cancelled/expired invitation.");
+        // Final states cannot be modified
+        if (invitation.Status is "Cancelled" or "Expired")
+            throw new InvalidOperationException(
+                "Cannot update a cancelled or expired invitation.");
+
+        // Optional: prevent duplicate update
+        if (invitation.Status == request.Status)
+            throw new InvalidOperationException(
+                $"Invitation is already '{request.Status}'.");
+
+        // State transition validation
+        switch (invitation.Status)
+        {
+            case "Pending":
+                if (request.Status is not ("Accepted" or "Declined" or "Cancelled"))
+                    throw new InvalidOperationException(
+                        "Pending invitation can only become Accepted, Declined or Cancelled.");
+                break;
+
+            case "Accepted":
+                if (request.Status is not ("Confirmed" or "Cancelled"))
+                    throw new InvalidOperationException(
+                        "Accepted invitation can only become Confirmed or Cancelled.");
+                break;
+
+            case "Declined":
+                throw new InvalidOperationException(
+                    "Declined invitation cannot be updated.");
+
+            case "Confirmed":
+                throw new InvalidOperationException(
+                    "Confirmed invitation cannot be updated.");
+        }
 
         invitation.Status = request.Status;
 
-        if (!string.IsNullOrWhiteSpace(request.ResponseReason))
-            invitation.ResponseReason = request.ResponseReason;
+        invitation.ResponseReason = string.IsNullOrWhiteSpace(request.ResponseReason)
+            ? null
+            : request.ResponseReason.Trim();
 
-        if (request.Status == "Accepted" || request.Status == "Declined")
-            invitation.RespondedAt = DateTime.UtcNow;
+        switch (request.Status)
+        {
+            case "Accepted":
+            case "Declined":
+                invitation.RespondedAt = DateTime.UtcNow;
+                break;
 
-        if (request.Status == "Confirmed")
-            invitation.ConfirmedAt = DateTime.UtcNow;
+            case "Confirmed":
+                invitation.ConfirmedAt = DateTime.UtcNow;
+                break;
 
-        if (request.Status == "Cancelled")
-            invitation.CancelledAt = DateTime.UtcNow;
+            case "Cancelled":
+                invitation.CancelledAt = DateTime.UtcNow;
+                break;
+        }
 
         await _context.SaveChangesAsync(cancellationToken);
 

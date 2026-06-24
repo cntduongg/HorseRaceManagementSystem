@@ -19,8 +19,24 @@ public sealed class CreatePredictionCommandHandler
         CreatePredictionCommand request,
         CancellationToken cancellationToken)
     {
+        if (request.RaceId <= 0)
+            throw new InvalidOperationException("RaceId is required.");
+
+        if (request.SpectatorId <= 0)
+            throw new InvalidOperationException("SpectatorId is required.");
+
+        if (request.FirstEntryId <= 0 ||
+            request.SecondEntryId <= 0 ||
+            request.ThirdEntryId <= 0)
+            throw new InvalidOperationException("EntryId is required.");
+
         if (request.BetAmount < 10)
             throw new InvalidOperationException("BetAmount must be at least 10.");
+
+        if (request.OddsLocked1 <= 0 ||
+            request.OddsLocked2 <= 0 ||
+            request.OddsLocked3 <= 0)
+            throw new InvalidOperationException("Odds must be greater than 0.");
 
         if (request.FirstEntryId == request.SecondEntryId ||
             request.FirstEntryId == request.ThirdEntryId ||
@@ -29,28 +45,36 @@ public sealed class CreatePredictionCommandHandler
             throw new InvalidOperationException("Selected entries must be different.");
         }
 
-        // Check Race
         var raceExists = await _context.Races
             .AnyAsync(x => x.RaceId == request.RaceId, cancellationToken);
 
         if (!raceExists)
             throw new InvalidOperationException("Race not found.");
 
-        // Check Spectator
-        var spectatorExists = await _context.Spectators
-            .AnyAsync(x => x.UserId == request.SpectatorId, cancellationToken);
+        var spectator = await _context.Spectators
+            .FirstOrDefaultAsync(x => x.UserId == request.SpectatorId, cancellationToken);
 
-        if (!spectatorExists)
+        if (spectator is null)
             throw new InvalidOperationException("Spectator not found.");
 
-        // Check Entries
-        var entryIds = new[] { request.FirstEntryId, request.SecondEntryId, request.ThirdEntryId };
+        if (!spectator.IsActive)
+            throw new InvalidOperationException("Spectator is inactive.");
+
+        var entryIds = new[]
+        {
+            request.FirstEntryId,
+            request.SecondEntryId,
+            request.ThirdEntryId
+        };
 
         var validEntries = await _context.Entries
-            .CountAsync(x => entryIds.Contains(x.EntryId), cancellationToken);
+            .CountAsync(x =>
+                entryIds.Contains(x.EntryId) &&
+                x.RaceId == request.RaceId,
+                cancellationToken);
 
         if (validEntries != 3)
-            throw new InvalidOperationException("One or more entries not found.");
+            throw new InvalidOperationException("Entries must belong to the selected race.");
 
         var prediction = new Prediction
         {
@@ -68,6 +92,7 @@ public sealed class CreatePredictionCommandHandler
         };
 
         _context.Predictions.Add(prediction);
+
         await _context.SaveChangesAsync(cancellationToken);
 
         return prediction.PredictionId;

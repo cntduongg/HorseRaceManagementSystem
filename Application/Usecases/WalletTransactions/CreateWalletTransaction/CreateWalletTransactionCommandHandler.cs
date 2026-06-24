@@ -20,16 +20,82 @@ public sealed class CreateWalletTransactionCommandHandler
         CancellationToken cancellationToken)
     {
         if (request.WalletId <= 0)
-            throw new InvalidOperationException("WalletId invalid.");
+            throw new InvalidOperationException("WalletId is invalid.");
+
+        if (request.SpectatorId <= 0)
+            throw new InvalidOperationException("SpectatorId is invalid.");
 
         if (string.IsNullOrWhiteSpace(request.Type))
             throw new InvalidOperationException("Type is required.");
 
-        var walletExists = await _context.PointWallets
-            .AnyAsync(x => x.WalletId == request.WalletId, cancellationToken);
+        if (request.Amount == 0)
+            throw new InvalidOperationException("Amount cannot be zero.");
 
-        if (!walletExists)
+        if (request.BalanceAfter < 0)
+            throw new InvalidOperationException("BalanceAfter cannot be negative.");
+
+        var wallet = await _context.PointWallets
+            .FirstOrDefaultAsync(
+                x => x.WalletId == request.WalletId,
+                cancellationToken);
+
+        if (wallet is null)
             throw new InvalidOperationException("Wallet not found.");
+
+        if (wallet.SpectatorId != request.SpectatorId)
+            throw new InvalidOperationException("Wallet does not belong to the spectator.");
+
+        var spectatorExists = await _context.Spectators
+            .AnyAsync(
+                x => x.UserId == request.SpectatorId,
+                cancellationToken);
+
+        if (!spectatorExists)
+            throw new InvalidOperationException("Spectator not found.");
+
+        if (request.PredictionId.HasValue)
+        {
+            var predictionExists = await _context.Predictions
+                .AnyAsync(
+                    x => x.PredictionId == request.PredictionId.Value,
+                    cancellationToken);
+
+            if (!predictionExists)
+                throw new InvalidOperationException("Prediction not found.");
+        }
+
+        if (request.SettlementRunId.HasValue)
+        {
+            var settlementExists = await _context.SettlementRuns
+                .AnyAsync(
+                    x => x.SettlementRunId == request.SettlementRunId.Value,
+                    cancellationToken);
+
+            if (!settlementExists)
+                throw new InvalidOperationException("SettlementRun not found.");
+        }
+
+        if (request.AdminId.HasValue)
+        {
+            var adminExists = await _context.Users
+                .AnyAsync(
+                    x => x.UserId == request.AdminId.Value,
+                    cancellationToken);
+
+            if (!adminExists)
+                throw new InvalidOperationException("Admin not found.");
+        }
+
+        if (request.RollbackOfTransactionId.HasValue)
+        {
+            var rollbackExists = await _context.WalletTransactions
+                .AnyAsync(
+                    x => x.WalletTransactionId == request.RollbackOfTransactionId.Value,
+                    cancellationToken);
+
+            if (!rollbackExists)
+                throw new InvalidOperationException("Rollback transaction not found.");
+        }
 
         var entity = new WalletTransaction
         {
@@ -47,6 +113,7 @@ public sealed class CreateWalletTransactionCommandHandler
         };
 
         _context.WalletTransactions.Add(entity);
+
         await _context.SaveChangesAsync(cancellationToken);
 
         return entity.WalletTransactionId;

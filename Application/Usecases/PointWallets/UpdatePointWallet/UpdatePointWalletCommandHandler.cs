@@ -18,6 +18,9 @@ public sealed class UpdatePointWalletCommandHandler
         UpdatePointWalletCommand request,
         CancellationToken cancellationToken)
     {
+        if (request.WalletId <= 0)
+            throw new InvalidOperationException("WalletId is required.");
+
         if (request.SpectatorId <= 0)
             throw new InvalidOperationException("SpectatorId is required.");
 
@@ -25,16 +28,30 @@ public sealed class UpdatePointWalletCommandHandler
             throw new InvalidOperationException("Balance cannot be negative.");
 
         var wallet = await _context.PointWallets
-            .FirstOrDefaultAsync(x => x.WalletId == request.WalletId, cancellationToken);
+            .FirstOrDefaultAsync(
+                x => x.WalletId == request.WalletId,
+                cancellationToken);
 
         if (wallet is null)
             return false;
 
         var spectatorExists = await _context.Spectators
-            .AnyAsync(x => x.UserId == request.SpectatorId, cancellationToken);
+            .AnyAsync(
+                x => x.UserId == request.SpectatorId,
+                cancellationToken);
 
         if (!spectatorExists)
             throw new InvalidOperationException("Spectator does not exist.");
+
+        var duplicatedWallet = await _context.PointWallets
+            .AnyAsync(x =>
+                x.SpectatorId == request.SpectatorId &&
+                x.WalletId != request.WalletId,
+                cancellationToken);
+
+        if (duplicatedWallet)
+            throw new InvalidOperationException(
+                "Wallet already exists for this spectator.");
 
         wallet.SpectatorId = request.SpectatorId;
         wallet.Balance = request.Balance;
