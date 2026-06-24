@@ -19,18 +19,22 @@ public sealed class GetRaceResultDetailQueryHandler
         CancellationToken cancellationToken)
     {
         return await _context.RaceResults
-            .Where(x => x.RaceId == request.RaceId && x.EntryId == request.EntryId)
-            .Select(x => new RaceResultDetailResponse(
-                x.RaceId,
-                x.EntryId,
-                x.TotalPoints,
-                x.FinalPosition,
-                x.IsRaceDQ,
-                x.LegWinCount,
-                x.LegTop3Count,
-                x.CreatedAt,
-                x.UpdatedAt
-            ))
-            .FirstOrDefaultAsync(cancellationToken);
+      .AsNoTracking()
+      .Where(x => x.RaceId == request.RaceId && x.EntryId == request.EntryId)
+      .Select(x => new RaceResultDetailResponse(
+          x.RaceId,
+          x.EntryId,
+          x.Entry.Horse.Name,
+          x.Entry.HorseOwner.FullName,
+          x.Entry.Jockey.FullName,
+          x.TotalPoints,
+          x.FinalPosition,
+          x.IsRaceDQ,
+          x.LegWinCount,
+          x.LegTop3Count,
+          x.CreatedAt,
+          x.UpdatedAt
+      ))
+      .FirstOrDefaultAsync(cancellationToken);
     }
 }

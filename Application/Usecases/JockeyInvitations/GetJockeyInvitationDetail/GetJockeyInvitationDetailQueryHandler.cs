@@ -19,18 +19,27 @@ public sealed class GetJockeyInvitationDetailQueryHandler
         CancellationToken cancellationToken)
     {
         return await _context.JockeyInvitations
-            .Where(x => x.InvitationId == request.InvitationId)
-            .Select(x => new JockeyInvitationDetailResponse(
-                x.InvitationId,
-                x.HorseOwnerId,
-                x.JockeyId,
-                x.HorseId,
-                x.RaceId,
-                x.Status,
-                x.Message,
-                x.ResponseReason,
-                x.SentAt
-            ))
-            .FirstOrDefaultAsync(cancellationToken);
+      .Where(x => x.InvitationId == request.InvitationId)
+      .Select(x => new JockeyInvitationDetailResponse(
+          x.InvitationId,
+
+          x.HorseOwnerId,
+          x.HorseOwner.FullName,
+
+          x.JockeyId,
+          x.Jockey.FullName,
+
+          x.HorseId,
+          x.Horse.Name,
+
+          x.RaceId,
+          x.Race.Name,
+
+          x.Status,
+          x.Message,
+          x.ResponseReason,
+          x.SentAt
+      ))
+      .FirstOrDefaultAsync(cancellationToken);
     }
 }

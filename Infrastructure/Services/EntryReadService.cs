@@ -37,7 +37,10 @@ public sealed class EntryReadService : IEntryReadService
                 x.Status,
                 x.SubmittedAt,
                 x.ApprovedAt,
-                null
+                null,
+                x.Race.Tournament != null
+    ? x.Race.Tournament.Name
+    : null
             ))
             .ToListAsync(cancellationToken);
     }

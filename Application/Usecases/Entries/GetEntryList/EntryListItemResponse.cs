@@ -15,5 +15,6 @@ public sealed record EntryListItemResponse(
     string Status,
     DateTime SubmittedAt,
     DateTime? ApprovedAt,
-    decimal? CurrentOdds
+    decimal? CurrentOdds,
+    string TournamentName
 );

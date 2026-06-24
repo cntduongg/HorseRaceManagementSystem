@@ -19,13 +19,15 @@ public sealed class GetRaceResultListQueryHandler
 		CancellationToken cancellationToken)
 	{
 		return await _context.RaceResults
-			.Select(x => new RaceResultListItemResponse(
-				x.RaceId,
-				x.EntryId,
-				x.TotalPoints,
-				x.FinalPosition,
-				x.IsRaceDQ
-			))
-			.ToListAsync(cancellationToken);
+            .Select(x => new RaceResultListItemResponse(
+    x.RaceId,
+    x.EntryId,
+    x.TotalPoints,
+    x.FinalPosition,
+    x.IsRaceDQ,
+    x.LegWinCount,
+    x.LegTop3Count
+))
+            .ToListAsync(cancellationToken);
 	}
 }

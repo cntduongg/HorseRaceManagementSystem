@@ -5,5 +5,7 @@ public sealed record RaceResultListItemResponse(
     int EntryId,
     int TotalPoints,
     int? FinalPosition,
-    bool IsRaceDQ
+    bool IsRaceDQ,
+    int LegWinCount,
+    int LegTop3Count
 );

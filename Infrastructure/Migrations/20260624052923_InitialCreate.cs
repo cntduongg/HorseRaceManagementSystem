@@ -9,7 +9,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialClean : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -63,7 +63,7 @@ namespace Infrastructure.Migrations
                     AvatarUrl = table.Column<string>(type: "text", nullable: true),
                     RoleId = table.Column<int>(type: "integer", nullable: false),
                     IsActive = table.Column<bool>(type: "boolean", nullable: false),
-                    Status = table.Column<string>(type: "text", nullable: false),
+                    Status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "Active"),
                     LockedUntil = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     LicenseNumber = table.Column<string>(type: "text", nullable: true),
                     Weight = table.Column<decimal>(type: "numeric", nullable: true),

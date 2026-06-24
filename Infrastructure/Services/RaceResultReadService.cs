@@ -16,7 +16,7 @@ public sealed class RaceResultReadService : IRaceResultReadService
     }
 
     public async Task<List<RaceResultListItemResponse>> GetListAsync(
-        CancellationToken cancellationToken)
+    CancellationToken cancellationToken)
     {
         return await _db.RaceResults
             .AsNoTracking()
@@ -26,11 +26,11 @@ public sealed class RaceResultReadService : IRaceResultReadService
             .Select(x => new RaceResultListItemResponse(
                 x.RaceId,
                 x.EntryId,
-                x.Entry.Horse.Name,
-                x.Entry.Horse.Owner.FullName,
-                x.Entry.Jockey.FullName,
+                x.TotalPoints,
                 x.FinalPosition,
-                x.TotalPoints
+                x.IsRaceDQ,
+                x.LegWinCount,
+                x.LegTop3Count
             ))
             .ToListAsync(cancellationToken);
     }
@@ -43,19 +43,20 @@ public sealed class RaceResultReadService : IRaceResultReadService
         return await _db.RaceResults
             .AsNoTracking()
             .Where(x => x.RaceId == raceId && x.EntryId == entryId)
-            .Select(x => new RaceResultDetailResponse(
-                x.RaceId,
-                x.EntryId,
-                x.Entry.Horse.Name,
-                x.Entry.Horse.Owner.FullName,
-                x.Entry.Jockey.FullName,
-                x.TotalPoints,
-                x.FinalPosition,
-                x.IsRaceDQ,
-                x.LegWinCount,
-                x.LegTop3Count,
-                x.PublishedAt
-            ))
+           .Select(x => new RaceResultDetailResponse(
+    x.RaceId,
+    x.EntryId,
+    x.Entry.Horse.Name,
+    x.Entry.Horse.Owner.FullName,
+    x.Entry.Jockey.FullName,
+    x.TotalPoints,
+    x.FinalPosition,
+    x.IsRaceDQ,
+    x.LegWinCount,
+    x.LegTop3Count,
+    x.CreatedAt,
+    x.UpdatedAt
+))
             .FirstOrDefaultAsync(cancellationToken);
     }
 }
