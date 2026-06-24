@@ -14,6 +14,7 @@ using Application.Usecases.Admin.RejectEntry;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Api.Controllers;
 
@@ -90,11 +91,16 @@ public sealed class AdminController : ControllerBase
     // =========================
     // COMMON
     // =========================
-
     private int GetUserId()
     {
-        var claim = User.FindFirst("userId")?.Value;
-        return int.Parse(claim!);
+        var claim =
+            User.FindFirst("userId")?.Value ??
+            User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (!int.TryParse(claim, out var userId))
+            throw new UnauthorizedAccessException("Invalid or missing userId claim");
+
+        return userId;
     }
 }
 
