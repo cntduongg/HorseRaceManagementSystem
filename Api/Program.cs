@@ -1,5 +1,4 @@
 using System.Text;
-using Api.Filters;
 using Api.Middlewares;
 using Application.DependencyInjection;
 using Infrastructure.Data;
@@ -8,9 +7,9 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi;
 using Application.Common;
 using Infrastructure.Data.Seed;
+using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
