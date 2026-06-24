@@ -1,24 +1,30 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.PointWallets.GetPointWalletList;
 
 public sealed class GetPointWalletListQueryHandler
-    : IRequestHandler<
-        GetPointWalletListQuery,
-        List<PointWalletListItemResponse>>
+    : IRequestHandler<GetPointWalletListQuery, List<PointWalletListItemResponse>>
 {
-    public Task<List<PointWalletListItemResponse>> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public GetPointWalletListQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<List<PointWalletListItemResponse>> Handle(
         GetPointWalletListQuery request,
         CancellationToken cancellationToken)
     {
-        // TODO: Load from database
-
-        var wallets = new List<PointWalletListItemResponse>
-        {
-            new(1, 1, 100, false),
-            new(2, 2, 250, false)
-        };
-
-        return Task.FromResult(wallets);
+        return await _context.PointWallets
+            .Select(x => new PointWalletListItemResponse(
+                x.WalletId,
+                x.SpectatorId,
+                x.Balance,
+                x.IsFrozen
+            ))
+            .ToListAsync(cancellationToken);
     }
 }

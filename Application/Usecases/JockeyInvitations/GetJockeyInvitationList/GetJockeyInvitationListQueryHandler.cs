@@ -1,37 +1,44 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.JockeyInvitations.GetJockeyInvitationList;
 
 public sealed class GetJockeyInvitationListQueryHandler
-    : IRequestHandler<
-        GetJockeyInvitationListQuery,
-        List<JockeyInvitationListItemResponse>>
+    : IRequestHandler<GetJockeyInvitationListQuery, List<JockeyInvitationListItemResponse>>
 {
-    public Task<List<JockeyInvitationListItemResponse>> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public GetJockeyInvitationListQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<List<JockeyInvitationListItemResponse>> Handle(
         GetJockeyInvitationListQuery request,
         CancellationToken cancellationToken)
     {
-        // TODO: Load from database
+        return await _context.JockeyInvitations
+            .AsNoTracking()
+            .OrderByDescending(x => x.SentAt)
+            .Select(x => new JockeyInvitationListItemResponse(
+                x.InvitationId,
 
-        var invitations =
-            new List<JockeyInvitationListItemResponse>
-            {
-                new(
-                    1,
-                    10,
-                    20,
-                    "Pending",
-                    DateTime.UtcNow
-                ),
-                new(
-                    2,
-                    11,
-                    21,
-                    "Accepted",
-                    DateTime.UtcNow
-                )
-            };
+                x.HorseOwnerId,
+                x.HorseOwner.FullName,
 
-        return Task.FromResult(invitations);
+                x.JockeyId,
+                x.Jockey.FullName,
+
+                x.RaceId,
+                x.Race.Name,
+
+                x.HorseId,
+                x.Horse.Name,
+
+                x.Status,
+                x.SentAt
+            ))
+            .ToListAsync(cancellationToken);
     }
 }

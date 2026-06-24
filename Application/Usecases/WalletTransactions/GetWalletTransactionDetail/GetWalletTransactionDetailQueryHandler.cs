@@ -1,29 +1,36 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.WalletTransactions.GetWalletTransactionDetail;
 
 public sealed class GetWalletTransactionDetailQueryHandler
-    : IRequestHandler<
-        GetWalletTransactionDetailQuery,
-        WalletTransactionDetailResponse?>
+    : IRequestHandler<GetWalletTransactionDetailQuery, WalletTransactionDetailResponse?>
 {
-    public Task<WalletTransactionDetailResponse?> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public GetWalletTransactionDetailQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<WalletTransactionDetailResponse?> Handle(
         GetWalletTransactionDetailQuery request,
         CancellationToken cancellationToken)
     {
-        // TODO: Load from database
-
-        var response = new WalletTransactionDetailResponse(
-            request.WalletTransactionId,
-            1,
-            1,
-            "Deposit",
-            100,
-            500,
-            "Initial balance",
-            DateTime.UtcNow
-        );
-
-        return Task.FromResult<WalletTransactionDetailResponse?>(response);
+        return await _context.WalletTransactions
+            .AsNoTracking()
+            .Where(x => x.WalletTransactionId == request.WalletTransactionId)
+            .Select(x => new WalletTransactionDetailResponse(
+                x.WalletTransactionId,
+                x.WalletId,
+                x.SpectatorId,
+                x.Type,
+                x.Amount,
+                x.BalanceAfter,
+                x.Reason,
+                x.CreatedAt
+            ))
+            .FirstOrDefaultAsync(cancellationToken);
     }
 }

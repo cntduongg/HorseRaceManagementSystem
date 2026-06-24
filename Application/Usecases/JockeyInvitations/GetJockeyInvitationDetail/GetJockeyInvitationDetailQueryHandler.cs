@@ -1,32 +1,36 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.JockeyInvitations.GetJockeyInvitationDetail;
 
 public sealed class GetJockeyInvitationDetailQueryHandler
-    : IRequestHandler<
-        GetJockeyInvitationDetailQuery,
-        JockeyInvitationDetailResponse?>
+    : IRequestHandler<GetJockeyInvitationDetailQuery, JockeyInvitationDetailResponse?>
 {
-    public Task<JockeyInvitationDetailResponse?> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public GetJockeyInvitationDetailQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<JockeyInvitationDetailResponse?> Handle(
         GetJockeyInvitationDetailQuery request,
         CancellationToken cancellationToken)
     {
-        // TODO: Load from database
-
-        var response =
-            new JockeyInvitationDetailResponse(
-                request.InvitationId,
-                1,
-                2,
-                3,
-                4,
-                "Pending",
-                "Please join this race",
-                null,
-                DateTime.UtcNow
-            );
-
-        return Task.FromResult<
-            JockeyInvitationDetailResponse?>(response);
+        return await _context.JockeyInvitations
+            .Where(x => x.InvitationId == request.InvitationId)
+            .Select(x => new JockeyInvitationDetailResponse(
+                x.InvitationId,
+                x.HorseOwnerId,
+                x.JockeyId,
+                x.HorseId,
+                x.RaceId,
+                x.Status,
+                x.Message,
+                x.ResponseReason,
+                x.SentAt
+            ))
+            .FirstOrDefaultAsync(cancellationToken);
     }
 }

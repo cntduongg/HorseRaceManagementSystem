@@ -1,34 +1,33 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.PredictionSettlements.GetPredictionSettlementList;
 
 public sealed class GetPredictionSettlementListQueryHandler
     : IRequestHandler<GetPredictionSettlementListQuery, List<PredictionSettlementListItemResponse>>
 {
-    public Task<List<PredictionSettlementListItemResponse>> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public GetPredictionSettlementListQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<List<PredictionSettlementListItemResponse>> Handle(
         GetPredictionSettlementListQuery request,
         CancellationToken cancellationToken)
     {
-        // TODO: Load from database
-
-        var items = new List<PredictionSettlementListItemResponse>
-        {
-            new(
-                1,
-                1,
-                "Won",
-                250,
-                false
-            ),
-            new(
-                2,
-                2,
-                "Lost",
-                0,
-                false
-            )
-        };
-
-        return Task.FromResult(items);
+        return await _context.PredictionSettlements
+            .AsNoTracking()
+            .OrderByDescending(x => x.SettledAt)
+            .Select(x => new PredictionSettlementListItemResponse(
+                x.PredictionSettlementId,
+                x.PredictionId,
+                x.Outcome,
+                x.PayoutAmount,
+                x.IsRollbacked
+            ))
+            .ToListAsync(cancellationToken);
     }
 }

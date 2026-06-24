@@ -1,15 +1,16 @@
 using MediatR;
+using Domain.Aggregates.Enums;
 
 namespace Application.Usecases.PrizePointTransactions.CreatePrizePointTransaction;
 
 public sealed record CreatePrizePointTransactionCommand(
-    int RaceResultId,
     int TournamentId,
     int RaceId,
     int EntryId,
     int UserId,
-    string EntityType,
+    string SourceType,
     int FinalPosition,
     int Points,
-    string Type
+    PrizePointTransactionType TransactionType,
+    int? RollbackOfId
 ) : IRequest<int>;

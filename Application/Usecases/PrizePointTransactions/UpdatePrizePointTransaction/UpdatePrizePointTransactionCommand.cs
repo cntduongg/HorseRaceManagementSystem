@@ -1,11 +1,13 @@
 using MediatR;
+using Domain.Aggregates.Enums;
 
 namespace Application.Usecases.PrizePointTransactions.UpdatePrizePointTransaction;
 
 public sealed record UpdatePrizePointTransactionCommand(
     int PrizePointTransactionId,
-    string EntityType,
+    string SourceType,
     int FinalPosition,
     int Points,
-    string Type
+    PrizePointTransactionType TransactionType,
+    int? RollbackOfId
 ) : IRequest<bool>;

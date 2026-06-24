@@ -1,31 +1,33 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.Violations.GetViolationList;
 
 public sealed class GetViolationListQueryHandler
-    : IRequestHandler<
-        GetViolationListQuery,
-        List<ViolationListItemResponse>>
+    : IRequestHandler<GetViolationListQuery, List<ViolationListItemResponse>>
 {
-    public Task<List<ViolationListItemResponse>> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public GetViolationListQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<List<ViolationListItemResponse>> Handle(
         GetViolationListQuery request,
         CancellationToken cancellationToken)
     {
-        // TODO: Load from database
-
-        var result = new List<ViolationListItemResponse>
-        {
-            new(
-                1,
-                1,
-                1,
-                1,
-                "LaneViolation",
-                "Warning",
-                "Pending"
-            )
-        };
-
-        return Task.FromResult(result);
+        return await _context.Violations
+            .Select(x => new ViolationListItemResponse(
+                x.ViolationId,
+                x.RaceId,
+                x.LegNumber,
+                x.EntryId,
+                x.ViolationType,
+                x.Penalty,
+                x.Status
+            ))
+            .ToListAsync(cancellationToken);
     }
 }

@@ -1,3 +1,5 @@
+using Application.Common.Interfaces;
+using Domain.Aggregates.Entities;
 using MediatR;
 
 namespace Application.Usecases.Roles.CreateRole;
@@ -5,7 +7,15 @@ namespace Application.Usecases.Roles.CreateRole;
 public sealed class CreateRoleCommandHandler
     : IRequestHandler<CreateRoleCommand, int>
 {
-    public Task<int> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public CreateRoleCommandHandler(
+        IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<int> Handle(
         CreateRoleCommand request,
         CancellationToken cancellationToken)
     {
@@ -15,9 +25,16 @@ public sealed class CreateRoleCommandHandler
         if (string.IsNullOrWhiteSpace(request.Name))
             throw new InvalidOperationException("Name is required.");
 
-        // TODO: Save to database
+        var role = new Role
+        {
+            Code = request.Code.Trim(),
+            Name = request.Name.Trim()
+        };
 
-        var roleId = 1;
-        return Task.FromResult(roleId);
+        _context.Roles.Add(role);
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return role.RoleId;
     }
 }

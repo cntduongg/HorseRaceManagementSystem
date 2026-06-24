@@ -1,29 +1,31 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.LegRefereeEntries.GetLegRefereeEntryList;
 
 public sealed class GetLegRefereeEntryListQueryHandler
-    : IRequestHandler<
-        GetLegRefereeEntryListQuery,
-        List<LegRefereeEntryListItemResponse>>
+    : IRequestHandler<GetLegRefereeEntryListQuery, List<LegRefereeEntryListItemResponse>>
 {
-    public Task<List<LegRefereeEntryListItemResponse>> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public GetLegRefereeEntryListQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<List<LegRefereeEntryListItemResponse>> Handle(
         GetLegRefereeEntryListQuery request,
         CancellationToken cancellationToken)
     {
-        // TODO: Load from database
-
-        var result = new List<LegRefereeEntryListItemResponse>
-        {
-            new(
-                1,
-                1,
-                1,
-                1,
-                "Finished"
-            )
-        };
-
-        return Task.FromResult(result);
+        return await _context.LegRefereeEntries
+     .Select(x => new LegRefereeEntryListItemResponse(
+         x.LegRefereeEntryId,
+         x.RaceId,
+         x.LegNumber,
+         x.EntryId,
+         x.ResultStatus
+     ))
+     .ToListAsync(cancellationToken);
     }
 }

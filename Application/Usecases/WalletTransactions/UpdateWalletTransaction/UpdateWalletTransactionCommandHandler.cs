@@ -9,8 +9,7 @@ public sealed class UpdateWalletTransactionCommandHandler
         UpdateWalletTransactionCommand request,
         CancellationToken cancellationToken)
     {
-        // TODO: Update database
-
-        return Task.FromResult(true);
+        throw new InvalidOperationException(
+            "WalletTransaction is append-only. Updates are not allowed.");
     }
 }

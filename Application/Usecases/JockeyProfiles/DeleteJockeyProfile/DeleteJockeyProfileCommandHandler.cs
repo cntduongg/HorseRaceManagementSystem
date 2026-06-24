@@ -1,16 +1,32 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.JockeyProfiles.DeleteJockeyProfile;
 
 public sealed class DeleteJockeyProfileCommandHandler
     : IRequestHandler<DeleteJockeyProfileCommand, bool>
 {
-    public Task<bool> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public DeleteJockeyProfileCommandHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<bool> Handle(
         DeleteJockeyProfileCommand request,
         CancellationToken cancellationToken)
     {
-        // TODO: Delete JockeyProfile from database
+        var profile = await _context.JockeyProfiles
+            .FirstOrDefaultAsync(x => x.UserId == request.UserId, cancellationToken);
 
-        return Task.FromResult(true);
+        if (profile is null)
+            return false;
+
+        _context.JockeyProfiles.Remove(profile);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return true;
     }
 }

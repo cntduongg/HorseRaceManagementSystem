@@ -1,20 +1,53 @@
+using Application.Common.Interfaces;
+using Domain.Aggregates.Entities;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.PointWallets.CreatePointWallet;
 
 public sealed class CreatePointWalletCommandHandler
     : IRequestHandler<CreatePointWalletCommand, int>
 {
-    public Task<int> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public CreatePointWalletCommandHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<int> Handle(
         CreatePointWalletCommand request,
         CancellationToken cancellationToken)
     {
-        // TODO: Validate spectator exists
+        if (request.SpectatorId <= 0)
+            throw new InvalidOperationException("SpectatorId is required.");
 
-        // TODO: Save to database
+        if (request.Balance < 0)
+            throw new InvalidOperationException("Balance cannot be negative.");
 
-        var walletId = 1;
+        var spectatorExists = await _context.Spectators
+            .AnyAsync(x => x.UserId == request.SpectatorId, cancellationToken);
 
-        return Task.FromResult(walletId);
+        if (!spectatorExists)
+            throw new InvalidOperationException("Spectator does not exist.");
+
+        var exists = await _context.PointWallets
+            .AnyAsync(x => x.SpectatorId == request.SpectatorId, cancellationToken);
+
+        if (exists)
+            throw new InvalidOperationException("Wallet already exists for this spectator.");
+
+        var wallet = new PointWallet
+        {
+            SpectatorId = request.SpectatorId,
+            Balance = request.Balance,
+            IsFrozen = request.IsFrozen,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _context.PointWallets.Add(wallet);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return wallet.WalletId;
     }
 }

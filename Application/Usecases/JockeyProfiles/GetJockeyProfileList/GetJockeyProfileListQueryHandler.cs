@@ -1,34 +1,30 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.JockeyProfiles.GetJockeyProfileList;
 
 public sealed class GetJockeyProfileListQueryHandler
-    : IRequestHandler<
-        GetJockeyProfileListQuery,
-        List<JockeyProfileListItemResponse>>
+    : IRequestHandler<GetJockeyProfileListQuery, List<JockeyProfileListItemResponse>>
 {
-    public Task<List<JockeyProfileListItemResponse>> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public GetJockeyProfileListQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<List<JockeyProfileListItemResponse>> Handle(
         GetJockeyProfileListQuery request,
         CancellationToken cancellationToken)
     {
-        // TODO: Load from database
-
-        var profiles = new List<JockeyProfileListItemResponse>
-        {
-            new(
-                1,
-                "JOCKEY-001",
-                100,
-                25
-            ),
-            new(
-                2,
-                "JOCKEY-002",
-                80,
-                15
-            )
-        };
-
-        return Task.FromResult(profiles);
+        return await _context.JockeyProfiles
+            .Select(x => new JockeyProfileListItemResponse(
+                x.UserId,
+                x.LicenseNumber,
+                x.TotalRaces,
+                x.TotalWins
+            ))
+            .ToListAsync(cancellationToken);
     }
 }

@@ -1,5 +1,6 @@
 using Application.Common;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.Tournaments.GetTournamentList;
 

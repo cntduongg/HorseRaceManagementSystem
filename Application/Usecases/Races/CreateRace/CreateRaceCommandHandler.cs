@@ -1,3 +1,5 @@
+using Application.Common.Interfaces;
+using Domain.Aggregates.Entities;
 using MediatR;
 
 namespace Application.Usecases.Races.CreateRace;
@@ -5,38 +7,50 @@ namespace Application.Usecases.Races.CreateRace;
 public sealed class CreateRaceCommandHandler
     : IRequestHandler<CreateRaceCommand, int>
 {
-    public Task<int> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public CreateRaceCommandHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<int> Handle(
         CreateRaceCommand request,
         CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(request.Name))
+            throw new InvalidOperationException("Race name is required.");
+
         if (request.NumberOfLegs < 1 || request.NumberOfLegs > 10)
-        {
-            throw new InvalidOperationException(
-                "NumberOfLegs must be between 1 and 10.");
-        }
+            throw new InvalidOperationException("NumberOfLegs must be between 1 and 10.");
 
         if (request.Referee1Id <= 0)
-        {
-            throw new InvalidOperationException(
-                "Referee1Id is required.");
-        }
+            throw new InvalidOperationException("Referee1Id is required.");
 
         if (request.Referee2Id <= 0)
-        {
-            throw new InvalidOperationException(
-                "Referee2Id is required.");
-        }
+            throw new InvalidOperationException("Referee2Id is required.");
 
         if (request.Referee1Id == request.Referee2Id)
+            throw new InvalidOperationException("Referees must be different.");
+
+        var race = new Race
         {
-            throw new InvalidOperationException(
-                "Referee1Id and Referee2Id must be different.");
-        }
+            TournamentId = request.TournamentId,
+            Name = request.Name.Trim(),
+            ScheduledStartTime = request.ScheduledStartTime.ToUniversalTime(),
+            NumberOfLegs = request.NumberOfLegs,
+            MaxHorses = request.MaxHorses,
+            RoundType = request.RoundType,
+            Referee1Id = request.Referee1Id,
+            Referee2Id = request.Referee2Id,
+            Status = "Scheduled",
+            CreatedAt = DateTime.UtcNow
+        };
 
-        // TODO: Save race into database
+        _context.Races.Add(race);
 
-        var raceId = 1;
+        await _context.SaveChangesAsync(cancellationToken);
 
-        return Task.FromResult(raceId);
+        return race.RaceId;
     }
 }

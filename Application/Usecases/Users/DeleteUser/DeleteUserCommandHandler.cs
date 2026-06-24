@@ -1,16 +1,35 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.Users.DeleteUser;
 
 public sealed class DeleteUserCommandHandler
     : IRequestHandler<DeleteUserCommand, bool>
 {
-    public Task<bool> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public DeleteUserCommandHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<bool> Handle(
         DeleteUserCommand request,
         CancellationToken cancellationToken)
     {
-        // TODO: Delete from database
+        var user = await _context.Users
+            .FirstOrDefaultAsync(
+                x => x.UserId == request.UserId,
+                cancellationToken);
 
-        return Task.FromResult(true);
+        if (user is null)
+            return false;
+
+        _context.Users.Remove(user);
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return true;
     }
 }
