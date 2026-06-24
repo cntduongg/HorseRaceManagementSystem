@@ -1,15 +1,17 @@
-using Application.Usecases.LegRefereeEntries.CreateLegRefereeEntry;
+﻿using Application.Usecases.LegRefereeEntries.CreateLegRefereeEntry;
 using Application.Usecases.LegRefereeEntries.DeleteLegRefereeEntry;
 using Application.Usecases.LegRefereeEntries.GetLegRefereeEntryDetail;
 using Application.Usecases.LegRefereeEntries.GetLegRefereeEntryList;
 using Application.Usecases.LegRefereeEntries.UpdateLegRefereeEntry;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/leg-referee-entries")]
+[Authorize(Roles = "REFEREE,ADMIN")]
 public sealed class LegRefereeEntriesController : ControllerBase
 {
     private readonly ISender _sender;

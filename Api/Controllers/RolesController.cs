@@ -1,15 +1,17 @@
-using Application.Usecases.Roles.CreateRole;
+﻿using Application.Usecases.Roles.CreateRole;
 using Application.Usecases.Roles.DeleteRole;
 using Application.Usecases.Roles.GetRoleDetail;
 using Application.Usecases.Roles.GetRoleList;
 using Application.Usecases.Roles.UpdateRole;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/roles")]
+[Authorize(Roles = "ADMIN")]
 public sealed class RolesController : ControllerBase
 {
     private readonly ISender _sender;

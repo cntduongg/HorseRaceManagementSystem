@@ -1,3 +1,5 @@
+using Application.Common;
+using Application.Usecases.Auth.GetProfile;
 using Application.Usecases.Auth.Login;
 using Application.Usecases.Auth.Logout;
 using Application.Usecases.Auth.Register;
@@ -13,10 +15,12 @@ namespace Api.Controllers;
 public sealed class AuthController : ControllerBase
 {
     private readonly ISender _sender;
+    private readonly ICurrentUser _currentUser;
 
-    public AuthController(ISender sender)
+    public AuthController(ISender sender, ICurrentUser currentUser)
     {
         _sender = sender;
+        _currentUser = currentUser;
     }
 
     /// <summary>
@@ -84,6 +88,32 @@ public sealed class AuthController : ControllerBase
     {
         var result = await _sender.Send(command, cancellationToken);
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Return the profile of the currently authenticated user (resolved from the JWT).
+    /// </summary>
+    [HttpGet("profile")]
+    [Authorize]
+    [ProducesResponseType(typeof(ProfileResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ProfileResponse>> GetProfile(
+        CancellationToken cancellationToken)
+    {
+        var userId = _currentUser.UserId;
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        var profile = await _sender.Send(new GetProfileQuery(userId.Value), cancellationToken);
+        if (profile is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(profile);
     }
 
     /// <summary>

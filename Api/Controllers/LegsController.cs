@@ -1,15 +1,17 @@
-using Application.Usecases.Legs.CreateLeg;
+﻿using Application.Usecases.Legs.CreateLeg;
 using Application.Usecases.Legs.DeleteLeg;
 using Application.Usecases.Legs.GetLegDetail;
 using Application.Usecases.Legs.GetLegList;
 using Application.Usecases.Legs.UpdateLeg;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/legs")]
+[Authorize]
 public sealed class LegsController : ControllerBase
 {
     private readonly ISender _sender;

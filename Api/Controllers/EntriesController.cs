@@ -1,15 +1,17 @@
-using Application.Usecases.Entries.CreateEntry;
+﻿using Application.Usecases.Entries.CreateEntry;
 using Application.Usecases.Entries.DeleteEntry;
 using Application.Usecases.Entries.GetEntryDetail;
 using Application.Usecases.Entries.GetEntryList;
 using Application.Usecases.Entries.UpdateEntry;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/entries")]
+[Authorize]
 public sealed class EntriesController : ControllerBase
 {
 	private readonly ISender _sender;
@@ -19,6 +21,7 @@ public sealed class EntriesController : ControllerBase
 		_sender = sender;
 	}
 
+	[Authorize(Roles = "HORSE_OWNER")]
 	[HttpPost]
 	public async Task<ActionResult<int>> Create(
 		[FromBody] CreateEntryCommand command,
@@ -60,6 +63,7 @@ public sealed class EntriesController : ControllerBase
 		return Ok(entries);
 	}
 
+	[Authorize(Roles = "HORSE_OWNER")]
 	[HttpPut("{entryId:int}")]
 	public async Task<ActionResult> Update(
 		int entryId,
@@ -76,6 +80,7 @@ public sealed class EntriesController : ControllerBase
 		return Ok(result);
 	}
 
+	[Authorize(Roles = "HORSE_OWNER")]
 	[HttpDelete("{entryId:int}")]
 	public async Task<ActionResult> Delete(
 		int entryId,

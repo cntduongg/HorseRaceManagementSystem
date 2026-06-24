@@ -1,15 +1,17 @@
-using Application.Usecases.PrizePointTransactions.CreatePrizePointTransaction;
+﻿using Application.Usecases.PrizePointTransactions.CreatePrizePointTransaction;
 using Application.Usecases.PrizePointTransactions.DeletePrizePointTransaction;
 using Application.Usecases.PrizePointTransactions.GetPrizePointTransactionDetail;
 using Application.Usecases.PrizePointTransactions.GetPrizePointTransactionList;
 using Application.Usecases.PrizePointTransactions.UpdatePrizePointTransaction;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/prize-point-transactions")]
+[Authorize(Roles = "ADMIN")]
 public sealed class PrizePointTransactionsController : ControllerBase
 {
     private readonly ISender _sender;

@@ -1,15 +1,17 @@
-using Application.Usecases.PointWallets.CreatePointWallet;
+﻿using Application.Usecases.PointWallets.CreatePointWallet;
 using Application.Usecases.PointWallets.DeletePointWallet;
 using Application.Usecases.PointWallets.GetPointWalletDetail;
 using Application.Usecases.PointWallets.GetPointWalletList;
 using Application.Usecases.PointWallets.UpdatePointWallet;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/point-wallets")]
+[Authorize(Roles = "SPECTATOR,ADMIN")]
 public sealed class PointWalletsController : ControllerBase
 {
     private readonly ISender _sender;

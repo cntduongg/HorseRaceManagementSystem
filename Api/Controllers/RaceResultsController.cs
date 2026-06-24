@@ -1,15 +1,17 @@
-using Application.Usecases.RaceResults.CreateRaceResult;
+﻿using Application.Usecases.RaceResults.CreateRaceResult;
 using Application.Usecases.RaceResults.DeleteRaceResult;
 using Application.Usecases.RaceResults.GetRaceResultDetail;
 using Application.Usecases.RaceResults.GetRaceResultList;
 using Application.Usecases.RaceResults.UpdateRaceResult;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/race-results")]
+[Authorize]
 public sealed class RaceResultsController : ControllerBase
 {
     private readonly ISender _sender;

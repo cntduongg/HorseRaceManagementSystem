@@ -1,15 +1,17 @@
-using Application.Usecases.JockeyProfiles.CreateJockeyProfile;
+﻿using Application.Usecases.JockeyProfiles.CreateJockeyProfile;
 using Application.Usecases.JockeyProfiles.DeleteJockeyProfile;
 using Application.Usecases.JockeyProfiles.GetJockeyProfileDetail;
 using Application.Usecases.JockeyProfiles.GetJockeyProfileList;
 using Application.Usecases.JockeyProfiles.UpdateJockeyProfile;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/jockey-profiles")]
+[Authorize]
 public sealed class JockeyProfilesController : ControllerBase
 {
     private readonly ISender _sender;

@@ -1,15 +1,17 @@
-using Application.Usecases.Violations.CreateViolation;
+﻿using Application.Usecases.Violations.CreateViolation;
 using Application.Usecases.Violations.DeleteViolation;
 using Application.Usecases.Violations.GetViolationDetail;
 using Application.Usecases.Violations.GetViolationList;
 using Application.Usecases.Violations.UpdateViolation;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/violations")]
+[Authorize(Roles = "REFEREE,ADMIN")]
 public sealed class ViolationsController : ControllerBase
 {
 	private readonly ISender _sender;

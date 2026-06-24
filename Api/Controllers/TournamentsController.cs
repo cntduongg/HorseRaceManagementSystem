@@ -1,15 +1,17 @@
-using Application.Usecases.Tournaments.CreateTournament;
+﻿using Application.Usecases.Tournaments.CreateTournament;
 using Application.Usecases.Tournaments.DeleteTournament;
 using Application.Usecases.Tournaments.GetTournamentDetail;
 using Application.Usecases.Tournaments.GetTournamentList;
 using Application.Usecases.Tournaments.UpdateTournament;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/tournaments")]
+[Authorize]
 public sealed class TournamentsController : ControllerBase
 {
     private readonly ISender _sender;
@@ -19,6 +21,7 @@ public sealed class TournamentsController : ControllerBase
         _sender = sender;
     }
 
+    [Authorize(Roles = "ADMIN")]
     [HttpPost]
     public async Task<ActionResult<int>> Create(
         [FromBody] CreateTournamentCommand command,
@@ -66,6 +69,7 @@ public sealed class TournamentsController : ControllerBase
         return Ok(tournament);
     }
 
+    [Authorize(Roles = "ADMIN")]
     [HttpPut("{tournamentId:int}")]
     public async Task<ActionResult> Update(
         [FromRoute] int tournamentId,
@@ -96,6 +100,7 @@ public sealed class TournamentsController : ControllerBase
         return NoContent();
     }
 
+    [Authorize(Roles = "ADMIN")]
     [HttpDelete("{tournamentId:int}")]
     public async Task<ActionResult> Delete(
         [FromRoute] int tournamentId,

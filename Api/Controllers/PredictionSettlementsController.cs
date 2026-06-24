@@ -1,15 +1,17 @@
-using Application.Usecases.PredictionSettlements.CreatePredictionSettlement;
+﻿using Application.Usecases.PredictionSettlements.CreatePredictionSettlement;
 using Application.Usecases.PredictionSettlements.DeletePredictionSettlement;
 using Application.Usecases.PredictionSettlements.GetPredictionSettlementDetail;
 using Application.Usecases.PredictionSettlements.GetPredictionSettlementList;
 using Application.Usecases.PredictionSettlements.UpdatePredictionSettlement;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/prediction-settlements")]
+[Authorize(Roles = "ADMIN")]
 public sealed class PredictionSettlementsController : ControllerBase
 {
     private readonly ISender _sender;

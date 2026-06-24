@@ -1,15 +1,17 @@
-using Application.Usecases.Horses.CreateHorse;
+﻿using Application.Usecases.Horses.CreateHorse;
 using Application.Usecases.Horses.DeleteHorse;
 using Application.Usecases.Horses.GetHorseDetail;
 using Application.Usecases.Horses.GetHorseList;
 using Application.Usecases.Horses.UpdateHorse;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/horses")]
+[Authorize]
 public sealed class HorsesController : ControllerBase
 {
     private readonly ISender _sender;
@@ -19,6 +21,7 @@ public sealed class HorsesController : ControllerBase
         _sender = sender;
     }
 
+    [Authorize(Roles = "HORSE_OWNER")]
     [HttpPost]
     public async Task<ActionResult<int>> Create(
         [FromBody] CreateHorseCommand command,
@@ -64,6 +67,7 @@ public sealed class HorsesController : ControllerBase
         return Ok(horse);
     }
 
+    [Authorize(Roles = "HORSE_OWNER")]
     [HttpPut("{horseId:int}")]
     public async Task<ActionResult> Update(
         [FromRoute] int horseId,
@@ -92,6 +96,7 @@ public sealed class HorsesController : ControllerBase
         return NoContent();
     }
 
+    [Authorize(Roles = "HORSE_OWNER")]
     [HttpDelete("{horseId:int}")]
     public async Task<ActionResult> Delete(
         [FromRoute] int horseId,

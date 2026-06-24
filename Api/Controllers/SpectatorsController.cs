@@ -1,15 +1,17 @@
-using Application.Usecases.Spectators.CreateSpectator;
+﻿using Application.Usecases.Spectators.CreateSpectator;
 using Application.Usecases.Spectators.DeleteSpectator;
 using Application.Usecases.Spectators.GetSpectatorDetail;
 using Application.Usecases.Spectators.GetSpectatorList;
 using Application.Usecases.Spectators.UpdateSpectator;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/spectators")]
+[Authorize(Roles = "SPECTATOR,ADMIN")]
 public sealed class SpectatorsController : ControllerBase
 {
     private readonly ISender _sender;

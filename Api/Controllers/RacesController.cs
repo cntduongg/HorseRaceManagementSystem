@@ -1,10 +1,11 @@
-
+﻿
 using Application.Usecases.Races.CreateRace;
 using Application.Usecases.Races.GetRaceDetail;
 using Application.Usecases.Races.DeleteRace;
 using Application.Usecases.Races.GetRaceList;
 using Application.Usecases.Races.UpdateRace;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers;
@@ -12,6 +13,7 @@ namespace Api.Controllers;
 
 [ApiController]
 [Route("api/races")]
+[Authorize]
 public sealed class RacesController : ControllerBase
 {
     private readonly ISender _sender;
@@ -21,6 +23,7 @@ public sealed class RacesController : ControllerBase
         _sender = sender;
     }
 
+    [Authorize(Roles = "ADMIN")]
     [HttpPost]
     public async Task<ActionResult<int>> Create(
         [FromBody] CreateRaceCommand command,
@@ -66,6 +69,7 @@ public sealed class RacesController : ControllerBase
         return Ok(races);
     }
 
+    [Authorize(Roles = "ADMIN")]
     [HttpPut("{raceId:int}")]
     public async Task<ActionResult> Update(
         [FromRoute] int raceId,
@@ -98,6 +102,7 @@ public sealed class RacesController : ControllerBase
         });
     }
 
+    [Authorize(Roles = "ADMIN")]
     [HttpDelete("{raceId:int}")]
     public async Task<ActionResult> Delete(
         [FromRoute] int raceId,

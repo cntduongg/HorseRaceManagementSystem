@@ -1,15 +1,17 @@
-using Application.Usecases.Predictions.CreatePrediction;
+﻿using Application.Usecases.Predictions.CreatePrediction;
 using Application.Usecases.Predictions.DeletePrediction;
 using Application.Usecases.Predictions.GetPredictionDetail;
 using Application.Usecases.Predictions.GetPredictionList;
 using Application.Usecases.Predictions.UpdatePrediction;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/predictions")]
+[Authorize(Roles = "SPECTATOR,ADMIN")]
 public sealed class PredictionsController : ControllerBase
 {
     private readonly ISender _sender;

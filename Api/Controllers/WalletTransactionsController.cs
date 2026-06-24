@@ -1,15 +1,17 @@
-using Application.Usecases.WalletTransactions.CreateWalletTransaction;
+﻿using Application.Usecases.WalletTransactions.CreateWalletTransaction;
 using Application.Usecases.WalletTransactions.DeleteWalletTransaction;
 using Application.Usecases.WalletTransactions.GetWalletTransactionDetail;
 using Application.Usecases.WalletTransactions.GetWalletTransactionList;
 using Application.Usecases.WalletTransactions.UpdateWalletTransaction;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/wallet-transactions")]
+[Authorize(Roles = "SPECTATOR,ADMIN")]
 public sealed class WalletTransactionsController : ControllerBase
 {
     private readonly ISender _sender;

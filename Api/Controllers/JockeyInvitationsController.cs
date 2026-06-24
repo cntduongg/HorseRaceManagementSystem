@@ -1,15 +1,17 @@
-using Application.Usecases.JockeyInvitations.CreateJockeyInvitation;
+﻿using Application.Usecases.JockeyInvitations.CreateJockeyInvitation;
 using Application.Usecases.JockeyInvitations.DeleteJockeyInvitation;
 using Application.Usecases.JockeyInvitations.GetJockeyInvitationDetail;
 using Application.Usecases.JockeyInvitations.GetJockeyInvitationList;
 using Application.Usecases.JockeyInvitations.UpdateJockeyInvitation;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/jockey-invitations")]
+[Authorize(Roles = "HORSE_OWNER,JOCKEY,ADMIN")]
 public sealed class JockeyInvitationsController : ControllerBase
 {
     private readonly ISender _sender;

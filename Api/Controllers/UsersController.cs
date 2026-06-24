@@ -1,15 +1,17 @@
-using Application.Usecases.Users.CreateUser;
+﻿using Application.Usecases.Users.CreateUser;
 using Application.Usecases.Users.DeleteUser;
 using Application.Usecases.Users.GetUserDetail;
 using Application.Usecases.Users.GetUserList;
 using Application.Usecases.Users.UpdateUser;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/users")]
+[Authorize(Roles = "ADMIN")]
 public sealed class UsersController : ControllerBase
 {
     private readonly ISender _sender;

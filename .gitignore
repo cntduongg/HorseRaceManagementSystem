@@ -19,8 +19,9 @@ appsettings.Development.json
 appsettings.local.json
 *.env
 
-# Claude Code
+# Claude Code / AI assistant
 .claude/
+CLAUDE.md
 
 # OS
 Thumbs.db
