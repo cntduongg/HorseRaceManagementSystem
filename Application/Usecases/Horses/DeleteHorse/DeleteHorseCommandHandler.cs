@@ -1,3 +1,4 @@
+using Application.Common;
 using MediatR;
 
 namespace Application.Usecases.Horses.DeleteHorse;
@@ -5,17 +6,29 @@ namespace Application.Usecases.Horses.DeleteHorse;
 public sealed class DeleteHorseCommandHandler
     : IRequestHandler<DeleteHorseCommand, bool>
 {
-    public Task<bool> Handle(
+    private readonly IHorseRepository _horseRepository;
+
+    public DeleteHorseCommandHandler(IHorseRepository horseRepository)
+    {
+        _horseRepository = horseRepository;
+    }
+
+    public async Task<bool> Handle(
         DeleteHorseCommand request,
         CancellationToken cancellationToken)
     {
-        if (request.HorseId <= 0)
+        var horse = await _horseRepository.GetByIdAsync(request.HorseId, cancellationToken);
+        if (horse is null)
         {
-            return Task.FromResult(false);
+            return false;
         }
 
-        // TODO: delete database
+        if (horse.OwnerId != request.RequesterId)
+        {
+            throw new UnauthorizedAccessException("You can only delete your own horses.");
+        }
 
-        return Task.FromResult(true);
+        _horseRepository.Remove(horse);
+        return true;
     }
 }

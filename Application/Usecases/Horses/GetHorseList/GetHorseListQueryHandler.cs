@@ -1,3 +1,4 @@
+using Application.Common;
 using MediatR;
 
 namespace Application.Usecases.Horses.GetHorseList;
@@ -5,26 +6,32 @@ namespace Application.Usecases.Horses.GetHorseList;
 public sealed class GetHorseListQueryHandler
     : IRequestHandler<GetHorseListQuery, List<HorseListItemResponse>>
 {
-    public Task<List<HorseListItemResponse>> Handle(
+    private readonly IHorseRepository _horseRepository;
+
+    public GetHorseListQueryHandler(IHorseRepository horseRepository)
+    {
+        _horseRepository = horseRepository;
+    }
+
+    public async Task<List<HorseListItemResponse>> Handle(
         GetHorseListQuery request,
         CancellationToken cancellationToken)
     {
-        var data = new List<HorseListItemResponse>
-        {
-            new(
-                HorseId: 1,
-                Name: "Thunder",
-                Status: "Approved",
-                Breed: "Arabian"
-            ),
-            new(
-                HorseId: 2,
-                Name: "Lightning",
-                Status: "Pending",
-                Breed: "Mongolian"
-            )
-        };
+        var horses = await _horseRepository.GetAsync(
+            request.OwnerId,
+            request.Status,
+            cancellationToken);
 
-        return Task.FromResult(data);
+        return horses
+            .Select(h => new HorseListItemResponse(
+                h.HorseId,
+                h.Name,
+                h.Breed,
+                h.BirthYear,
+                h.Color,
+                h.ImageUrl,
+                h.Status,
+                h.RejectionReason))
+            .ToList();
     }
 }

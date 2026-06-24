@@ -1,3 +1,4 @@
+using Application.Common;
 using MediatR;
 
 namespace Application.Usecases.Horses.GetHorseDetail;
@@ -5,26 +6,31 @@ namespace Application.Usecases.Horses.GetHorseDetail;
 public sealed class GetHorseDetailQueryHandler
     : IRequestHandler<GetHorseDetailQuery, HorseDetailResponse?>
 {
-    public Task<HorseDetailResponse?> Handle(
+    private readonly IHorseRepository _horseRepository;
+
+    public GetHorseDetailQueryHandler(IHorseRepository horseRepository)
+    {
+        _horseRepository = horseRepository;
+    }
+
+    public async Task<HorseDetailResponse?> Handle(
         GetHorseDetailQuery request,
         CancellationToken cancellationToken)
     {
-        if (request.HorseId <= 0)
+        var horse = await _horseRepository.GetByIdAsync(request.HorseId, cancellationToken);
+        if (horse is null)
         {
-            return Task.FromResult<HorseDetailResponse?>(null);
+            return null;
         }
 
-        var response = new HorseDetailResponse(
-            HorseId: request.HorseId,
-            OwnerId: 1,
-            Name: "Demo Horse",
-            Breed: "Arabian",
-            BirthYear: 2020,
-            Color: "Brown",
-            Status: "Pending",
-            ImageUrl: null
-        );
-
-        return Task.FromResult<HorseDetailResponse?>(response);
+        return new HorseDetailResponse(
+            horse.HorseId,
+            horse.OwnerId,
+            horse.Name,
+            horse.Breed,
+            horse.BirthYear,
+            horse.Color,
+            horse.Status,
+            horse.ImageUrl);
     }
 }
