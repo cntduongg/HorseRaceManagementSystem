@@ -1,6 +1,6 @@
 using Domain.Aggregates.Entities;
 using Microsoft.EntityFrameworkCore;
-
+using Microsoft.EntityFrameworkCore.Infrastructure;
 namespace Application.Common.Interfaces;
 
 public interface IApplicationDbContext
@@ -49,4 +49,5 @@ public interface IApplicationDbContext
 
     Task<int> SaveChangesAsync(
         CancellationToken cancellationToken = default);
+    DatabaseFacade Database { get; }
 }

@@ -41,6 +41,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITournamentReadService, TournamentReadService>();
         services.AddScoped<IRaceReadService, RaceReadService>();
         services.AddScoped<IEntryReadService, EntryReadService>();
+        services.AddScoped<IHorseRepository, HorseRepository>();
+        services.AddScoped<IEntryRepository, EntryRepository>();
         return services;
     }
 }

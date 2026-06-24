@@ -1,6 +1,12 @@
 using Application.Usecases.Admin.ApproveUser;
 using Application.Usecases.Admin.GetPendingUsers;
 using Application.Usecases.Admin.RejectUser;
+
+using Application.Usecases.Admin.GetPendingHorses;
+using Application.Usecases.Admin.ApproveHorse;
+using Application.Usecases.Admin.RejectHorse;
+using Application.Usecases.Admin.RevokeHorse;
+
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -19,54 +25,84 @@ public sealed class AdminController : ControllerBase
         _sender = sender;
     }
 
-    /// <summary>
-    /// List all user accounts that are pending admin approval (Horse Owner and Jockey registrations).
-    /// </summary>
+    // =========================
+    // USERS
+    // =========================
+
     [HttpGet("users/pending")]
-    [ProducesResponseType(typeof(List<PendingUserResponse>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<List<PendingUserResponse>>> GetPendingUsers(
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> GetPendingUsers(CancellationToken ct)
     {
-        var result = await _sender.Send(new GetPendingUsersQuery(), cancellationToken);
+        var result = await _sender.Send(new GetPendingUsersQuery(), ct);
         return Ok(result);
     }
 
-    /// <summary>
-    /// Approve a pending user registration. Sets their status to Active so they can log in.
-    /// </summary>
     [HttpPost("users/{id:int}/approve")]
-    [ProducesResponseType(typeof(ApproveUserResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ApproveUserResponse>> ApproveUser(
-        int id,
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> ApproveUser(int id, CancellationToken ct)
     {
-        var result = await _sender.Send(new ApproveUserCommand(id), cancellationToken);
+        var result = await _sender.Send(new ApproveUserCommand(id), ct);
+        return Ok(result);
+    }
+
+    [HttpPost("users/{id:int}/reject")]
+    public async Task<IActionResult> RejectUser(int id, [FromBody] RejectUserRequest request, CancellationToken ct)
+    {
+        var result = await _sender.Send(new RejectUserCommand(id, request.Reason), ct);
+        return Ok(result);
+    }
+
+    // =========================
+    // HORSES
+    // =========================
+
+    /// <summary>
+    /// Get all pending horses for admin review
+    /// </summary>
+    [HttpGet("horses/pending")]
+    public async Task<IActionResult> GetPendingHorses(CancellationToken ct)
+    {
+        var result = await _sender.Send(new GetPendingHorsesQuery(), ct);
         return Ok(result);
     }
 
     /// <summary>
-    /// Reject a pending user registration. Optionally provide a reason.
+    /// Approve horse registration
     /// </summary>
-    [HttpPost("users/{id:int}/reject")]
-    [ProducesResponseType(typeof(RejectUserResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<RejectUserResponse>> RejectUser(
-        int id,
-        [FromBody] RejectUserRequest request,
-        CancellationToken cancellationToken)
+    [HttpPost("horses/{id:int}/approve")]
+    public async Task<IActionResult> ApproveHorse(int id, CancellationToken ct)
     {
-        var result = await _sender.Send(new RejectUserCommand(id, request.Reason), cancellationToken);
+        // TODO: get AdminId from JWT
+        var adminId = GetUserId();
+
+        var result = await _sender.Send(new ApproveHorseCommand(id, adminId), ct);
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Reject horse registration
+    /// </summary>
+    [HttpPost("horses/{id:int}/reject")]
+    public async Task<IActionResult> RejectHorse(int id, [FromBody] RejectHorseRequest request, CancellationToken ct)
+    {
+        var result = await _sender.Send(new RejectHorseCommand(id, request.Reason), ct);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Revoke approved horse + cancel all entries
+    /// </summary>
+    [HttpPost("horses/{id:int}/revoke")]
+    public async Task<IActionResult> RevokeHorse(int id, CancellationToken ct)
+    {
+        var result = await _sender.Send(new RevokeHorseCommand(id), ct);
+        return Ok(result);
+    }
+
+    private int GetUserId()
+    {
+        var claim = User.FindFirst("userId")?.Value;
+        return int.Parse(claim!);
     }
 }
 
 public sealed record RejectUserRequest(string? Reason);
+public sealed record RejectHorseRequest(string? Reason);
