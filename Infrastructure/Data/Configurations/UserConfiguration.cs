@@ -31,9 +31,9 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.HasData(new User
         {
             UserId       = 1,
-            Email        = "admin@gmail.com",
-            PasswordHash = "$2a$11$Ov6QpkCSImsKhGQUK9vOauXi6RdzBBjnT01qi7Mbgs/lPBAh/bmRe",
-            FullName     = "System Admin",
+            Email        = "admin@horserace.com",
+            PasswordHash = "$2a$11$cHcPtVLvCvKHR/30b2HuQOMs7GqrfTEAr5FcjLqCQzf9zCECIqqmW",
+            FullName = "System Admin",
             RoleId       = 5,
             IsActive     = true,
             Status       = "Active",

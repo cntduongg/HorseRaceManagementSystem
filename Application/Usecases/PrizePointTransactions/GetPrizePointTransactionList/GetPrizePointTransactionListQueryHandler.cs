@@ -1,4 +1,6 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.PrizePointTransactions.GetPrizePointTransactionList;
 
@@ -6,18 +8,27 @@ public sealed class GetPrizePointTransactionListQueryHandler
     : IRequestHandler<GetPrizePointTransactionListQuery,
         List<PrizePointTransactionListItemResponse>>
 {
-    public Task<List<PrizePointTransactionListItemResponse>> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public GetPrizePointTransactionListQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<List<PrizePointTransactionListItemResponse>> Handle(
         GetPrizePointTransactionListQuery request,
         CancellationToken cancellationToken)
     {
-        // TODO: Load from database
-
-        var result = new List<PrizePointTransactionListItemResponse>
-        {
-            new(1, 1, "HorseOwner", 100, "Awarded"),
-            new(2, 2, "Jockey", 50, "Awarded")
-        };
-
-        return Task.FromResult(result);
+        return await _context.PrizePointTransactions
+            .AsNoTracking()
+            .OrderByDescending(x => x.CreatedAt)
+            .Select(x => new PrizePointTransactionListItemResponse(
+                x.PrizePointTransactionId,
+                x.UserId,
+                x.SourceType,
+                x.Points,
+                x.TransactionType.ToString()
+            ))
+            .ToListAsync(cancellationToken);
     }
 }

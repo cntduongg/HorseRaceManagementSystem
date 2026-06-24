@@ -1,27 +1,37 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.Races.GetRaceDetail;
 
 public sealed class GetRaceDetailQueryHandler
     : IRequestHandler<GetRaceDetailQuery, RaceDetailResponse?>
 {
-    public Task<RaceDetailResponse?> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public GetRaceDetailQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<RaceDetailResponse?> Handle(
         GetRaceDetailQuery request,
         CancellationToken cancellationToken)
     {
-        var response = new RaceDetailResponse(
-            RaceId: request.RaceId,
-            TournamentId: 1,
-            Name: "Test Race",
-            ScheduledStartTime: DateTime.UtcNow.AddDays(7),
-            NumberOfLegs: 3,
-            MaxHorses: 8,
-            RoundType: "Regular",
-            Status: "Scheduled",
-            Referee1Id: 1,
-            Referee2Id: 2
-        );
-
-        return Task.FromResult<RaceDetailResponse?>(response);
+        return await _context.Races
+            .Where(x => x.RaceId == request.RaceId)
+            .Select(x => new RaceDetailResponse(
+                x.RaceId,
+                x.TournamentId,
+                x.Name,
+                x.ScheduledStartTime,
+                x.NumberOfLegs,
+                x.MaxHorses,
+                x.RoundType,
+                x.Status,
+                x.Referee1Id,
+                x.Referee2Id
+            ))
+            .FirstOrDefaultAsync(cancellationToken);
     }
 }

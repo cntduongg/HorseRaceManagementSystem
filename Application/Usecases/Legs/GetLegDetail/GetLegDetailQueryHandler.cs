@@ -1,28 +1,38 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.Legs.GetLegDetail;
 
 public sealed class GetLegDetailQueryHandler
     : IRequestHandler<GetLegDetailQuery, LegDetailResponse?>
 {
-    public Task<LegDetailResponse?> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public GetLegDetailQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<LegDetailResponse?> Handle(
         GetLegDetailQuery request,
         CancellationToken cancellationToken)
     {
-        // TODO: Load from database
-
-        var response = new LegDetailResponse(
-            request.RaceId,
-            request.LegNumber,
-            "Pending",
-            null,
-            null,
-            null,
-            null,
-            DateTime.UtcNow,
-            null
-        );
-
-        return Task.FromResult<LegDetailResponse?>(response);
+        return await _context.Legs
+            .Where(x =>
+                x.RaceId == request.RaceId &&
+                x.LegNumber == request.LegNumber)
+            .Select(x => new LegDetailResponse(
+                x.RaceId,
+                x.LegNumber,
+                x.Status,
+                x.ConfirmationType,
+                x.ConfirmedAt,
+                x.ConflictReportedAt,
+                x.AdminOverrideReason,
+                x.StartedAt,
+                x.FinishedAt
+            ))
+            .FirstOrDefaultAsync(cancellationToken);
     }
 }

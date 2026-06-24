@@ -3,7 +3,7 @@ namespace Application.Usecases.PrizePointTransactions.GetPrizePointTransactionLi
 public sealed record PrizePointTransactionListItemResponse(
     int PrizePointTransactionId,
     int UserId,
-    string EntityType,
+    string SourceType,
     int Points,
-    string Type
+    string TransactionType
 );

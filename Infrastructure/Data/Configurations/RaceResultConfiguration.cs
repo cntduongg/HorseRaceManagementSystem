@@ -10,14 +10,23 @@ public class RaceResultConfiguration : IEntityTypeConfiguration<RaceResult>
     {
         builder.HasKey(r => new { r.RaceId, r.EntryId });
 
+
+        builder.HasIndex(r => new { r.RaceId, r.EntryId })
+               .IsUnique();
+
         builder.HasOne(r => r.Race)
             .WithMany(race => race.RaceResults)
             .HasForeignKey(r => r.RaceId)
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasOne(r => r.Entry)
-            .WithOne(e => e.RaceResult)
-            .HasForeignKey<RaceResult>(r => r.EntryId)
-            .OnDelete(DeleteBehavior.Restrict);
+    .WithMany(e => e.RaceResults)
+    .HasForeignKey(r => r.EntryId)
+    .OnDelete(DeleteBehavior.Restrict);
+
+        builder.Property(r => r.TotalPoints).HasDefaultValue(0);
+        builder.Property(r => r.LegWinCount).HasDefaultValue(0);
+        builder.Property(r => r.LegTop3Count).HasDefaultValue(0);
+        builder.Property(r => r.IsRaceDQ).HasDefaultValue(false);
     }
 }

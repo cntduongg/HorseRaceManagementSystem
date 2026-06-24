@@ -1,27 +1,36 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.SettlementRuns.GetSettlementRunDetail;
 
 public sealed class GetSettlementRunDetailQueryHandler
     : IRequestHandler<GetSettlementRunDetailQuery, SettlementRunDetailResponse?>
 {
-    public Task<SettlementRunDetailResponse?> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public GetSettlementRunDetailQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<SettlementRunDetailResponse?> Handle(
         GetSettlementRunDetailQuery request,
         CancellationToken cancellationToken)
     {
-        // TODO: Load from database
-
-        var response = new SettlementRunDetailResponse(
-            request.SettlementRunId,
-            1,
-            "Publish",
-            "Completed",
-            100,
-            10000,
-            15000,
-            1
-        );
-
-        return Task.FromResult<SettlementRunDetailResponse?>(response);
+        return await _context.SettlementRuns
+            .AsNoTracking()
+            .Where(x => x.SettlementRunId == request.SettlementRunId)
+            .Select(x => new SettlementRunDetailResponse(
+                x.SettlementRunId,
+                x.RaceId,
+                x.Type,
+                x.Status,
+                x.TotalPredictions,
+                x.TotalBetAmount,
+                x.TotalPayoutAmount,
+                x.TriggeredByAdminId
+            ))
+            .FirstOrDefaultAsync(cancellationToken);
     }
 }

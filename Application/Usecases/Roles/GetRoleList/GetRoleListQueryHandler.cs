@@ -1,28 +1,29 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.Roles.GetRoleList;
 
 public sealed class GetRoleListQueryHandler
     : IRequestHandler<GetRoleListQuery, List<RoleListItemResponse>>
 {
-    public Task<List<RoleListItemResponse>> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public GetRoleListQueryHandler(
+        IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<List<RoleListItemResponse>> Handle(
         GetRoleListQuery request,
         CancellationToken cancellationToken)
     {
-        var roles = new List<RoleListItemResponse>
-        {
-            new(
-                1,
-                "ADMIN",
-                "Administrator"
-            ),
-            new(
-                2,
-                "JOCKEY",
-                "Jockey"
-            )
-        };
-
-        return Task.FromResult(roles);
+        return await _context.Roles
+            .Select(x => new RoleListItemResponse(
+                x.RoleId,
+                x.Code,
+                x.Name))
+            .ToListAsync(cancellationToken);
     }
 }

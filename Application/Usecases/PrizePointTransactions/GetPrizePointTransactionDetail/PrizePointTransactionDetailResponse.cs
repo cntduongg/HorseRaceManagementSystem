@@ -2,13 +2,13 @@ namespace Application.Usecases.PrizePointTransactions.GetPrizePointTransactionDe
 
 public sealed record PrizePointTransactionDetailResponse(
     int PrizePointTransactionId,
-    int RaceResultId,
     int TournamentId,
     int RaceId,
     int EntryId,
     int UserId,
-    string EntityType,
+    string SourceType,
     int FinalPosition,
     int Points,
-    string Type
+    string TransactionType,
+    int? RollbackOfId
 );

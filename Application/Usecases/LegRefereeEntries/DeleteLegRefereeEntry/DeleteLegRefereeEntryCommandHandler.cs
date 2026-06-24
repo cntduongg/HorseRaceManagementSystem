@@ -9,8 +9,7 @@ public sealed class DeleteLegRefereeEntryCommandHandler
         DeleteLegRefereeEntryCommand request,
         CancellationToken cancellationToken)
     {
-        // TODO: Delete from database
-
-        return Task.FromResult(true);
+        throw new InvalidOperationException(
+            "LegRefereeEntry is append-only and cannot be deleted.");
     }
 }

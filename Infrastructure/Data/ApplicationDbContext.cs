@@ -5,7 +5,12 @@ using ShareKernel.UnitOfWork;
 
 namespace Infrastructure.Data;
 
-public class ApplicationDbContext : DbContext, IUnitOfWork
+using Application.Common.Interfaces;
+
+public class ApplicationDbContext
+    : DbContext,
+      IApplicationDbContext,
+      IUnitOfWork
 {
     private IDbContextTransaction? _currentTransaction;
 

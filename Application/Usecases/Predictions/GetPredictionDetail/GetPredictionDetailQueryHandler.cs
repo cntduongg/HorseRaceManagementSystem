@@ -1,30 +1,38 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.Predictions.GetPredictionDetail;
 
 public sealed class GetPredictionDetailQueryHandler
     : IRequestHandler<GetPredictionDetailQuery, PredictionDetailResponse?>
 {
-    public Task<PredictionDetailResponse?> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public GetPredictionDetailQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<PredictionDetailResponse?> Handle(
         GetPredictionDetailQuery request,
         CancellationToken cancellationToken)
     {
-        // TODO: Load prediction from database
-
-        var response = new PredictionDetailResponse(
-            PredictionId: request.PredictionId,
-            RaceId: 1,
-            SpectatorId: 1,
-            FirstEntryId: 1,
-            SecondEntryId: 2,
-            ThirdEntryId: 3,
-            BetAmount: 100,
-            OddsLocked1: 1.5m,
-            OddsLocked2: 2.0m,
-            OddsLocked3: 2.5m,
-            Status: "Pending"
-        );
-
-        return Task.FromResult<PredictionDetailResponse?>(response);
+        return await _context.Predictions
+            .Where(x => x.PredictionId == request.PredictionId)
+            .Select(x => new PredictionDetailResponse(
+                x.PredictionId,
+                x.RaceId,
+                x.SpectatorId,
+                x.FirstEntryId,
+                x.SecondEntryId,
+                x.ThirdEntryId,
+                x.BetAmount,
+                x.OddsLocked1,
+                x.OddsLocked2,
+                x.OddsLocked3,
+                x.Status
+            ))
+            .FirstOrDefaultAsync(cancellationToken);
     }
 }

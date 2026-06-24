@@ -1,22 +1,31 @@
-using Application.Common;
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.RaceResults.GetRaceResultList;
 
 public sealed class GetRaceResultListQueryHandler
-    : IRequestHandler<GetRaceResultListQuery, List<RaceResultListItemResponse>>
+	: IRequestHandler<GetRaceResultListQuery, List<RaceResultListItemResponse>>
 {
-    private readonly IRaceResultReadService _raceResultReadService;
+	private readonly IApplicationDbContext _context;
 
-    public GetRaceResultListQueryHandler(IRaceResultReadService raceResultReadService)
-    {
-        _raceResultReadService = raceResultReadService;
-    }
+	public GetRaceResultListQueryHandler(IApplicationDbContext context)
+	{
+		_context = context;
+	}
 
-    public Task<List<RaceResultListItemResponse>> Handle(
-        GetRaceResultListQuery request,
-        CancellationToken cancellationToken)
-    {
-        return _raceResultReadService.GetListAsync(cancellationToken);
-    }
+	public async Task<List<RaceResultListItemResponse>> Handle(
+		GetRaceResultListQuery request,
+		CancellationToken cancellationToken)
+	{
+		return await _context.RaceResults
+			.Select(x => new RaceResultListItemResponse(
+				x.RaceId,
+				x.EntryId,
+				x.TotalPoints,
+				x.FinalPosition,
+				x.IsRaceDQ
+			))
+			.ToListAsync(cancellationToken);
+	}
 }

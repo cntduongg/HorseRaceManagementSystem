@@ -1,22 +1,30 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.Entries.GetEntryList;
 
 public sealed class GetEntryListQueryHandler
     : IRequestHandler<GetEntryListQuery, List<EntryListItemResponse>>
 {
-    public Task<List<EntryListItemResponse>> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public GetEntryListQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<List<EntryListItemResponse>> Handle(
         GetEntryListQuery request,
         CancellationToken cancellationToken)
     {
-        // TODO: Load from database
-
-        var entries = new List<EntryListItemResponse>
-        {
-            new(1, 1, 10, "Pending"),
-            new(2, 1, 11, "Approved")
-        };
-
-        return Task.FromResult(entries);
+        return await _context.Entries
+            .Select(x => new EntryListItemResponse(
+                x.EntryId,
+                x.RaceId,
+                x.HorseId,
+                x.Status
+            ))
+            .ToListAsync(cancellationToken);
     }
 }

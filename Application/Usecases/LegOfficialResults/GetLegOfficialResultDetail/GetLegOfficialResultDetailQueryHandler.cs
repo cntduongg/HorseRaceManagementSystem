@@ -1,31 +1,41 @@
+using Application.Common.Interfaces;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.LegOfficialResults.GetLegOfficialResultDetail;
 
 public sealed class GetLegOfficialResultDetailQueryHandler
-	: IRequestHandler<
-		GetLegOfficialResultDetailQuery,
-		LegOfficialResultDetailResponse?>
+    : IRequestHandler<GetLegOfficialResultDetailQuery, LegOfficialResultDetailResponse?>
 {
-	public Task<LegOfficialResultDetailResponse?> Handle(
-		GetLegOfficialResultDetailQuery request,
-		CancellationToken cancellationToken)
-	{
-		// TODO: Load from database
+    private readonly IApplicationDbContext _context;
 
-		var response = new LegOfficialResultDetailResponse(
-			request.RaceId,
-			request.LegNumber,
-			request.EntryId,
-			1,
-			"Finished",
-			10,
-			"AutoMatched",
-			DateTime.UtcNow,
-			1,
-			null
-		);
+    public GetLegOfficialResultDetailQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
 
-		return Task.FromResult<LegOfficialResultDetailResponse?>(response);
-	}
+    public async Task<LegOfficialResultDetailResponse?> Handle(
+        GetLegOfficialResultDetailQuery request,
+        CancellationToken cancellationToken)
+    {
+        return await _context.LegOfficialResults
+            .AsNoTracking()
+            .Where(x =>
+                x.RaceId == request.RaceId &&
+                x.LegNumber == request.LegNumber &&
+                x.EntryId == request.EntryId)
+            .Select(x => new LegOfficialResultDetailResponse(
+                x.RaceId,
+                x.LegNumber,
+                x.EntryId,
+                x.FinishPosition,
+                x.ResultStatus,
+                x.LegPoints,
+                x.ConfirmationType,
+                x.ConfirmedAt,
+                x.ConfirmedByAdminId,
+                x.OverrideReason
+            ))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
 }

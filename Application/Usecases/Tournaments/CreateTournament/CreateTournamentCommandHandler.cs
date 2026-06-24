@@ -1,3 +1,5 @@
+using Application.Common.Interfaces;
+using Domain.Aggregates.Entities;
 using MediatR;
 
 namespace Application.Usecases.Tournaments.CreateTournament;
@@ -5,25 +7,39 @@ namespace Application.Usecases.Tournaments.CreateTournament;
 public sealed class CreateTournamentCommandHandler
     : IRequestHandler<CreateTournamentCommand, int>
 {
-    public Task<int> Handle(
+    private readonly IApplicationDbContext _context;
+
+    public CreateTournamentCommandHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<int> Handle(
         CreateTournamentCommand request,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
-        {
             throw new InvalidOperationException("Tournament name is required.");
-        }
 
         if (request.StartDate > request.EndDate)
+            throw new InvalidOperationException("StartDate cannot be later than EndDate.");
+
+        var tournament = new Tournament
         {
-            throw new InvalidOperationException(
-                "StartDate cannot be later than EndDate.");
-        }
+            Name = request.Name.Trim(),
+            Description = request.Description,
+            Location = request.Location,
+            StartDate = request.StartDate,
+            EndDate = request.EndDate,
+            LogoUrl = request.LogoUrl,
+            Status = "Draft",
+            CreatedAt = DateTime.UtcNow
+        };
 
-        // TODO: Save tournament into database
+        _context.Tournaments.Add(tournament);
 
-        var tournamentId = Random.Shared.Next(1, int.MaxValue);
+        await _context.SaveChangesAsync(cancellationToken);
 
-        return Task.FromResult(tournamentId);
+        return tournament.TournamentId;
     }
 }
