@@ -1,4 +1,4 @@
-using Application.Common.Interfaces;
+using Application.Common;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,24 +7,17 @@ namespace Application.Usecases.Races.GetRaceList;
 public sealed class GetRaceListQueryHandler
     : IRequestHandler<GetRaceListQuery, List<RaceListItemResponse>>
 {
-    private readonly IApplicationDbContext _context;
+    private readonly IRaceReadService _raceReadService;
 
-    public GetRaceListQueryHandler(IApplicationDbContext context)
+    public GetRaceListQueryHandler(IRaceReadService raceReadService)
     {
-        _context = context;
+        _raceReadService = raceReadService;
     }
 
-    public async Task<List<RaceListItemResponse>> Handle(
+    public Task<List<RaceListItemResponse>> Handle(
         GetRaceListQuery request,
         CancellationToken cancellationToken)
     {
-        return await _context.Races
-            .Select(x => new RaceListItemResponse(
-                x.RaceId,
-                x.Name,
-                x.ScheduledStartTime,
-                x.Status
-            ))
-            .ToListAsync(cancellationToken);
+        return _raceReadService.GetListAsync(cancellationToken);
     }
 }

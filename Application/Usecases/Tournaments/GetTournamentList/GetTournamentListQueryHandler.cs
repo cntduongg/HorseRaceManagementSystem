@@ -1,4 +1,4 @@
-using Application.Common.Interfaces;
+using Application.Common;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,25 +7,17 @@ namespace Application.Usecases.Tournaments.GetTournamentList;
 public sealed class GetTournamentListQueryHandler
     : IRequestHandler<GetTournamentListQuery, List<TournamentListItemResponse>>
 {
-    private readonly IApplicationDbContext _context;
+    private readonly ITournamentReadService _tournamentReadService;
 
-    public GetTournamentListQueryHandler(IApplicationDbContext context)
+    public GetTournamentListQueryHandler(ITournamentReadService tournamentReadService)
     {
-        _context = context;
+        _tournamentReadService = tournamentReadService;
     }
 
-    public async Task<List<TournamentListItemResponse>> Handle(
+    public Task<List<TournamentListItemResponse>> Handle(
         GetTournamentListQuery request,
         CancellationToken cancellationToken)
     {
-        return await _context.Tournaments
-            .Select(x => new TournamentListItemResponse(
-                x.TournamentId,
-                x.Name,
-                x.StartDate,
-                x.EndDate,
-                x.Status
-            ))
-            .ToListAsync(cancellationToken);
+        return _tournamentReadService.GetListAsync(cancellationToken);
     }
 }

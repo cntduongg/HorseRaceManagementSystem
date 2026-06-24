@@ -1,4 +1,4 @@
-using Application.Common.Interfaces;
+using Application.Common;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,24 +7,17 @@ namespace Application.Usecases.Entries.GetEntryList;
 public sealed class GetEntryListQueryHandler
     : IRequestHandler<GetEntryListQuery, List<EntryListItemResponse>>
 {
-    private readonly IApplicationDbContext _context;
+    private readonly IEntryReadService _entryReadService;
 
-    public GetEntryListQueryHandler(IApplicationDbContext context)
+    public GetEntryListQueryHandler(IEntryReadService entryReadService)
     {
-        _context = context;
+        _entryReadService = entryReadService;
     }
 
-    public async Task<List<EntryListItemResponse>> Handle(
+    public Task<List<EntryListItemResponse>> Handle(
         GetEntryListQuery request,
         CancellationToken cancellationToken)
     {
-        return await _context.Entries
-            .Select(x => new EntryListItemResponse(
-                x.EntryId,
-                x.RaceId,
-                x.HorseId,
-                x.Status
-            ))
-            .ToListAsync(cancellationToken);
+        return _entryReadService.GetListAsync(cancellationToken);
     }
 }
