@@ -2,6 +2,7 @@ namespace Application.Usecases.JockeyProfiles.GetJockeyProfileDetail;
 
 public sealed record JockeyProfileDetailResponse(
     int UserId,
+    string? FullName,
     string? LicenseNumber,
     decimal? Weight,
     string? Bio,

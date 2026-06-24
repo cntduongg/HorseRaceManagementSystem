@@ -19,12 +19,13 @@ public sealed class GetJockeyProfileListQueryHandler
         CancellationToken cancellationToken)
     {
         return await _context.JockeyProfiles
-            .Select(x => new JockeyProfileListItemResponse(
-                x.UserId,
-                x.LicenseNumber,
-                x.TotalRaces,
-                x.TotalWins
-            ))
-            .ToListAsync(cancellationToken);
+      .Select(x => new JockeyProfileListItemResponse(
+          x.UserId,
+          x.User!.FullName,
+          x.LicenseNumber,
+          x.TotalRaces,
+          x.TotalWins
+      ))
+      .ToListAsync(cancellationToken);
     }
 }

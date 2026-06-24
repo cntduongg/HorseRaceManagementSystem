@@ -22,6 +22,7 @@ public sealed class GetJockeyProfileDetailQueryHandler
             .Where(x => x.UserId == request.UserId)
             .Select(x => new JockeyProfileDetailResponse(
                 x.UserId,
+                x.User != null ? x.User.FullName : null,
                 x.LicenseNumber,
                 x.Weight,
                 x.Bio,
