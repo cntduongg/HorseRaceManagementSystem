@@ -1,40 +1,48 @@
 using System.Text;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+
 using Api.Filters;
 using Api.Middlewares;
+
 using Application.DependencyInjection;
+using Application.Common;
+
 using Infrastructure.Data;
 using Infrastructure.DependencyInjection;
+using Infrastructure.Data.Seed;
+
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi;
-using Application.Common;
-using Infrastructure.Data.Seed;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
+/* ---------------- EXCEPTION ---------------- */
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
+/* ---------------- CONTROLLERS ---------------- */
 builder.Services.AddControllers();
 
+/* ---------------- CORS ---------------- */
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendPolicy", policy =>
     {
-        policy
-            .AllowAnyOrigin()
-            .AllowAnyHeader()
-            .AllowAnyMethod();
+        policy.AllowAnyOrigin()
+              .AllowAnyHeader()
+              .AllowAnyMethod();
     });
 });
 
 builder.Services.AddEndpointsApiExplorer();
 
+/* ---------------- SWAGGER ---------------- */
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new()
+    c.SwaggerDoc("v1", new OpenApiInfo
     {
         Title = "HorseRace API",
         Version = "v1"
@@ -42,23 +50,29 @@ builder.Services.AddSwaggerGen(c =>
 
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Description = "JWT Authorization header. Format: Bearer {token}",
         Name = "Authorization",
-        In = ParameterLocation.Header,
         Type = SecuritySchemeType.Http,
         Scheme = "bearer",
-        BearerFormat = "JWT"
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Enter: Bearer {token}"
     });
 
     c.OperationFilter<BearerSecurityOperationFilter>();
 });
 
+/* ---------------- DEPENDENCY INJECTION ---------------- */
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
+/* ---------------- JWT CONFIG ---------------- */
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
+
 var secretKey = jwtSettings["SecretKey"]
-    ?? throw new InvalidOperationException("JwtSettings:SecretKey is not configured.");
+    ?? throw new InvalidOperationException("JwtSettings:SecretKey is missing.");
+
+var issuer = jwtSettings["Issuer"];
+var audience = jwtSettings["Audience"];
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -70,52 +84,49 @@ builder.Services
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtSettings["Issuer"],
-            ValidAudience = jwtSettings["Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
-            ClockSkew = TimeSpan.Zero
+
+            ValidIssuer = issuer,
+            ValidAudience = audience,
+
+            IssuerSigningKey =
+                new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
+
+            ClockSkew = TimeSpan.Zero,
+
+            RoleClaimType = ClaimTypes.Role,
+            NameClaimType = JwtRegisteredClaimNames.Email
         };
 
         options.Events = new JwtBearerEvents
         {
-            OnChallenge = async context =>
+            OnAuthenticationFailed = context =>
             {
-                context.HandleResponse();
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-
-                var problem = new ProblemDetails
-                {
-                    Status = StatusCodes.Status401Unauthorized,
-                    Title = "Unauthorized",
-                    Detail = string.IsNullOrEmpty(context.ErrorDescription)
-                        ? "Authentication token is missing or invalid."
-                        : context.ErrorDescription,
-                    Instance = context.Request.Path
-                };
-
-                await context.Response.WriteAsJsonAsync(problem);
+                Console.WriteLine("JWT FAILED:");
+                Console.WriteLine(context.Exception.Message);
+                return Task.CompletedTask;
             },
-            OnForbidden = async context =>
+
+            OnMessageReceived = context =>
             {
-                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                Console.WriteLine("TOKEN:");
+                Console.WriteLine(context.Token);
+                return Task.CompletedTask;
+            },
 
-                var problem = new ProblemDetails
-                {
-                    Status = StatusCodes.Status403Forbidden,
-                    Title = "Forbidden",
-                    Detail = "You do not have permission to access this resource.",
-                    Instance = context.Request.Path
-                };
-
-                await context.Response.WriteAsJsonAsync(problem);
+            OnChallenge = context =>
+            {
+                Console.WriteLine("JWT CHALLENGE TRIGGERED");
+                return Task.CompletedTask;
             }
         };
     });
 
 builder.Services.AddAuthorization();
 
+/* ---------------- BUILD APP ---------------- */
 var app = builder.Build();
 
+/* ---------------- DB MIGRATION + SEED ---------------- */
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -123,15 +134,17 @@ using (var scope = app.Services.CreateScope())
 
     await db.Database.MigrateAsync();
 
-    var shouldSeedTestData =
+    var shouldSeed =
         app.Environment.IsDevelopment()
         || builder.Configuration.GetValue<bool>("SeedTestData");
 
-    if (shouldSeedTestData)
+    if (shouldSeed)
     {
         await DatabaseSeeder.SeedAsync(db, passwordHasher);
     }
 }
+
+/* ---------------- PIPELINE (FIXED) ---------------- */
 
 app.UseSwagger();
 app.UseSwaggerUI();
@@ -142,9 +155,9 @@ app.UseCors("FrontendPolicy");
 
 app.UseExceptionHandler();
 
-app.UseAuthentication();
-app.UseAuthorization();
+app.UseAuthentication();  
+app.UseAuthorization();    
 
-app.MapControllers();
+app.MapControllers();    
 
 app.Run();
