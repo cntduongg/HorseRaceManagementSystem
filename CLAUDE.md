@@ -104,7 +104,8 @@ EF mapping: `Infrastructure/Data/Configurations/*Configuration.cs` (mỗi entity
 > Cập nhật: 2026-06-25 (đối chiếu lại code; merge nhánh `duongcnt` đã thay nhiều handler đặc thù bằng CRUD generic).
 
 **✅ Đã bổ sung orchestration vận hành đua (2026-06-25)** — `Application/Usecases/RaceExecution/*` + `Api/Controllers/RaceExecutionController.cs` (prefix `api/races`, role-locked). Build pass, MediatR tự đăng ký:
-- **Flow 3-4:** `POST {id}/start` (Scheduled→InProgress, tạo Legs, khóa cược), `POST {id}/resume` (Paused→InProgress), `GET {id}/execution`, `GET {id}/standings` (tổng Leg Points), `GET {id}/pause` (so sánh 2 submission).
+- **Flow 3:** `POST {id}/open-registration`, `POST {id}/close-registration` (auto-reject Entry Pending + **khóa Odds per-Entry** từ win rate + gán **GateNumber** + set OddsComputedAt; transaction). `Entry.Odds` (cột mới + migration `AddEntryOdds`). UpdateRace khóa NumberOfLegs khi rời Scheduled; CreatePrediction ưu tiên `Entry.Odds` đã khóa.
+- **Flow 3-4:** `POST {id}/start` (Scheduled→InProgress, **yêu cầu đã đóng ĐK**, tạo Legs, khóa cược), `POST {id}/resume` (Paused→InProgress), `GET {id}/execution`, `GET {id}/standings` (tổng Leg Points), `GET {id}/pause` (so sánh 2 submission).
 - **Flow 4 blind:** `GET {id}/legs/{i}/referee-view` (ẩn input referee kia đến khi cả hai submit), `PUT {i}/draft` (validate-only — chưa có bảng draft), `POST {i}/submit` (append-only, so khớp → Confirmed/AutoMatched + tính Leg Points & LegOfficialResult, hoặc Conflicted + Paused; hết leg → PendingResult).
 - **Flow 5:** `POST {id}/legs/{i}/override` (AdminOverride + lý do bắt buộc, resume).
 - **Flow 8:** `POST {id}/publish` & `unpublish` — **atomic** (transaction tường minh): RaceResult + xếp hạng, Prize Points Owner/Jockey, quyết toán prediction (payout = bet × odds), cộng ví, SettlementRun/PredictionSettlement; unpublish rollback.

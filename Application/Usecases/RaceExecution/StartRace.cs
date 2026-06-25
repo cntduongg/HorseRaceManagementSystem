@@ -42,6 +42,10 @@ public sealed class StartRaceCommandHandler
         if (race.Referee1Id is null || race.Referee2Id is null)
             throw new InvalidOperationException("Cuộc đua chưa được gán đủ 2 trọng tài.");
 
+        // Phải đóng đăng ký (khóa Odds + gán GateNumber) trước khi bắt đầu — Flow 3.
+        if (race.OddsComputedAt is null)
+            throw new InvalidOperationException("Cần đóng đăng ký (khóa Odds) trước khi bắt đầu đua.");
+
         var approvedEntries = race.Entries
             .Count(e => e.Status == RaceExecutionConstants.EntryApproved);
 

@@ -20,6 +20,18 @@ public sealed class RaceExecutionController : ControllerBase
         _sender = sender;
     }
 
+    // ── Đăng ký (Flow 3) ─────────────────────────────────────────────
+
+    [HttpPost("{raceId:int}/open-registration")]
+    [Authorize(Roles = "ADMIN")]
+    public async Task<IActionResult> OpenRegistration(int raceId, CancellationToken ct)
+        => Ok(await _sender.Send(new OpenRegistrationCommand(raceId), ct));
+
+    [HttpPost("{raceId:int}/close-registration")]
+    [Authorize(Roles = "ADMIN")]
+    public async Task<IActionResult> CloseRegistration(int raceId, CancellationToken ct)
+        => Ok(await _sender.Send(new CloseRegistrationCommand(raceId), ct));
+
     // ── Race lifecycle ───────────────────────────────────────────────
 
     [HttpPost("{raceId:int}/start")]

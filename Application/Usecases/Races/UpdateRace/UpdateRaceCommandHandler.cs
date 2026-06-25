@@ -41,6 +41,11 @@ public sealed class UpdateRaceCommandHandler
         if (race is null)
             return false;
 
+        // Khóa số Legs khi đua đã rời Scheduled (đang/đã chạy) — Flow 3.
+        if (race.Status != "Scheduled" && request.NumberOfLegs != race.NumberOfLegs)
+            throw new InvalidOperationException(
+                "Không thể đổi số Legs sau khi cuộc đua đã bắt đầu.");
+
         race.TournamentId = request.TournamentId;
         race.Name = request.Name.Trim();
         race.ScheduledStartTime = request.ScheduledStartTime;

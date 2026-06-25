@@ -10,6 +10,7 @@ public class Entry
 
     public string Status { get; set; } = "Pending";
     public int? GateNumber { get; set; }
+    public decimal Odds { get; set; } = 0;          // Khóa khi đóng đăng ký (Flow 3)
     public string? RejectionReason { get; set; }
 
     public DateTime SubmittedAt { get; set; }

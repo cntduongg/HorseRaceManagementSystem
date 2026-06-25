@@ -76,8 +76,10 @@ public sealed class CreatePredictionCommandHandler
         if (request.BetAmount > wallet.Balance * 0.5m)
             throw new InvalidOperationException("Số tiền cược không được vượt quá 50% số dư.");
 
-        // ── Khóa odds server-side (bỏ giá trị client gửi) ──
-        var odds = await ComputeOddsAsync(request.RaceId, firstEntry.HorseId, cancellationToken);
+        // ── Odds server-side: ưu tiên odds đã KHÓA khi đóng đăng ký (Flow 3); fallback tính tạm ──
+        var odds = firstEntry.Odds > 0
+            ? firstEntry.Odds
+            : await ComputeOddsAsync(request.RaceId, firstEntry.HorseId, cancellationToken);
 
         var now = DateTime.UtcNow;
 
