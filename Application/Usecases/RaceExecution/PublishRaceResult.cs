@@ -69,23 +69,32 @@ public sealed class PublishRaceResultCommandHandler
                 .ToListAsync(cancellationToken)).ToHashSet();
 
             // ── 1. Tính tổng điểm & xếp hạng (DQ luôn xuống đáy) ──
+            // Tie-break: tổng điểm → nhiều 1st nhất → nhiều 2nd nhất → vị trí Leg cuối tốt hơn.
+            var lastLegNumber = officials.Count > 0 ? officials.Max(o => o.LegNumber) : 0;
             var ranked = entries.Select(e =>
             {
                 var isDq = dqSet.Contains(e.EntryId);
                 var rows = officials.Where(o => o.EntryId == e.EntryId).ToList();
+                var finished = rows.Where(r => r.ResultStatus == RaceExecutionConstants.ResultFinished).ToList();
+                var lastLeg = rows.FirstOrDefault(r => r.LegNumber == lastLegNumber);
                 return new
                 {
                     Entry = e,
                     IsDq = isDq,
                     TotalPoints = isDq ? 0 : rows.Sum(r => r.LegPoints),
-                    LegWins = isDq ? 0 : rows.Count(r => r.ResultStatus == RaceExecutionConstants.ResultFinished && r.FinishPosition == 1),
-                    LegTop3 = isDq ? 0 : rows.Count(r => r.ResultStatus == RaceExecutionConstants.ResultFinished && r.FinishPosition is >= 1 and <= 3)
+                    LegWins = isDq ? 0 : finished.Count(r => r.FinishPosition == 1),
+                    Leg2nds = isDq ? 0 : finished.Count(r => r.FinishPosition == 2),
+                    LegTop3 = isDq ? 0 : finished.Count(r => r.FinishPosition is >= 1 and <= 3),
+                    LastLegPos = (!isDq && lastLeg is { ResultStatus: RaceExecutionConstants.ResultFinished, FinishPosition: not null })
+                        ? lastLeg.FinishPosition!.Value
+                        : int.MaxValue
                 };
             })
             .OrderBy(x => x.IsDq)
             .ThenByDescending(x => x.TotalPoints)
             .ThenByDescending(x => x.LegWins)
-            .ThenByDescending(x => x.LegTop3)
+            .ThenByDescending(x => x.Leg2nds)
+            .ThenBy(x => x.LastLegPos)
             .ToList();
 
             // ── 2. Ghi RaceResult ──
@@ -137,6 +146,26 @@ public sealed class PublishRaceResultCommandHandler
                             CreatedAt = now
                         });
                     }
+                }
+                position++;
+            }
+
+            // ── 3b. Cập nhật thống kê Career của Jockey (nếu có hồ sơ) ──
+            var jockeyIds = ranked.Select(r => r.Entry.JockeyId).Distinct().ToList();
+            var profiles = await _context.JockeyProfiles
+                .Where(p => jockeyIds.Contains(p.UserId))
+                .ToListAsync(cancellationToken);
+            position = 1;
+            foreach (var r in ranked)
+            {
+                var profile = profiles.FirstOrDefault(p => p.UserId == r.Entry.JockeyId);
+                if (profile is not null)
+                {
+                    profile.TotalRaces += 1;
+                    if (!r.IsDq && position == 1) profile.TotalWins += 1;
+                    if (!r.IsDq && position <= 3) profile.TotalTop3 += 1;
+                    profile.CareerPrizePoints += r.IsDq ? 0 : RaceExecutionConstants.PrizePointsFor(position);
+                    profile.UpdatedAt = now;
                 }
                 position++;
             }

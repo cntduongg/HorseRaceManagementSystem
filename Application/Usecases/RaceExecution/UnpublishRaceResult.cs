@@ -108,6 +108,34 @@ public sealed class UnpublishRaceResultCommandHandler
             var results = await _context.RaceResults
                 .Where(r => r.RaceId == race.RaceId)
                 .ToListAsync(cancellationToken);
+
+            // ── 4b. Hoàn lại thống kê Career của Jockey (đối xứng với Publish) ──
+            var entries = await _context.Entries
+                .Where(e => e.RaceId == race.RaceId)
+                .Select(e => new { e.EntryId, e.JockeyId })
+                .ToListAsync(cancellationToken);
+            var jockeyByEntry = entries.ToDictionary(e => e.EntryId, e => e.JockeyId);
+            var jockeyIds = entries.Select(e => e.JockeyId).Distinct().ToList();
+            var profiles = await _context.JockeyProfiles
+                .Where(p => jockeyIds.Contains(p.UserId))
+                .ToListAsync(cancellationToken);
+
+            foreach (var res in results)
+            {
+                if (!jockeyByEntry.TryGetValue(res.EntryId, out var jockeyId)) continue;
+                var profile = profiles.FirstOrDefault(p => p.UserId == jockeyId);
+                if (profile is null) continue;
+
+                profile.TotalRaces = Math.Max(0, profile.TotalRaces - 1);
+                if (!res.IsRaceDQ && res.FinalPosition == 1)
+                    profile.TotalWins = Math.Max(0, profile.TotalWins - 1);
+                if (!res.IsRaceDQ && res.FinalPosition is >= 1 and <= 3)
+                    profile.TotalTop3 = Math.Max(0, profile.TotalTop3 - 1);
+                var prize = res.IsRaceDQ ? 0 : RaceExecutionConstants.PrizePointsFor(res.FinalPosition ?? 0);
+                profile.CareerPrizePoints = Math.Max(0, profile.CareerPrizePoints - prize);
+                profile.UpdatedAt = now;
+            }
+
             _context.RaceResults.RemoveRange(results);
 
             // ── 5. Đưa race về PendingResult ──
