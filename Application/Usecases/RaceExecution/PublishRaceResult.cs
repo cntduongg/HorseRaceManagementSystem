@@ -61,19 +61,29 @@ public sealed class PublishRaceResultCommandHandler
 
             var now = DateTime.UtcNow;
 
-            // ── 1. Tính tổng điểm & xếp hạng ──
+            // Entry bị Race DQ (vi phạm đã duyệt) — xếp cuối, 0 điểm, 0 Prize (Flow 6).
+            var dqSet = (await _context.Violations
+                .Where(v => v.RaceId == race.RaceId && v.Status == "Approved" && v.Penalty == "DQ")
+                .Select(v => v.EntryId)
+                .Distinct()
+                .ToListAsync(cancellationToken)).ToHashSet();
+
+            // ── 1. Tính tổng điểm & xếp hạng (DQ luôn xuống đáy) ──
             var ranked = entries.Select(e =>
             {
+                var isDq = dqSet.Contains(e.EntryId);
                 var rows = officials.Where(o => o.EntryId == e.EntryId).ToList();
                 return new
                 {
                     Entry = e,
-                    TotalPoints = rows.Sum(r => r.LegPoints),
-                    LegWins = rows.Count(r => r.ResultStatus == RaceExecutionConstants.ResultFinished && r.FinishPosition == 1),
-                    LegTop3 = rows.Count(r => r.ResultStatus == RaceExecutionConstants.ResultFinished && r.FinishPosition is >= 1 and <= 3)
+                    IsDq = isDq,
+                    TotalPoints = isDq ? 0 : rows.Sum(r => r.LegPoints),
+                    LegWins = isDq ? 0 : rows.Count(r => r.ResultStatus == RaceExecutionConstants.ResultFinished && r.FinishPosition == 1),
+                    LegTop3 = isDq ? 0 : rows.Count(r => r.ResultStatus == RaceExecutionConstants.ResultFinished && r.FinishPosition is >= 1 and <= 3)
                 };
             })
-            .OrderByDescending(x => x.TotalPoints)
+            .OrderBy(x => x.IsDq)
+            .ThenByDescending(x => x.TotalPoints)
             .ThenByDescending(x => x.LegWins)
             .ThenByDescending(x => x.LegTop3)
             .ToList();
@@ -83,7 +93,7 @@ public sealed class PublishRaceResultCommandHandler
             int? winnerEntryId = null;
             foreach (var r in ranked)
             {
-                if (position == 1) winnerEntryId = r.Entry.EntryId;
+                if (winnerEntryId is null && !r.IsDq) winnerEntryId = r.Entry.EntryId;
 
                 _context.RaceResults.Add(new RaceResult
                 {
@@ -91,6 +101,7 @@ public sealed class PublishRaceResultCommandHandler
                     EntryId = r.Entry.EntryId,
                     TotalPoints = r.TotalPoints,
                     FinalPosition = position,
+                    IsRaceDQ = r.IsDq,
                     LegWinCount = r.LegWins,
                     LegTop3Count = r.LegTop3,
                     PublishedAt = now,
@@ -100,11 +111,11 @@ public sealed class PublishRaceResultCommandHandler
             }
             await _context.SaveChangesAsync(cancellationToken); // RaceResult tồn tại trước khi PrizePointTransaction tham chiếu FK
 
-            // ── 3. Cộng Prize Points cho Owner & Jockey ──
+            // ── 3. Cộng Prize Points cho Owner & Jockey (bỏ qua entry DQ) ──
             position = 1;
             foreach (var r in ranked)
             {
-                var prize = RaceExecutionConstants.PrizePointsFor(position);
+                var prize = r.IsDq ? 0 : RaceExecutionConstants.PrizePointsFor(position);
                 if (prize > 0)
                 {
                     foreach (var (userId, source) in new[]

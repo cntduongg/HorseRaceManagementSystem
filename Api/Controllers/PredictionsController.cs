@@ -6,6 +6,7 @@ using Application.Usecases.Predictions.UpdatePrediction;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace Api.Controllers;
 
@@ -27,8 +28,9 @@ public sealed class PredictionsController : ControllerBase
         [FromBody] CreatePredictionCommand command,
         CancellationToken cancellationToken)
     {
+        // SpectatorId lấy từ JWT — không tin body.
         var predictionId = await _sender.Send(
-            command,
+            command with { SpectatorId = GetUserId() },
             cancellationToken);
 
         return CreatedAtAction(
@@ -100,12 +102,22 @@ public sealed class PredictionsController : ControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _sender.Send(
-            new DeletePredictionCommand(predictionId),
+            new DeletePredictionCommand(predictionId, GetUserId()),
             cancellationToken);
 
         return Ok(new
         {
             success = result
         });
+    }
+
+    private int GetUserId()
+    {
+        var claim =
+            User.FindFirst("userId")?.Value ??
+            User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!int.TryParse(claim, out var userId))
+            throw new UnauthorizedAccessException("Invalid or missing userId claim");
+        return userId;
     }
 }

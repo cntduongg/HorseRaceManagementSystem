@@ -81,6 +81,9 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
+// Flow 7 — tác vụ nền cộng điểm ví +100 mỗi thứ Hai.
+builder.Services.AddHostedService<Api.Services.WeeklyTopUpBackgroundService>();
+
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"]
     ?? throw new InvalidOperationException("JwtSettings:SecretKey is not configured.");

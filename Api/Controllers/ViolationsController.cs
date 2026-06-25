@@ -6,6 +6,7 @@ using Application.Usecases.Violations.UpdateViolation;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace Api.Controllers;
 
@@ -21,13 +22,20 @@ public sealed class ViolationsController : ControllerBase
 		_sender = sender;
 	}
 
+	// Referee báo cáo — ReportedByRefereeId lấy từ JWT, Status luôn Pending.
 	[HttpPost]
 	public async Task<ActionResult<int>> Create(
 		[FromBody] CreateViolationCommand command,
 		CancellationToken cancellationToken)
 	{
+		var claim =
+			User.FindFirst("userId")?.Value ??
+			User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+		if (!int.TryParse(claim, out var refereeId))
+			throw new UnauthorizedAccessException("Invalid or missing userId claim");
+
 		var violationId = await _sender.Send(
-			command,
+			command with { ReportedByRefereeId = refereeId, Status = "Pending" },
 			cancellationToken);
 
 		return CreatedAtAction(

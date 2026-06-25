@@ -26,6 +26,9 @@ public sealed class DeletePredictionCommandHandler
         if (prediction is null)
             return false;
 
+        if (request.CurrentUserId > 0 && prediction.SpectatorId != request.CurrentUserId)
+            throw new UnauthorizedAccessException("Bạn chỉ có thể hủy dự đoán của chính mình.");
+
         if (prediction.Status != "Pending")
             throw new InvalidOperationException("Chỉ hủy được dự đoán đang hoạt động.");
 
