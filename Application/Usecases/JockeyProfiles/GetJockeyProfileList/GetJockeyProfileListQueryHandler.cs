@@ -18,7 +18,11 @@ public sealed class GetJockeyProfileListQueryHandler
         GetJockeyProfileListQuery request,
         CancellationToken cancellationToken)
     {
+        // Flow 2 — Owner chỉ thấy nài có hồ sơ đủ (License Number + Weight).
         return await _context.JockeyProfiles
+      .Where(x => x.LicenseNumber != null && x.LicenseNumber != ""
+                  && x.Weight != null && x.Weight > 0)
+      .OrderByDescending(x => x.TotalWins)
       .Select(x => new JockeyProfileListItemResponse(
           x.UserId,
           x.User!.FullName,

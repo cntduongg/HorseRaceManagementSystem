@@ -87,15 +87,14 @@ EF mapping: `Infrastructure/Data/Configurations/*Configuration.cs` (mỗi entity
   - `GET /api/horses/{id}`, `PUT /api/horses/{id}` [HORSE_OWNER, kiểm ownership], `DELETE /api/horses/{id}` [HORSE_OWNER].
   - `POST /api/horses/{id}/approve` [ADMIN] → `Approved`; `POST /api/horses/{id}/reject` [ADMIN] (lý do bắt buộc) → `Rejected`; `POST /api/horses/{id}/revoke` [ADMIN] → `Revoked` + auto-cancel các Entry `Pending` dùng ngựa đó.
   - Status ngựa: `Pending → Approved | Rejected`, và revoke (`Approved →` hủy). Hằng số: `Domain/Aggregates/Constants/HorseStatus.cs`, `EntryStatus.cs`. Repo: `IHorseRepository`, `IEntryRepository`. `RevokeHorse` dùng transaction tường minh (`_context.Database.BeginTransactionAsync`).
-- **Flow 2 — Mời nài & nộp Entry** ⚠️ **một phần thật, phần lõi còn thiếu** (đối chiếu code 2026-06-25).
-  - **Đã có (purpose-built):** Admin duyệt Entry — `POST /api/admin/entries/{id}/approve` & `/{id}/reject` [ADMIN] (`Application/Usecases/Admin/ApproveEntry`, `RejectEntry`); Admin xem `GET /api/admin/entries/pending`.
-  - **Mới là CRUD generic (controller chỉ POST/GET/PUT/DELETE):**
-    - `jockey-invitations`: `CreateJockeyInvitation` chỉ validate FK tồn tại + chống trùng `(owner+jockey+horse+race, Pending)`; **KHÔNG** kiểm horse Approved/sở hữu, race `Scheduled`, hay nài có License+Weight. Accept/Decline/Confirm làm qua `PUT /jockey-invitations/{id}` (`UpdateJockeyInvitation` — chỉ kiểm chuyển trạng thái hợp lệ); **KHÔNG** có route `/accept` `/decline` `/confirm` riêng, **KHÔNG** auto-cancel các invitation khác khi Confirm.
-    - `entries`: `CreateEntry` **chỉ insert** (validate các Id > 0); **KHÔNG** lấy jockey từ invitation Confirmed, **KHÔNG** kiểm horse Approved/sở hữu, race `Scheduled`, hay chống trùng horse/jockey trong race.
-    - `jockey-profiles`: CRUD generic; **chưa** có filter "chỉ hiện nài có LicenseNumber + Weight" (không có `IJockeyReadService`).
-  - **Nhận định danh từ body, chưa dùng `ICurrentUser`:** `HorseOwnerId`, `JockeyId`… đang lấy từ request body.
-  - **Còn thiếu cho Flow 2 đầy đủ:** check horse Approved + ownership, race `Scheduled`, nài hợp lệ; pull jockey từ invitation Confirmed; confirm → auto-cancel invitation khác; chuyển định danh sang `ICurrentUser`.
-  - **Lưu ý:** các file `RaceStatus.cs`, `InvitationStatus.cs`, `RoleIds.cs` và repo `IJockeyInvitationRepository`, `IRaceRepository`, `IJockeyReadService` **KHÔNG tồn tại** — handler dùng `IApplicationDbContext` trực tiếp và string literal cho status.
+- **Flow 2 — Mời nài & nộp Entry** ✅ **đã hoàn thiện orchestration** (2026-06-25).
+  - **Mời nài** (`POST /api/jockey-invitations` [HORSE_OWNER]): validate horse `Approved` + thuộc owner, race `Scheduled`, nài role JOCKEY + có `LicenseNumber`+`Weight`, chống trùng invitation active `(jockey+horse+race)`. HorseOwnerId lấy từ JWT.
+  - **Phản hồi/Xác nhận** (`PUT /api/jockey-invitations/{id}`, body `{status, responseReason}`): Accept/Decline chỉ chính nài; Confirm/Cancel chỉ owner; **Confirm → auto-cancel** mọi invitation active khác cùng `(horse+race)` + chặn 1 nài confirm cho 2 ngựa khác nhau trong cùng race. (Controller dựng command từ route id + claims — đã sửa bug "InvitationId mismatch".)
+  - **Nộp Entry** (`POST /api/entries` [HORSE_OWNER]): **jockey LẤY TỪ invitation Confirmed** (không tin body), validate horse Approved+sở hữu, race Scheduled, chống trùng horse/jockey trong race. HorseOwnerId từ JWT.
+  - **Admin duyệt Entry**: `POST /api/admin/entries/{id}/approve|reject` [ADMIN] (`Admin/ApproveEntry`, `RejectEntry`); `GET /api/admin/entries/pending`.
+  - **List scope theo role:** `GET /jockey-invitations` (jockey→nhận, owner→gửi, admin→tất cả); `GET /entries?raceId=` (HORSE_OWNER→của mình, referee/spectator/admin→tất cả). `GET /jockey-profiles` chỉ hiện nài có `LicenseNumber`+`Weight`.
+  - **Còn lại (thuộc Flow 3):** đóng đăng ký → auto-reject Entry `Pending` + tính/khóa Odds + gán GateNumber.
+  - **Lưu ý:** không dùng `ICurrentUser` (chưa tồn tại) — identity resolve trong controller bằng `User.FindFirst("userId")`; status là string literal; handler dùng `IApplicationDbContext` trực tiếp.
 - **Read services** (`Infrastructure/Services/`): `RaceReadService`, `TournamentReadService`, `EntryReadService`, `RaceResultReadService` — truy vấn đọc.
 - **Hạ tầng**: JWT config + custom 401/403 ProblemDetails (Program.cs), CORS mở (`FrontendPolicy`), `GlobalExceptionHandler`, `ApiResponseFilter`, auto `MigrateAsync()` + seed khi Development.
 - **Seeder** (`Infrastructure/Data/Seed/DatabaseSeeder.cs`): tạo 5 role + tài khoản test (xem mục 8).
