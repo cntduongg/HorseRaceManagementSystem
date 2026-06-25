@@ -71,12 +71,14 @@ EF mapping: `Infrastructure/Data/Configurations/*Configuration.cs` (mỗi entity
 - **Auth** (`Api/Controllers/AuthController.cs` + `Application/Usecases/Auth/`):
   - `POST /api/auth/register/{spectator|horse-owner|jockey}` — Spectator active ngay; Horse Owner & Jockey chờ Admin duyệt.
   - `POST /api/auth/login` — trả access + refresh token (JWT, claim role).
-  - `GET /api/auth/profile` — hồ sơ user hiện tại, resolve UserId từ JWT qua `ICurrentUser` (không tin body).
+  - `GET /api/auth/profile` [Authorize] — hồ sơ user hiện tại, resolve UserId từ JWT claims (✅ thêm 2026-06-25, `Auth/GetProfile`).
   - `POST /api/auth/logout` — revoke refresh token (yêu cầu Bearer).
   - `POST /api/auth/refresh-token` — token rotation.
-  - `POST /api/auth/forgot-password` + `reset-password` — qua `PasswordResetOtp`.
-- **Phân quyền (Authorization)**: mọi controller đều yêu cầu đăng nhập (`[Authorize]`); role-locked theo nghiệp vụ — ví dụ `Roles/Users/Settlement*/PrizePointTransactions` = ADMIN, `LegRefereeEntries/LegOfficialResults/Violations` = REFEREE/ADMIN, write của Horses/Entries = HORSE_OWNER, write của Tournaments/Races = ADMIN.
-- **`ICurrentUser`** (`Application/Common/ICurrentUser.cs`, impl `Api/Services/CurrentUser.cs`): đọc UserId/Email/Role từ JWT claims, đăng ký DI qua `AddHttpContextAccessor`. Dùng cái này thay vì nhận `...Id` từ request body.
+  - `POST /api/auth/forgot-password` + `reset-password` — qua `PasswordResetOtp` (✅ thêm 2026-06-25, `Auth/ForgotPassword`+`ResetPassword`; DEV trả OTP trong response vì chưa có email service).
+  - `PUT /api/users/{id}/change-password` [Authorize] — đổi mật khẩu, verify mật khẩu cũ (✅ thêm 2026-06-25, `Users/ChangePassword`; UserId lấy từ claims, bỏ qua route id).
+- **Admin tiện ích** (`AdminController`, ADMIN — ✅ thêm 2026-06-25): `GET /api/admin/violations` (`GetAdminViolations`), `GET /api/admin/points/balances|transactions` + `POST /api/admin/points/adjust` (`PointsManagement`), `GET /api/admin/discrepancies` + `POST /{id}/resolve` (`Discrepancies` — **entity + migration `AddDiscrepancy` mới**).
+- **Phân quyền (Authorization)**: ⚠️ **KHÔNG** đồng đều — `AdminController` có `[Authorize(Roles="ADMIN")]`, `AuthController` chỉ vài action `[Authorize]`, `RaceExecutionController` role-locked; **nhiều controller CRUD (Races/Entries/Predictions/Tournaments/PointWallets…) chưa có `[Authorize]`** — cần bổ sung.
+- **Lưu ý `ICurrentUser`**: interface này **KHÔNG tồn tại** trong code (docs cũ bịa). Hiện identity resolve thủ công trong controller bằng `User.FindFirst("userId")`/`NameIdentifier` (xem `AdminController`, `RaceExecutionController`, `AuthController`). Nên tạo abstraction dùng chung.
 - **Admin duyệt user** (`AdminController`, `[Authorize(Roles="ADMIN")]`):
   - `GET /api/admin/users/pending`, `POST /api/admin/users/{id}/approve`, `POST /api/admin/users/{id}/reject`.
 - **Flow 1 — Đăng ký & duyệt ngựa** (`Api/Controllers/HorsesController.cs` + `Application/Usecases/Horses/`): toàn bộ vòng đời ngựa đã chạy thật trên DB.

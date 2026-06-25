@@ -3,8 +3,11 @@ using Application.Usecases.Users.DeleteUser;
 using Application.Usecases.Users.GetUserDetail;
 using Application.Usecases.Users.GetUserList;
 using Application.Usecases.Users.UpdateUser;
+using Application.Usecases.Users.ChangePassword;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Api.Controllers;
 
@@ -17,6 +20,28 @@ public sealed class UsersController : ControllerBase
     public UsersController(ISender sender)
     {
         _sender = sender;
+    }
+
+    /// <summary>
+    /// Đổi mật khẩu của chính user đang đăng nhập (resolve UserId từ JWT — bỏ qua route id).
+    /// </summary>
+    [HttpPut("{userId:int}/change-password")]
+    [Authorize]
+    public async Task<IActionResult> ChangePassword(
+        [FromRoute] int userId,
+        [FromBody] ChangePasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        var claim =
+            User.FindFirst("userId")?.Value ??
+            User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!int.TryParse(claim, out var currentUserId))
+            throw new UnauthorizedAccessException("Invalid or missing userId claim");
+
+        var result = await _sender.Send(
+            new ChangePasswordCommand(currentUserId, request.CurrentPassword, request.NewPassword),
+            cancellationToken);
+        return Ok(result);
     }
 
     [HttpPost]
@@ -104,3 +129,5 @@ public sealed class UsersController : ControllerBase
         });
     }
 }
+
+public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);

@@ -11,6 +11,10 @@ using Application.Usecases.Admin.GetPendingEntries;
 using Application.Usecases.Admin.ApproveEntry;
 using Application.Usecases.Admin.RejectEntry;
 
+using Application.Usecases.Admin.GetAdminViolations;
+using Application.Usecases.Admin.PointsManagement;
+using Application.Usecases.Admin.Discrepancies;
+
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -89,6 +93,55 @@ public sealed class AdminController : ControllerBase
         => Ok(await _sender.Send(new RejectEntryCommand(id, req.Reason), ct));
 
     // =========================
+    // VIOLATIONS (review)
+    // =========================
+
+    [HttpGet("violations")]
+    public async Task<IActionResult> GetViolations(
+        [FromQuery] string? status, [FromQuery] int page = 1, [FromQuery] int pageSize = 15,
+        CancellationToken ct = default)
+        => Ok(await _sender.Send(new GetAdminViolationsQuery(status, page, pageSize), ct));
+
+    // =========================
+    // POINTS MANAGEMENT
+    // =========================
+
+    [HttpGet("points/balances")]
+    public async Task<IActionResult> GetPointBalances(
+        [FromQuery] string? search, [FromQuery] int page = 1, [FromQuery] int pageSize = 50,
+        CancellationToken ct = default)
+        => Ok(await _sender.Send(new GetPointBalancesQuery(search, page, pageSize), ct));
+
+    [HttpGet("points/transactions")]
+    public async Task<IActionResult> GetPointTransactions(
+        [FromQuery] string? search, [FromQuery] string? type,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 50,
+        CancellationToken ct = default)
+        => Ok(await _sender.Send(new GetPointTransactionsQuery(search, type, page, pageSize), ct));
+
+    [HttpPost("points/adjust")]
+    public async Task<IActionResult> AdjustPoints(
+        [FromBody] AdjustPointsRequest req, CancellationToken ct)
+        => Ok(await _sender.Send(
+            new AdjustPointsCommand(req.UserId, req.Amount, req.Type, req.Reason, GetUserId()), ct));
+
+    // =========================
+    // DISCREPANCIES
+    // =========================
+
+    [HttpGet("discrepancies")]
+    public async Task<IActionResult> GetDiscrepancies(
+        [FromQuery] string? status, [FromQuery] int page = 1, [FromQuery] int pageSize = 15,
+        CancellationToken ct = default)
+        => Ok(await _sender.Send(new GetDiscrepanciesQuery(status, page, pageSize), ct));
+
+    [HttpPost("discrepancies/{id:int}/resolve")]
+    public async Task<IActionResult> ResolveDiscrepancy(
+        int id, [FromBody] ResolveDiscrepancyRequest req, CancellationToken ct)
+        => Ok(await _sender.Send(new ResolveDiscrepancyCommand(
+            id, req.Resolution, req.Action, req.AdjustedPointsAwarded, GetUserId()), ct));
+
+    // =========================
     // COMMON
     // =========================
     private int GetUserId()
@@ -111,3 +164,5 @@ public sealed class AdminController : ControllerBase
 public sealed record RejectUserRequest(string? Reason);
 public sealed record RejectHorseRequest(string? Reason);
 public sealed record RejectEntryRequest(string? Reason);
+public sealed record AdjustPointsRequest(int UserId, decimal Amount, string Type, string? Reason);
+public sealed record ResolveDiscrepancyRequest(string Resolution, string Action, int AdjustedPointsAwarded);
