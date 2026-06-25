@@ -5,11 +5,13 @@ using Application.Usecases.Legs.GetLegList;
 using Application.Usecases.Legs.UpdateLeg;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/legs")]
+[Authorize(Roles = "REFEREE,ADMIN")]
 public sealed class LegsController : ControllerBase
 {
     private readonly ISender _sender;

@@ -5,11 +5,13 @@ using Application.Usecases.LegRefereeEntries.GetLegRefereeEntryList;
 using Application.Usecases.LegRefereeEntries.UpdateLegRefereeEntry;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/leg-referee-entries")]
+[Authorize(Roles = "REFEREE,ADMIN")]
 public sealed class LegRefereeEntriesController : ControllerBase
 {
     private readonly ISender _sender;

@@ -5,11 +5,13 @@ using Application.Usecases.RaceResults.GetRaceResultList;
 using Application.Usecases.RaceResults.UpdateRaceResult;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/race-results")]
+[Authorize]
 public sealed class RaceResultsController : ControllerBase
 {
     private readonly ISender _sender;
@@ -20,6 +22,7 @@ public sealed class RaceResultsController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = "REFEREE,ADMIN")]
     public async Task<ActionResult> Create(
         [FromBody] CreateRaceResultCommand command,
         CancellationToken cancellationToken)
@@ -57,6 +60,7 @@ public sealed class RaceResultsController : ControllerBase
     }
 
     [HttpPut("{raceId:int}/{entryId:int}")]
+    [Authorize(Roles = "REFEREE,ADMIN")]
     public async Task<ActionResult> Update(
         int raceId,
         int entryId,
@@ -78,6 +82,7 @@ public sealed class RaceResultsController : ControllerBase
     }
 
     [HttpDelete("{raceId:int}/{entryId:int}")]
+    [Authorize(Roles = "REFEREE,ADMIN")]
     public async Task<ActionResult> Delete(
         int raceId,
         int entryId,

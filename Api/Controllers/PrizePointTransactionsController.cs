@@ -5,11 +5,13 @@ using Application.Usecases.PrizePointTransactions.GetPrizePointTransactionList;
 using Application.Usecases.PrizePointTransactions.UpdatePrizePointTransaction;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/prize-point-transactions")]
+[Authorize(Roles = "ADMIN")]
 public sealed class PrizePointTransactionsController : ControllerBase
 {
     private readonly ISender _sender;

@@ -5,11 +5,13 @@ using Application.Usecases.LegOfficialResults.GetLegOfficialResultList;
 using Application.Usecases.LegOfficialResults.UpdateLegOfficialResult;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/leg-official-results")]
+[Authorize(Roles = "REFEREE,ADMIN")]
 public sealed class LegOfficialResultsController : ControllerBase
 {
 	private readonly ISender _sender;

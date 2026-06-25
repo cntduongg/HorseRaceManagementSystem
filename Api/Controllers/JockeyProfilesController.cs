@@ -5,11 +5,13 @@ using Application.Usecases.JockeyProfiles.GetJockeyProfileList;
 using Application.Usecases.JockeyProfiles.UpdateJockeyProfile;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/jockey-profiles")]
+[Authorize]
 public sealed class JockeyProfilesController : ControllerBase
 {
     private readonly ISender _sender;

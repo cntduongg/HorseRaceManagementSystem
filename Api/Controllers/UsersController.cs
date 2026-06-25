@@ -13,6 +13,7 @@ namespace Api.Controllers;
 
 [ApiController]
 [Route("api/users")]
+[Authorize]
 public sealed class UsersController : ControllerBase
 {
     private readonly ISender _sender;
@@ -45,6 +46,7 @@ public sealed class UsersController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = "ADMIN")]
     public async Task<ActionResult<int>> Create(
         [FromBody] CreateUserCommand command,
         CancellationToken cancellationToken)
@@ -115,6 +117,7 @@ public sealed class UsersController : ControllerBase
     }
 
     [HttpDelete("{userId:int}")]
+    [Authorize(Roles = "ADMIN")]
     public async Task<ActionResult> Delete(
         [FromRoute] int userId,
         CancellationToken cancellationToken)

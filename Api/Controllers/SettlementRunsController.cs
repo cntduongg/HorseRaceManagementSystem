@@ -5,11 +5,13 @@ using Application.Usecases.SettlementRuns.GetSettlementRunList;
 using Application.Usecases.SettlementRuns.UpdateSettlementRun;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/settlement-runs")]
+[Authorize(Roles = "ADMIN")]
 public sealed class SettlementRunsController : ControllerBase
 {
     private readonly ISender _sender;

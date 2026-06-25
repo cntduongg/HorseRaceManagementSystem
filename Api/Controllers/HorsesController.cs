@@ -5,11 +5,13 @@ using Application.Usecases.Horses.GetHorseList;
 using Application.Usecases.Horses.UpdateHorse;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/horses")]
+[Authorize]
 public sealed class HorsesController : ControllerBase
 {
     private readonly ISender _sender;
@@ -20,6 +22,7 @@ public sealed class HorsesController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = "HORSE_OWNER")]
     public async Task<ActionResult<int>> Create(
         [FromBody] CreateHorseCommand command,
         CancellationToken cancellationToken)
@@ -65,6 +68,7 @@ public sealed class HorsesController : ControllerBase
     }
 
     [HttpPut("{horseId:int}")]
+    [Authorize(Roles = "HORSE_OWNER")]
     public async Task<ActionResult> Update(
         [FromRoute] int horseId,
         [FromBody] UpdateHorseCommand command,
@@ -93,6 +97,7 @@ public sealed class HorsesController : ControllerBase
     }
 
     [HttpDelete("{horseId:int}")]
+    [Authorize(Roles = "HORSE_OWNER")]
     public async Task<ActionResult> Delete(
         [FromRoute] int horseId,
         CancellationToken cancellationToken)

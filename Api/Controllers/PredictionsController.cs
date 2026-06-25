@@ -5,11 +5,13 @@ using Application.Usecases.Predictions.GetPredictionList;
 using Application.Usecases.Predictions.UpdatePrediction;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/predictions")]
+[Authorize]
 public sealed class PredictionsController : ControllerBase
 {
     private readonly ISender _sender;
@@ -20,6 +22,7 @@ public sealed class PredictionsController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = "SPECTATOR")]
     public async Task<ActionResult<int>> Create(
         [FromBody] CreatePredictionCommand command,
         CancellationToken cancellationToken)
@@ -66,6 +69,7 @@ public sealed class PredictionsController : ControllerBase
     }
 
     [HttpPut("{predictionId:int}")]
+    [Authorize(Roles = "SPECTATOR")]
     public async Task<ActionResult> Update(
         [FromRoute] int predictionId,
         [FromBody] UpdatePredictionCommand command,
@@ -90,6 +94,7 @@ public sealed class PredictionsController : ControllerBase
     }
 
     [HttpDelete("{predictionId:int}")]
+    [Authorize(Roles = "SPECTATOR")]
     public async Task<ActionResult> Delete(
         [FromRoute] int predictionId,
         CancellationToken cancellationToken)
