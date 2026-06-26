@@ -6,12 +6,14 @@ using Application.Usecases.Races.GetRaceList;
 using Application.Usecases.Races.UpdateRace;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Api.Controllers;
 
 
 [ApiController]
 [Route("api/races")]
+[Authorize]
 public sealed class RacesController : ControllerBase
 {
     private readonly ISender _sender;
@@ -22,6 +24,7 @@ public sealed class RacesController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = "ADMIN")]
     public async Task<ActionResult<int>> Create(
         [FromBody] CreateRaceCommand command,
         CancellationToken cancellationToken)
@@ -67,6 +70,7 @@ public sealed class RacesController : ControllerBase
     }
 
     [HttpPut("{raceId:int}")]
+    [Authorize(Roles = "ADMIN")]
     public async Task<ActionResult> Update(
         [FromRoute] int raceId,
         [FromBody] UpdateRaceCommand command,
@@ -99,6 +103,7 @@ public sealed class RacesController : ControllerBase
     }
 
     [HttpDelete("{raceId:int}")]
+    [Authorize(Roles = "ADMIN")]
     public async Task<ActionResult> Delete(
         [FromRoute] int raceId,
         CancellationToken cancellationToken)

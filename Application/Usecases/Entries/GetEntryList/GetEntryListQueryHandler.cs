@@ -18,6 +18,7 @@ public sealed class GetEntryListQueryHandler
         GetEntryListQuery request,
         CancellationToken cancellationToken)
     {
-        return _entryReadService.GetListAsync(cancellationToken);
+        return _entryReadService.GetListAsync(
+            request.OwnerId, request.RaceId, cancellationToken);
     }
 }

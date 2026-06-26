@@ -5,11 +5,14 @@ using Application.Usecases.Predictions.GetPredictionList;
 using Application.Usecases.Predictions.UpdatePrediction;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/predictions")]
+[Authorize]
 public sealed class PredictionsController : ControllerBase
 {
     private readonly ISender _sender;
@@ -20,12 +23,14 @@ public sealed class PredictionsController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = "SPECTATOR")]
     public async Task<ActionResult<int>> Create(
         [FromBody] CreatePredictionCommand command,
         CancellationToken cancellationToken)
     {
+        // SpectatorId lấy từ JWT — không tin body.
         var predictionId = await _sender.Send(
-            command,
+            command with { SpectatorId = GetUserId() },
             cancellationToken);
 
         return CreatedAtAction(
@@ -66,6 +71,7 @@ public sealed class PredictionsController : ControllerBase
     }
 
     [HttpPut("{predictionId:int}")]
+    [Authorize(Roles = "SPECTATOR")]
     public async Task<ActionResult> Update(
         [FromRoute] int predictionId,
         [FromBody] UpdatePredictionCommand command,
@@ -90,17 +96,28 @@ public sealed class PredictionsController : ControllerBase
     }
 
     [HttpDelete("{predictionId:int}")]
+    [Authorize(Roles = "SPECTATOR")]
     public async Task<ActionResult> Delete(
         [FromRoute] int predictionId,
         CancellationToken cancellationToken)
     {
         var result = await _sender.Send(
-            new DeletePredictionCommand(predictionId),
+            new DeletePredictionCommand(predictionId, GetUserId()),
             cancellationToken);
 
         return Ok(new
         {
             success = result
         });
+    }
+
+    private int GetUserId()
+    {
+        var claim =
+            User.FindFirst("userId")?.Value ??
+            User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!int.TryParse(claim, out var userId))
+            throw new UnauthorizedAccessException("Invalid or missing userId claim");
+        return userId;
     }
 }

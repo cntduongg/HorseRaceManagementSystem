@@ -5,11 +5,13 @@ using Application.Usecases.PointWallets.GetPointWalletList;
 using Application.Usecases.PointWallets.UpdatePointWallet;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/point-wallets")]
+[Authorize]
 public sealed class PointWalletsController : ControllerBase
 {
     private readonly ISender _sender;
@@ -20,6 +22,7 @@ public sealed class PointWalletsController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = "ADMIN")]
     public async Task<ActionResult<int>> Create(
         [FromBody] CreatePointWalletCommand command,
         CancellationToken cancellationToken)
@@ -66,6 +69,7 @@ public sealed class PointWalletsController : ControllerBase
     }
 
     [HttpPut("{walletId:int}")]
+    [Authorize(Roles = "ADMIN")]
     public async Task<ActionResult> Update(
         [FromRoute] int walletId,
         [FromBody] UpdatePointWalletCommand command,
@@ -90,6 +94,7 @@ public sealed class PointWalletsController : ControllerBase
     }
 
     [HttpDelete("{walletId:int}")]
+    [Authorize(Roles = "ADMIN")]
     public async Task<ActionResult> Delete(
         [FromRoute] int walletId,
         CancellationToken cancellationToken)

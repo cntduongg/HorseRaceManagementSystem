@@ -1,0 +1,157 @@
+using Application.Common;
+using Application.Common.Interfaces;
+using Domain.Aggregates.Entities;
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+
+namespace Application.Usecases.RaceExecution;
+
+// POST /api/races/{raceId}/unpublish — Admin rollback kết quả + payout (ATOMIC) → PendingResult.
+public sealed record UnpublishRaceResultCommand(int RaceId, int AdminUserId)
+    : ICommand<UnpublishRaceResultResponse>;
+
+public sealed record UnpublishRaceResultResponse(
+    int RaceId,
+    string Status,
+    int ReversedPayouts);
+
+public sealed class UnpublishRaceResultCommandHandler
+    : IRequestHandler<UnpublishRaceResultCommand, UnpublishRaceResultResponse>
+{
+    private readonly IApplicationDbContext _context;
+
+    public UnpublishRaceResultCommandHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<UnpublishRaceResultResponse> Handle(
+        UnpublishRaceResultCommand request,
+        CancellationToken cancellationToken)
+    {
+        await using var tx = await _context.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var race = await _context.Races
+                .FirstOrDefaultAsync(r => r.RaceId == request.RaceId, cancellationToken)
+                ?? throw new KeyNotFoundException("Race not found.");
+
+            if (race.Status != RaceExecutionConstants.RaceFinished)
+                throw new InvalidOperationException(
+                    $"Chỉ unpublish được race đã Finished (hiện tại: {race.Status}).");
+
+            var now = DateTime.UtcNow;
+
+            // ── 1. Hoàn lại payout đã chi ──
+            var settlements = await _context.PredictionSettlements
+                .Where(s => s.RaceId == race.RaceId && !s.IsRollbacked)
+                .ToListAsync(cancellationToken);
+
+            var spectatorIds = settlements.Select(s => s.SpectatorId).Distinct().ToList();
+            var wallets = await _context.PointWallets
+                .Where(w => spectatorIds.Contains(w.SpectatorId))
+                .ToListAsync(cancellationToken);
+
+            var reversed = 0;
+            foreach (var s in settlements)
+            {
+                if (s.Outcome == "Won" && s.PayoutAmount > 0 && s.PayoutTransactionId != null)
+                {
+                    var wallet = wallets.FirstOrDefault(w => w.SpectatorId == s.SpectatorId);
+                    if (wallet is { IsFrozen: false })
+                    {
+                        wallet.Balance -= s.PayoutAmount;
+                        wallet.UpdatedAt = now;
+
+                        _context.WalletTransactions.Add(new WalletTransaction
+                        {
+                            WalletId = wallet.WalletId,
+                            SpectatorId = s.SpectatorId,
+                            PredictionId = s.PredictionId,
+                            SettlementRunId = s.SettlementRunId,
+                            Type = "PayoutRollback",
+                            Amount = -s.PayoutAmount,
+                            BalanceAfter = wallet.Balance,
+                            Reason = $"Rollback payout race #{race.RaceId}",
+                            RollbackOfTransactionId = s.PayoutTransactionId,
+                            CreatedAt = now
+                        });
+                        reversed++;
+                    }
+                }
+
+                s.IsRollbacked = true;
+                s.RollbackAt = now;
+            }
+
+            // ── 2. Đưa dự đoán về Pending ──
+            var predictionIds = settlements.Select(s => s.PredictionId).ToList();
+            var predictions = await _context.Predictions
+                .Where(p => predictionIds.Contains(p.PredictionId))
+                .ToListAsync(cancellationToken);
+            foreach (var p in predictions)
+                p.Status = "Pending";
+
+            // ── 3. Đánh dấu các SettlementRun đã rollback ──
+            var runs = await _context.SettlementRuns
+                .Where(r => r.RaceId == race.RaceId && r.Status == "Completed")
+                .ToListAsync(cancellationToken);
+            foreach (var run in runs)
+                run.Status = "RolledBack";
+
+            // ── 4. Gỡ Prize Points & RaceResult (Prize trước vì FK tới RaceResult) ──
+            var prizes = await _context.PrizePointTransactions
+                .Where(p => p.RaceId == race.RaceId)
+                .ToListAsync(cancellationToken);
+            _context.PrizePointTransactions.RemoveRange(prizes);
+
+            var results = await _context.RaceResults
+                .Where(r => r.RaceId == race.RaceId)
+                .ToListAsync(cancellationToken);
+
+            // ── 4b. Hoàn lại thống kê Career của Jockey (đối xứng với Publish) ──
+            var entries = await _context.Entries
+                .Where(e => e.RaceId == race.RaceId)
+                .Select(e => new { e.EntryId, e.JockeyId })
+                .ToListAsync(cancellationToken);
+            var jockeyByEntry = entries.ToDictionary(e => e.EntryId, e => e.JockeyId);
+            var jockeyIds = entries.Select(e => e.JockeyId).Distinct().ToList();
+            var profiles = await _context.JockeyProfiles
+                .Where(p => jockeyIds.Contains(p.UserId))
+                .ToListAsync(cancellationToken);
+
+            foreach (var res in results)
+            {
+                if (!jockeyByEntry.TryGetValue(res.EntryId, out var jockeyId)) continue;
+                var profile = profiles.FirstOrDefault(p => p.UserId == jockeyId);
+                if (profile is null) continue;
+
+                profile.TotalRaces = Math.Max(0, profile.TotalRaces - 1);
+                if (!res.IsRaceDQ && res.FinalPosition == 1)
+                    profile.TotalWins = Math.Max(0, profile.TotalWins - 1);
+                if (!res.IsRaceDQ && res.FinalPosition is >= 1 and <= 3)
+                    profile.TotalTop3 = Math.Max(0, profile.TotalTop3 - 1);
+                var prize = res.IsRaceDQ ? 0 : RaceExecutionConstants.PrizePointsFor(res.FinalPosition ?? 0);
+                profile.CareerPrizePoints = Math.Max(0, profile.CareerPrizePoints - prize);
+                profile.UpdatedAt = now;
+            }
+
+            _context.RaceResults.RemoveRange(results);
+
+            // ── 5. Đưa race về PendingResult ──
+            race.Status = RaceExecutionConstants.RacePendingResult;
+            race.PublishedAt = null;
+            race.UpdatedAt = now;
+
+            await _context.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+
+            return new UnpublishRaceResultResponse(race.RaceId, race.Status, reversed);
+        }
+        catch
+        {
+            await tx.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+}

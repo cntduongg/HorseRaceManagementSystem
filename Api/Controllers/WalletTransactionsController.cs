@@ -5,11 +5,13 @@ using Application.Usecases.WalletTransactions.GetWalletTransactionList;
 using Application.Usecases.WalletTransactions.UpdateWalletTransaction;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/wallet-transactions")]
+[Authorize]
 public sealed class WalletTransactionsController : ControllerBase
 {
     private readonly ISender _sender;
@@ -20,6 +22,7 @@ public sealed class WalletTransactionsController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = "ADMIN")]
     public async Task<ActionResult<int>> Create(
         [FromBody] CreateWalletTransactionCommand command,
         CancellationToken cancellationToken)
@@ -64,6 +67,7 @@ public sealed class WalletTransactionsController : ControllerBase
     }
 
     [HttpPut("{transactionId:int}")]
+    [Authorize(Roles = "ADMIN")]
     public async Task<ActionResult> Update(
         [FromRoute] int transactionId,
         [FromBody] UpdateWalletTransactionCommand command,
@@ -86,6 +90,7 @@ public sealed class WalletTransactionsController : ControllerBase
     }
 
     [HttpDelete("{transactionId:int}")]
+    [Authorize(Roles = "ADMIN")]
     public async Task<ActionResult> Delete(
         [FromRoute] int transactionId,
         CancellationToken cancellationToken)

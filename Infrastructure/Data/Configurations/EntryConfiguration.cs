@@ -10,6 +10,8 @@ public class EntryConfiguration : IEntityTypeConfiguration<Entry>
     {
         builder.HasKey(e => e.EntryId);
 
+        builder.Property(e => e.Odds).HasPrecision(10, 4);
+
         builder.HasIndex(e => new { e.RaceId, e.HorseId }).IsUnique();
         builder.HasIndex(e => new { e.RaceId, e.JockeyId }).IsUnique();
         builder.HasIndex(e => new { e.RaceId, e.GateNumber })

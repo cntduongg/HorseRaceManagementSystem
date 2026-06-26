@@ -5,11 +5,13 @@ using Application.Usecases.Spectators.GetSpectatorList;
 using Application.Usecases.Spectators.UpdateSpectator;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Api.Controllers;
 
 [ApiController]
 [Route("api/spectators")]
+[Authorize]
 public sealed class SpectatorsController : ControllerBase
 {
     private readonly ISender _sender;

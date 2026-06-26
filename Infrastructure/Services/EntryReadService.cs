@@ -15,10 +15,18 @@ public sealed class EntryReadService : IEntryReadService
     }
 
     public async Task<List<EntryListItemResponse>> GetListAsync(
+        int? ownerId,
+        int? raceId,
         CancellationToken cancellationToken)
     {
-        return await _db.Entries
-            .AsNoTracking()
+        var query = _db.Entries.AsNoTracking();
+
+        if (ownerId is > 0)
+            query = query.Where(x => x.HorseOwnerId == ownerId);
+        if (raceId is > 0)
+            query = query.Where(x => x.RaceId == raceId);
+
+        return await query
             .OrderBy(x => x.RaceId)
             .ThenBy(x => x.GateNumber ?? int.MaxValue)
             .ThenBy(x => x.EntryId)
@@ -37,7 +45,7 @@ public sealed class EntryReadService : IEntryReadService
                 x.Status,
                 x.SubmittedAt,
                 x.ApprovedAt,
-                null,
+                x.Odds > 0 ? x.Odds : (decimal?)null,
                 x.Race.Tournament != null
     ? x.Race.Tournament.Name
     : null

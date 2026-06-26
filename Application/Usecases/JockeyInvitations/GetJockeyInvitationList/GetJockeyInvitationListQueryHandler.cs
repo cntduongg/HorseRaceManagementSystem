@@ -18,8 +18,20 @@ public sealed class GetJockeyInvitationListQueryHandler
         GetJockeyInvitationListQuery request,
         CancellationToken cancellationToken)
     {
-        return await _context.JockeyInvitations
-            .AsNoTracking()
+        var query = _context.JockeyInvitations.AsNoTracking();
+
+        // Scope theo role: nài thấy lời mời nhận được; chủ ngựa thấy lời mời đã gửi; admin thấy tất cả.
+        if (request.CurrentUserId > 0)
+        {
+            query = request.Role switch
+            {
+                "JOCKEY" => query.Where(x => x.JockeyId == request.CurrentUserId),
+                "HORSE_OWNER" => query.Where(x => x.HorseOwnerId == request.CurrentUserId),
+                _ => query
+            };
+        }
+
+        return await query
             .OrderByDescending(x => x.SentAt)
             .Select(x => new JockeyInvitationListItemResponse(
                 x.InvitationId,

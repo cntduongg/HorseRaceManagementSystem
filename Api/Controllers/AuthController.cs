@@ -2,9 +2,13 @@ using Application.Usecases.Auth.Login;
 using Application.Usecases.Auth.Logout;
 using Application.Usecases.Auth.Register;
 using Application.Usecases.Auth.RefreshToken;
+using Application.Usecases.Auth.GetProfile;
+using Application.Usecases.Auth.ForgotPassword;
+using Application.Usecases.Auth.ResetPassword;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Api.Controllers;
 
@@ -115,10 +119,59 @@ public sealed class AuthController : ControllerBase
         var result = await _sender.Send(new RefreshTokenCommand(request.RefreshToken), cancellationToken);
         return Ok(result);
     }
+
+    /// <summary>
+    /// Hồ sơ của user hiện tại (resolve UserId từ JWT, không tin body).
+    /// </summary>
+    [HttpGet("profile")]
+    [Authorize]
+    public async Task<IActionResult> Profile(CancellationToken cancellationToken)
+    {
+        var user = await _sender.Send(new GetProfileQuery(GetUserId()), cancellationToken);
+        return Ok(new { user });
+    }
+
+    /// <summary>
+    /// Phát mã OTP đặt lại mật khẩu. (DEV: trả OTP trong response do chưa có email service.)
+    /// </summary>
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword(
+        [FromBody] ForgotPasswordRequest request,
+        CancellationToken cancellationToken)
+        => Ok(await _sender.Send(new ForgotPasswordCommand(request.Email), cancellationToken));
+
+    /// <summary>
+    /// Xác thực OTP và đặt mật khẩu mới.
+    /// </summary>
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword(
+        [FromBody] ResetPasswordRequest request,
+        CancellationToken cancellationToken)
+        => Ok(await _sender.Send(new ResetPasswordCommand(
+            request.Email, request.OtpCode, request.NewPassword, request.ConfirmPassword),
+            cancellationToken));
+
+    private int GetUserId()
+    {
+        var claim =
+            User.FindFirst("userId")?.Value ??
+            User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (!int.TryParse(claim, out var userId))
+            throw new UnauthorizedAccessException("Invalid or missing userId claim");
+
+        return userId;
+    }
 }
 
 public sealed record LogoutRequest(string RefreshToken);
 public sealed record RefreshTokenRequest(string RefreshToken);
+public sealed record ForgotPasswordRequest(string Email);
+public sealed record ResetPasswordRequest(
+    string Email,
+    string OtpCode,
+    string NewPassword,
+    string? ConfirmPassword);
 
 public sealed record RegisterSpectatorRequest(
     string Email,

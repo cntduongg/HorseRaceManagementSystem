@@ -22,6 +22,69 @@ namespace Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Domain.Aggregates.Entities.Discrepancy", b =>
+                {
+                    b.Property<int>("DiscrepancyId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("DiscrepancyId"));
+
+                    b.Property<int?>("AdjustedPointsAwarded")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int?>("OfficialPosition")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PredictedPosition")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("RaceId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ReportedById")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Resolution")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("ResolutionAction")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("ResolvedByAdminId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.HasKey("DiscrepancyId");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("Discrepancies");
+                });
+
             modelBuilder.Entity("Domain.Aggregates.Entities.Entry", b =>
                 {
                     b.Property<int>("EntryId")
@@ -50,6 +113,10 @@ namespace Infrastructure.Migrations
 
                     b.Property<int>("JockeyId")
                         .HasColumnType("integer");
+
+                    b.Property<decimal>("Odds")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("numeric(10,4)");
 
                     b.Property<int>("RaceId")
                         .HasColumnType("integer");

@@ -3,5 +3,6 @@ using MediatR;
 namespace Application.Usecases.Predictions.DeletePrediction;
 
 public sealed record DeletePredictionCommand(
-    int PredictionId
+    int PredictionId,
+    int CurrentUserId = 0
 ) : IRequest<bool>;

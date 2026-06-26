@@ -5,9 +5,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.Predictions.CreatePrediction;
 
+// Flow 7 — Đặt cược dự đoán: odds KHÓA SERVER-SIDE, trừ ví ngay, validate min 10 / 50% số dư /
+// 1 dự đoán active mỗi race / race phải Scheduled. (Bỏ qua odds do client gửi.)
 public sealed class CreatePredictionCommandHandler
     : IRequestHandler<CreatePredictionCommand, int>
 {
+    private const decimal MinBet = 10m;
+    private const string RaceScheduled = "Scheduled";
+    private const string EntryApproved = "Approved";
+
     private readonly IApplicationDbContext _context;
 
     public CreatePredictionCommandHandler(IApplicationDbContext context)
@@ -21,80 +27,131 @@ public sealed class CreatePredictionCommandHandler
     {
         if (request.RaceId <= 0)
             throw new InvalidOperationException("RaceId is required.");
-
         if (request.SpectatorId <= 0)
             throw new InvalidOperationException("SpectatorId is required.");
+        if (request.FirstEntryId <= 0)
+            throw new InvalidOperationException("FirstEntryId is required.");
+        if (request.BetAmount < MinBet)
+            throw new InvalidOperationException($"Số tiền cược tối thiểu là {MinBet} điểm.");
 
-        if (request.FirstEntryId <= 0 ||
-            request.SecondEntryId <= 0 ||
-            request.ThirdEntryId <= 0)
-            throw new InvalidOperationException("EntryId is required.");
+        var race = await _context.Races
+            .FirstOrDefaultAsync(x => x.RaceId == request.RaceId, cancellationToken)
+            ?? throw new InvalidOperationException("Race not found.");
 
-        if (request.BetAmount < 10)
-            throw new InvalidOperationException("BetAmount must be at least 10.");
-
-        if (request.OddsLocked1 <= 0 ||
-            request.OddsLocked2 <= 0 ||
-            request.OddsLocked3 <= 0)
-            throw new InvalidOperationException("Odds must be greater than 0.");
-
-        if (request.FirstEntryId == request.SecondEntryId ||
-            request.FirstEntryId == request.ThirdEntryId ||
-            request.SecondEntryId == request.ThirdEntryId)
-        {
-            throw new InvalidOperationException("Selected entries must be different.");
-        }
-
-        var raceExists = await _context.Races
-            .AnyAsync(x => x.RaceId == request.RaceId, cancellationToken);
-
-        if (!raceExists)
-            throw new InvalidOperationException("Race not found.");
+        if (race.Status != RaceScheduled)
+            throw new InvalidOperationException("Chỉ được đặt cược khi cuộc đua đang Scheduled.");
 
         var spectator = await _context.Spectators
-            .FirstOrDefaultAsync(x => x.UserId == request.SpectatorId, cancellationToken);
-
-        if (spectator is null)
-            throw new InvalidOperationException("Spectator not found.");
-
+            .FirstOrDefaultAsync(x => x.UserId == request.SpectatorId, cancellationToken)
+            ?? throw new InvalidOperationException("Spectator not found.");
         if (!spectator.IsActive)
-            throw new InvalidOperationException("Spectator is inactive.");
+            throw new InvalidOperationException("Tài khoản khán giả đang bị khóa.");
 
-        var entryIds = new[]
+        // Entry dự đoán về 1st phải thuộc race & đã duyệt.
+        var firstEntry = await _context.Entries
+            .FirstOrDefaultAsync(
+                e => e.EntryId == request.FirstEntryId && e.RaceId == request.RaceId,
+                cancellationToken)
+            ?? throw new InvalidOperationException("Entry không thuộc cuộc đua đã chọn.");
+        if (firstEntry.Status != EntryApproved)
+            throw new InvalidOperationException("Entry chưa được duyệt.");
+
+        // Tối đa 1 dự đoán active mỗi race.
+        var hasActive = await _context.Predictions.AnyAsync(
+            p => p.RaceId == request.RaceId &&
+                 p.SpectatorId == request.SpectatorId &&
+                 p.Status == "Pending",
+            cancellationToken);
+        if (hasActive)
+            throw new InvalidOperationException("Bạn đã có một dự đoán đang hoạt động cho cuộc đua này.");
+
+        // Ví: phải tồn tại, không đóng băng, đủ số dư, không vượt 50%.
+        var wallet = await _context.PointWallets
+            .FirstOrDefaultAsync(w => w.SpectatorId == request.SpectatorId, cancellationToken)
+            ?? throw new InvalidOperationException("Không tìm thấy ví điểm.");
+        if (wallet.IsFrozen)
+            throw new InvalidOperationException("Ví điểm đang bị đóng băng.");
+        if (request.BetAmount > wallet.Balance)
+            throw new InvalidOperationException("Số dư không đủ.");
+        if (request.BetAmount > wallet.Balance * 0.5m)
+            throw new InvalidOperationException("Số tiền cược không được vượt quá 50% số dư.");
+
+        // ── Odds server-side: ưu tiên odds đã KHÓA khi đóng đăng ký (Flow 3); fallback tính tạm ──
+        var odds = firstEntry.Odds > 0
+            ? firstEntry.Odds
+            : await ComputeOddsAsync(request.RaceId, firstEntry.HorseId, cancellationToken);
+
+        var now = DateTime.UtcNow;
+
+        await using var tx = await _context.Database.BeginTransactionAsync(cancellationToken);
+        try
         {
-            request.FirstEntryId,
-            request.SecondEntryId,
-            request.ThirdEntryId
-        };
+            var prediction = new Prediction
+            {
+                RaceId = request.RaceId,
+                SpectatorId = request.SpectatorId,
+                FirstEntryId = request.FirstEntryId,
+                SecondEntryId = request.FirstEntryId, // spec: chỉ dự đoán 1st
+                ThirdEntryId = request.FirstEntryId,
+                BetAmount = request.BetAmount,
+                OddsLocked1 = odds,
+                OddsLocked2 = odds,
+                OddsLocked3 = odds,
+                Status = "Pending",
+                CreatedAt = now
+            };
+            _context.Predictions.Add(prediction);
+            await _context.SaveChangesAsync(cancellationToken); // lấy PredictionId
 
-        var validEntries = await _context.Entries
-            .CountAsync(x =>
-                entryIds.Contains(x.EntryId) &&
-                x.RaceId == request.RaceId,
-                cancellationToken);
+            // Trừ ví ngay + ghi giao dịch.
+            wallet.Balance -= request.BetAmount;
+            wallet.UpdatedAt = now;
 
-        if (validEntries != 3)
-            throw new InvalidOperationException("Entries must belong to the selected race.");
+            _context.WalletTransactions.Add(new WalletTransaction
+            {
+                WalletId = wallet.WalletId,
+                SpectatorId = request.SpectatorId,
+                PredictionId = prediction.PredictionId,
+                Type = "BetPlaced",
+                Amount = -request.BetAmount,
+                BalanceAfter = wallet.Balance,
+                Reason = $"Đặt cược race #{request.RaceId}",
+                CreatedAt = now
+            });
+            await _context.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
 
-        var prediction = new Prediction
+            return prediction.PredictionId;
+        }
+        catch
         {
-            RaceId = request.RaceId,
-            SpectatorId = request.SpectatorId,
-            FirstEntryId = request.FirstEntryId,
-            SecondEntryId = request.SecondEntryId,
-            ThirdEntryId = request.ThirdEntryId,
-            BetAmount = request.BetAmount,
-            OddsLocked1 = request.OddsLocked1,
-            OddsLocked2 = request.OddsLocked2,
-            OddsLocked3 = request.OddsLocked3,
-            Status = "Pending",
-            CreatedAt = DateTime.UtcNow
-        };
+            await tx.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
 
-        _context.Predictions.Add(prediction);
+    // Odds = 1 / winRate (clamp). winRate theo lịch sử về nhất của ngựa; chưa có lịch sử → theo cỡ field.
+    private async Task<decimal> ComputeOddsAsync(int raceId, int horseId, CancellationToken ct)
+    {
+        var horseResults = await _context.RaceResults
+            .Where(r => r.Entry.HorseId == horseId && r.FinalPosition != null)
+            .Select(r => r.FinalPosition)
+            .ToListAsync(ct);
 
-        await _context.SaveChangesAsync(cancellationToken);
+        double winRate;
+        if (horseResults.Count > 0)
+        {
+            var firsts = horseResults.Count(p => p == 1);
+            winRate = (double)firsts / horseResults.Count;
+        }
+        else
+        {
+            var fieldSize = await _context.Entries.CountAsync(
+                e => e.RaceId == raceId && e.Status == EntryApproved, ct);
+            winRate = 1.0 / Math.Max(fieldSize, 2);
+        }
 
-        return prediction.PredictionId;
+        var odds = (decimal)Math.Round(1.0 / Math.Max(winRate, 0.04), 2);
+        return Math.Clamp(odds, 1.1m, 25m);
     }
 }
