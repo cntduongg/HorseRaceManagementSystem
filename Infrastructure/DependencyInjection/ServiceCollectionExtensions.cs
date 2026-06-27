@@ -44,7 +44,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IHorseRepository, HorseRepository>();
         services.AddScoped<IEntryRepository, EntryRepository>();
         services.AddScoped<IReviewHistoryRepository, ReviewHistoryRepository>();
-
+        services.AddScoped<IRegistrationService, RegistrationService>();
         return services;
     }
 }
