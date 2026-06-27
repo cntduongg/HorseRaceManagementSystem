@@ -46,7 +46,7 @@ public interface IApplicationDbContext
     DbSet<JockeyProfile> JockeyProfiles { get; }
 
     DbSet<PasswordResetOtp> PasswordResetOtps { get; }
-
+    DbSet<ReviewHistory> ReviewHistories { get; }
     DbSet<Discrepancy> Discrepancies { get; }
 
     Task<int> SaveChangesAsync(

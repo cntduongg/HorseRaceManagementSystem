@@ -43,6 +43,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IEntryReadService, EntryReadService>();
         services.AddScoped<IHorseRepository, HorseRepository>();
         services.AddScoped<IEntryRepository, EntryRepository>();
+        services.AddScoped<IReviewHistoryRepository, ReviewHistoryRepository>();
+
         return services;
     }
 }

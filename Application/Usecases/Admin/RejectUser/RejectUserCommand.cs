@@ -2,4 +2,8 @@ using Application.Common;
 
 namespace Application.Usecases.Admin.RejectUser;
 
-public sealed record RejectUserCommand(int UserId, string? Reason) : ICommand<RejectUserResponse>;
+public sealed record RejectUserCommand(
+    int UserId,
+    int AdminId,
+    string Reason
+) : ICommand<RejectUserResponse>;

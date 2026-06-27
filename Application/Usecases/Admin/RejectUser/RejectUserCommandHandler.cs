@@ -1,4 +1,6 @@
 using Application.Common;
+using Domain.Aggregates.Entities;
+using Domain.Aggregates.Enums;
 using MediatR;
 
 namespace Application.Usecases.Admin.RejectUser;
@@ -6,26 +8,51 @@ namespace Application.Usecases.Admin.RejectUser;
 public sealed class RejectUserCommandHandler : IRequestHandler<RejectUserCommand, RejectUserResponse>
 {
     private readonly IUserRepository _userRepository;
+    private readonly IReviewHistoryRepository _reviewHistoryRepository;
 
-    public RejectUserCommandHandler(IUserRepository userRepository)
+    public RejectUserCommandHandler(
+        IUserRepository userRepository,
+        IReviewHistoryRepository reviewHistoryRepository)
     {
         _userRepository = userRepository;
+        _reviewHistoryRepository = reviewHistoryRepository;
     }
 
-    public async Task<RejectUserResponse> Handle(RejectUserCommand request, CancellationToken cancellationToken)
+    public async Task<RejectUserResponse> Handle(
+        RejectUserCommand request,
+        CancellationToken cancellationToken)
     {
-        var user = await _userRepository.GetByIdAsync(request.UserId, cancellationToken);
+        if (string.IsNullOrWhiteSpace(request.Reason))
+            throw new ArgumentException("Reason is required.");
+
+        var user = await _userRepository.GetByIdAsync(
+            request.UserId,
+            cancellationToken);
 
         if (user is null)
-            throw new KeyNotFoundException($"User with ID {request.UserId} was not found.");
+            throw new KeyNotFoundException(
+                $"User with ID {request.UserId} was not found.");
 
-        if (user.Status != "Pending")
-            throw new InvalidOperationException($"User {request.UserId} is not in Pending status (current: {user.Status}).");
-
-        user.Status    = "Rejected";
-        user.IsActive  = false;
+        // Cho phép reject lại kể cả không còn Pending
+        user.Status = "Rejected";
+        user.IsActive = false;
         user.UpdatedAt = DateTime.UtcNow;
 
-        return new RejectUserResponse(user.UserId, user.Email, user.FullName, user.Status);
+        await _reviewHistoryRepository.AddAsync(
+            new ReviewHistory
+            {
+                EntityType = ReviewEntity.User,
+                EntityId = user.UserId,
+                Action = ReviewAction.Rejected,
+                Reason = request.Reason,
+                AdminId = request.AdminId
+            },
+            cancellationToken);
+
+        return new RejectUserResponse(
+            user.UserId,
+            user.Email,
+            user.FullName,
+            user.Status);
     }
 }
