@@ -46,7 +46,7 @@ public class ApplicationDbContext
     public DbSet<SettlementRun> SettlementRuns => Set<SettlementRun>();
     public DbSet<PredictionSettlement> PredictionSettlements => Set<PredictionSettlement>();
     public DbSet<PrizePointTransaction> PrizePointTransactions => Set<PrizePointTransaction>();
-
+    public DbSet<ReviewHistory> ReviewHistories => Set<ReviewHistory>();
     public DbSet<Discrepancy> Discrepancies => Set<Discrepancy>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

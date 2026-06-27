@@ -1,7 +1,8 @@
 using Application.Usecases.Admin.ApproveUser;
 using Application.Usecases.Admin.GetPendingUsers;
 using Application.Usecases.Admin.RejectUser;
-
+using Application.Usecases.Admin.GetReviewHistory;
+using Domain.Aggregates.Enums;
 using Application.Usecases.Admin.GetPendingHorses;
 using Application.Usecases.Admin.ApproveHorse;
 using Application.Usecases.Admin.RejectHorse;
@@ -47,12 +48,27 @@ public sealed class AdminController : ControllerBase
         => Ok(await _sender.Send(new GetPendingUsersQuery(), ct));
 
     [HttpPost("users/{id:int}/approve")]
-    public async Task<IActionResult> ApproveUser(int id, CancellationToken ct)
-        => Ok(await _sender.Send(new ApproveUserCommand(id), ct));
-
+    public async Task<IActionResult> ApproveUser(
+    int id,
+    [FromBody] ApproveUserRequest? req,
+    CancellationToken ct)
+    => Ok(await _sender.Send(
+        new ApproveUserCommand(
+            id,
+            GetUserId(),
+            req?.Reason),
+        ct));
     [HttpPost("users/{id:int}/reject")]
-    public async Task<IActionResult> RejectUser(int id, [FromBody] RejectUserRequest req, CancellationToken ct)
-        => Ok(await _sender.Send(new RejectUserCommand(id, req.Reason), ct));
+    public async Task<IActionResult> RejectUser(
+        int id,
+        [FromBody] RejectUserRequest req,
+        CancellationToken ct)
+        => Ok(await _sender.Send(
+            new RejectUserCommand(
+                id,
+                GetUserId(),
+                req.Reason),
+            ct));
 
     // Khóa/Mở khóa tài khoản (Flow 7: khóa Spectator → đóng băng ví + hoàn cược Pending).
     [HttpPost("users/{id:int}/lock")]
@@ -72,15 +88,23 @@ public sealed class AdminController : ControllerBase
         => Ok(await _sender.Send(new GetPendingHorsesQuery(), ct));
 
     [HttpPost("horses/{id:int}/approve")]
-    public async Task<IActionResult> ApproveHorse(int id, CancellationToken ct)
-    {
-        var adminId = GetUserId();
-        return Ok(await _sender.Send(new ApproveHorseCommand(id, adminId), ct));
-    }
+    public async Task<IActionResult> ApproveHorse(
+    int id,
+    [FromBody] ApproveHorseRequest? req,
+    CancellationToken ct)
+    => Ok(await _sender.Send(
+        new ApproveHorseCommand(
+            id,
+            GetUserId(),
+            req?.Reason),
+        ct));
 
     [HttpPost("horses/{id:int}/reject")]
     public async Task<IActionResult> RejectHorse(int id, [FromBody] RejectHorseRequest req, CancellationToken ct)
-        => Ok(await _sender.Send(new RejectHorseCommand(id, req.Reason), ct));
+        => Ok(await _sender.Send(new RejectHorseCommand(
+    id,
+    GetUserId(),
+    req.Reason), ct));
 
     [HttpPost("horses/{id:int}/revoke")]
     public async Task<IActionResult> RevokeHorse(int id, CancellationToken ct)
@@ -95,15 +119,23 @@ public sealed class AdminController : ControllerBase
         => Ok(await _sender.Send(new GetPendingEntriesQuery(), ct));
 
     [HttpPost("entries/{id:int}/approve")]
-    public async Task<IActionResult> ApproveEntry(int id, CancellationToken ct)
-    {
-        var adminId = GetUserId();
-        return Ok(await _sender.Send(new ApproveEntryCommand(id, adminId), ct));
-    }
+    public async Task<IActionResult> ApproveEntry(
+       int id,
+       [FromBody] ApproveEntryRequest? req,
+       CancellationToken ct)
+       => Ok(await _sender.Send(
+           new ApproveEntryCommand(
+               id,
+               GetUserId(),
+               req?.Reason),
+           ct));
 
     [HttpPost("entries/{id:int}/reject")]
     public async Task<IActionResult> RejectEntry(int id, [FromBody] RejectEntryRequest req, CancellationToken ct)
-        => Ok(await _sender.Send(new RejectEntryCommand(id, req.Reason), ct));
+        => Ok(await _sender.Send(new RejectEntryCommand(
+    id,
+    GetUserId(),
+    req.Reason), ct));
 
     // =========================
     // VIOLATIONS (review)
@@ -172,6 +204,20 @@ public sealed class AdminController : ControllerBase
             id, req.Resolution, req.Action, req.AdjustedPointsAwarded, GetUserId()), ct));
 
     // =========================
+    // REVIEW HISTORY
+    // =========================
+    [HttpGet("review-history")]
+    public async Task<IActionResult> GetReviewHistory(
+    [FromQuery] ReviewEntity? entity,
+    [FromQuery] int? entityId,
+    CancellationToken ct)
+    {
+        return Ok(await _sender.Send(
+            new GetReviewHistoryQuery(entity, entityId),
+            ct));
+    }
+
+    // =========================
     // COMMON
     // =========================
     private int GetUserId()
@@ -190,7 +236,9 @@ public sealed class AdminController : ControllerBase
 // =========================
 // REQUEST DTOs
 // =========================
-
+public sealed record ApproveEntryRequest(string? Reason);
+public sealed record ApproveHorseRequest(string? Reason);
+public sealed record ApproveUserRequest(string? Reason);
 public sealed record RejectUserRequest(string? Reason);
 public sealed record RejectHorseRequest(string? Reason);
 public sealed record RejectEntryRequest(string? Reason);
