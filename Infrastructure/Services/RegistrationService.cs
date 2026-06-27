@@ -1,5 +1,7 @@
 using Application.Common;
 using Application.Common.Interfaces;
+using Domain.Aggregates.Constants;
+using Domain.Aggregates.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Services;
@@ -66,22 +68,33 @@ public sealed class RegistrationService : IRegistrationService
 
     //-------------------------------------------------------
 
-    private Task ComputeOdds(
-        Domain.Aggregates.Entities.Race race,
-        CancellationToken cancellationToken)
+    private async Task ComputeOdds(
+     Race race,
+     CancellationToken cancellationToken)
     {
-        /*
-         * Flow 3
-         *
-         * Sau này sẽ:
-         *
-         * 1. Tính Odds
-         * 2. Freeze Odds
-         * 3. Publish Odds
-         */
+        var approvedEntries = await _context.Entries
+            .Where(x =>
+                x.RaceId == race.RaceId &&
+                x.Status == EntryStatus.Approved)
+            .ToListAsync(cancellationToken);
+
+        if (!approvedEntries.Any())
+        {
+            race.OddsComputedAt = DateTime.UtcNow;
+            return;
+        }
+
+        //---------------------------------------------------
+        // TEMP ALGORITHM
+        // Hiện tại tất cả đều có odds = 2.0000
+        //---------------------------------------------------
+
+        foreach (var entry in approvedEntries)
+        {
+            entry.Odds = 2.0000m;
+            entry.UpdatedAt = DateTime.UtcNow;
+        }
 
         race.OddsComputedAt = DateTime.UtcNow;
-
-        return Task.CompletedTask;
     }
 }

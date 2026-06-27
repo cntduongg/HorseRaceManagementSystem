@@ -1,4 +1,4 @@
-
+using Application.Usecases.Races.PublishOdds;
 using Application.Usecases.Races.CreateRace;
 using Application.Usecases.Races.GetRaceDetail;
 using Application.Usecases.Races.DeleteRace;
@@ -157,6 +157,29 @@ public sealed class RacesController : ControllerBase
     {
         var result = await _sender.Send(
             new CloseRaceRegistrationCommand(raceId),
+            cancellationToken);
+
+        if (!result)
+        {
+            return NotFound(new
+            {
+                message = "Race not found"
+            });
+        }
+
+        return Ok(new
+        {
+            success = true
+        });
+    }
+    [HttpPost("{raceId:int}/odds/publish")]
+    [Authorize(Roles = "ADMIN")]
+    public async Task<ActionResult> PublishOdds(
+    [FromRoute] int raceId,
+    CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(
+            new PublishRaceOddsCommand(raceId),
             cancellationToken);
 
         if (!result)

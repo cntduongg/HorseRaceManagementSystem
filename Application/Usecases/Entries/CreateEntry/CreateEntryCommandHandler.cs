@@ -71,8 +71,10 @@ public sealed class CreateEntryCommandHandler
         if (race.Status != "Scheduled")
             throw new InvalidOperationException(
                 "Chỉ nộp Entry khi cuộc đua đang Scheduled.");
-
         var now = DateTime.UtcNow;
+
+  
+       
 
         // Registration chưa mở
         if (race.RegistrationOpenAt == null)
@@ -84,6 +86,21 @@ public sealed class CreateEntryCommandHandler
             race.RegistrationCloseAt <= now)
             throw new InvalidOperationException(
                 "Registration đã đóng.");
+        //---------------------------------------------------------
+        // Registration full
+        //---------------------------------------------------------
+
+        var currentEntries = await _context.Entries.CountAsync(
+            e =>
+                e.RaceId == request.RaceId &&
+                ActiveEntryStatuses.Contains(e.Status),
+            cancellationToken);
+
+        if (currentEntries >= race.MaxHorses)
+        {
+            throw new InvalidOperationException(
+                "Registration is full.");
+        }
 
         //---------------------------------------------------------
         // Confirmed invitation
