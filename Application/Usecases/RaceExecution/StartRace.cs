@@ -68,7 +68,16 @@ public sealed class StartRaceCommandHandler
 
         race.Status = RaceExecutionConstants.RaceInProgress;
         race.UpdatedAt = DateTime.UtcNow;
+        var pendingPredictions = await _context.Predictions
+            .Where(p =>
+                p.RaceId == race.RaceId &&
+                p.Status == PredictionStatus.Pending)
+            .ToListAsync(cancellationToken);
 
+        foreach (var prediction in pendingPredictions)
+        {
+            prediction.Status = PredictionStatus.Locked;
+        }
         await _context.SaveChangesAsync(cancellationToken);
 
         return new StartRaceResponse(

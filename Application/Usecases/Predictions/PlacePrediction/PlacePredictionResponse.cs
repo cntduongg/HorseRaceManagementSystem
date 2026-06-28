@@ -1,6 +1,11 @@
 namespace Application.Usecases.Predictions.PlacePrediction;
 
-public class PlacePredictionResponse
-{
-    
-}
+public sealed record PlacePredictionResponse(
+    int PredictionId,
+    int RaceId,
+    int SpectatorId,
+    int EntryId,
+    decimal BetAmount,
+    decimal OddsLocked,
+    string Status,
+    DateTime CreatedAt);

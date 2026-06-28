@@ -10,17 +10,17 @@ public class Prediction
 
     public int FirstEntryId { get; set; }
 
-    public int SecondEntryId { get; set; }
+    public int? SecondEntryId { get; set; }
 
-    public int ThirdEntryId { get; set; }
+    public int? ThirdEntryId { get; set; }
 
     public decimal BetAmount { get; set; }
 
     public decimal OddsLocked1 { get; set; }
 
-    public decimal OddsLocked2 { get; set; }
+    public decimal? OddsLocked2 { get; set; }
 
-    public decimal OddsLocked3 { get; set; }
+    public decimal? OddsLocked3 { get; set; }
 
     public string Status { get; set; } = "Pending";
 

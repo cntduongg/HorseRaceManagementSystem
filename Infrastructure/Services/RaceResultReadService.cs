@@ -30,7 +30,8 @@ public sealed class RaceResultReadService : IRaceResultReadService
                 x.FinalPosition,
                 x.IsRaceDQ,
                 x.LegWinCount,
-                x.LegTop3Count
+                x.LegTop3Count,
+                x.ViolationNote
             ))
             .ToListAsync(cancellationToken);
     }
@@ -54,6 +55,7 @@ public sealed class RaceResultReadService : IRaceResultReadService
     x.IsRaceDQ,
     x.LegWinCount,
     x.LegTop3Count,
+    x.ViolationNote,
     x.CreatedAt,
     x.UpdatedAt
 ))

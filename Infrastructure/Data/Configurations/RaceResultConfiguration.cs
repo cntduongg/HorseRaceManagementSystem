@@ -28,5 +28,11 @@ public class RaceResultConfiguration : IEntityTypeConfiguration<RaceResult>
         builder.Property(r => r.LegWinCount).HasDefaultValue(0);
         builder.Property(r => r.LegTop3Count).HasDefaultValue(0);
         builder.Property(r => r.IsRaceDQ).HasDefaultValue(false);
+        builder.Property(x => x.IsDisqualified)
+            .IsRequired()
+            .HasDefaultValue(false);
+
+        builder.Property(x => x.ViolationNote)
+            .HasMaxLength(500);
     }
 }

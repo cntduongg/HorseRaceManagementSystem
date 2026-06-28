@@ -36,9 +36,9 @@ public sealed class PublishRaceResultCommandHandler
         try
         {
             var race = await _context.Races
-                .Include(r => r.Legs)
-                .FirstOrDefaultAsync(r => r.RaceId == request.RaceId, cancellationToken)
-                ?? throw new KeyNotFoundException("Race not found.");
+                           .Include(r => r.Legs)
+                           .FirstOrDefaultAsync(r => r.RaceId == request.RaceId, cancellationToken)
+                       ?? throw new KeyNotFoundException("Race not found.");
 
             if (race.Status != RaceExecutionConstants.RacePendingResult)
                 throw new InvalidOperationException(
@@ -46,7 +46,7 @@ public sealed class PublishRaceResultCommandHandler
 
             var allLegsDone = race.Legs.Count > 0 && race.Legs.All(l =>
                 l.Status is RaceExecutionConstants.LegConfirmed
-                          or RaceExecutionConstants.LegResolved);
+                    or RaceExecutionConstants.LegResolved);
             if (!allLegsDone)
                 throw new InvalidOperationException("Vẫn còn leg chưa được xác nhận.");
 
@@ -72,30 +72,31 @@ public sealed class PublishRaceResultCommandHandler
             // Tie-break: tổng điểm → nhiều 1st nhất → nhiều 2nd nhất → vị trí Leg cuối tốt hơn.
             var lastLegNumber = officials.Count > 0 ? officials.Max(o => o.LegNumber) : 0;
             var ranked = entries.Select(e =>
-            {
-                var isDq = dqSet.Contains(e.EntryId);
-                var rows = officials.Where(o => o.EntryId == e.EntryId).ToList();
-                var finished = rows.Where(r => r.ResultStatus == RaceExecutionConstants.ResultFinished).ToList();
-                var lastLeg = rows.FirstOrDefault(r => r.LegNumber == lastLegNumber);
-                return new
                 {
-                    Entry = e,
-                    IsDq = isDq,
-                    TotalPoints = isDq ? 0 : rows.Sum(r => r.LegPoints),
-                    LegWins = isDq ? 0 : finished.Count(r => r.FinishPosition == 1),
-                    Leg2nds = isDq ? 0 : finished.Count(r => r.FinishPosition == 2),
-                    LegTop3 = isDq ? 0 : finished.Count(r => r.FinishPosition is >= 1 and <= 3),
-                    LastLegPos = (!isDq && lastLeg is { ResultStatus: RaceExecutionConstants.ResultFinished, FinishPosition: not null })
-                        ? lastLeg.FinishPosition!.Value
-                        : int.MaxValue
-                };
-            })
-            .OrderBy(x => x.IsDq)
-            .ThenByDescending(x => x.TotalPoints)
-            .ThenByDescending(x => x.LegWins)
-            .ThenByDescending(x => x.Leg2nds)
-            .ThenBy(x => x.LastLegPos)
-            .ToList();
+                    var isDq = dqSet.Contains(e.EntryId);
+                    var rows = officials.Where(o => o.EntryId == e.EntryId).ToList();
+                    var finished = rows.Where(r => r.ResultStatus == RaceExecutionConstants.ResultFinished).ToList();
+                    var lastLeg = rows.FirstOrDefault(r => r.LegNumber == lastLegNumber);
+                    return new
+                    {
+                        Entry = e,
+                        IsDq = isDq,
+                        TotalPoints = isDq ? 0 : rows.Sum(r => r.LegPoints),
+                        LegWins = isDq ? 0 : finished.Count(r => r.FinishPosition == 1),
+                        Leg2nds = isDq ? 0 : finished.Count(r => r.FinishPosition == 2),
+                        LegTop3 = isDq ? 0 : finished.Count(r => r.FinishPosition is >= 1 and <= 3),
+                        LastLegPos = (!isDq && lastLeg is
+                            { ResultStatus: RaceExecutionConstants.ResultFinished, FinishPosition: not null })
+                            ? lastLeg.FinishPosition!.Value
+                            : int.MaxValue
+                    };
+                })
+                .OrderBy(x => x.IsDq)
+                .ThenByDescending(x => x.TotalPoints)
+                .ThenByDescending(x => x.LegWins)
+                .ThenByDescending(x => x.Leg2nds)
+                .ThenBy(x => x.LastLegPos)
+                .ToList();
 
             // ── 2. Ghi RaceResult ──
             var position = 1;
@@ -118,36 +119,46 @@ public sealed class PublishRaceResultCommandHandler
                 });
                 position++;
             }
-            await _context.SaveChangesAsync(cancellationToken); // RaceResult tồn tại trước khi PrizePointTransaction tham chiếu FK
+
+            await _context.SaveChangesAsync(
+                cancellationToken); // RaceResult tồn tại trước khi PrizePointTransaction tham chiếu FK
 
             // ── 3. Cộng Prize Points cho Owner & Jockey (bỏ qua entry DQ) ──
             position = 1;
             foreach (var r in ranked)
             {
-                var prize = r.IsDq ? 0 : RaceExecutionConstants.PrizePointsFor(position);
-                if (prize > 0)
+                if (r.IsDq)
                 {
-                    foreach (var (userId, source) in new[]
-                    {
-                        (r.Entry.HorseOwnerId, "OwnerPrize"),
-                        (r.Entry.JockeyId, "JockeyPrize")
-                    })
-                    {
-                        _context.PrizePointTransactions.Add(new PrizePointTransaction
-                        {
-                            TournamentId = race.TournamentId,
-                            RaceId = race.RaceId,
-                            EntryId = r.Entry.EntryId,
-                            UserId = userId,
-                            SourceType = source,
-                            FinalPosition = position,
-                            Points = prize,
-                            TransactionType = PrizePointTransactionType.Awarded,
-                            CreatedAt = now
-                        });
-                    }
+                    continue;
                 }
-                position++;
+
+                var finalPosition = ranked.IndexOf(r) + 1;
+                var prize = RaceExecutionConstants.PrizePointsFor(finalPosition);
+
+                if (prize <= 0)
+                {
+                    continue;
+                }
+
+                foreach (var (userId, source) in new[]
+                         {
+                             (r.Entry.HorseOwnerId, "OwnerPrize"),
+                             (r.Entry.JockeyId, "JockeyPrize")
+                         })
+                {
+                    _context.PrizePointTransactions.Add(new PrizePointTransaction
+                    {
+                        TournamentId = race.TournamentId,
+                        RaceId = race.RaceId,
+                        EntryId = r.Entry.EntryId,
+                        UserId = userId,
+                        SourceType = source,
+                        FinalPosition = finalPosition,
+                        Points = prize,
+                        TransactionType = PrizePointTransactionType.Awarded,
+                        CreatedAt = now
+                    });
+                }
             }
 
             // ── 3b. Cập nhật thống kê Career của Jockey (nếu có hồ sơ) ──
@@ -167,6 +178,7 @@ public sealed class PublishRaceResultCommandHandler
                     profile.CareerPrizePoints += r.IsDq ? 0 : RaceExecutionConstants.PrizePointsFor(position);
                     profile.UpdatedAt = now;
                 }
+
                 position++;
             }
 
@@ -179,71 +191,105 @@ public sealed class PublishRaceResultCommandHandler
                 TriggeredByAdminId = request.AdminUserId,
                 CreatedAt = now
             };
+
             _context.SettlementRuns.Add(run);
             await _context.SaveChangesAsync(cancellationToken); // lấy SettlementRunId
 
             var predictions = await _context.Predictions
-                .Where(p => p.RaceId == race.RaceId && p.Status == "Pending")
+                .Where(p =>
+                    p.RaceId == race.RaceId &&
+                    (
+                        p.Status == PredictionStatus.Pending ||
+                        p.Status == PredictionStatus.Locked
+                    ))
                 .ToListAsync(cancellationToken);
 
-            var spectatorIds = predictions.Select(p => p.SpectatorId).Distinct().ToList();
+            var spectatorIds = predictions
+                .Select(p => p.SpectatorId)
+                .Distinct()
+                .ToList();
+
             var wallets = await _context.PointWallets
                 .Where(w => spectatorIds.Contains(w.SpectatorId))
                 .ToListAsync(cancellationToken);
 
-            decimal totalBet = 0, totalPayout = 0;
-            foreach (var p in predictions)
-            {
-                var won = winnerEntryId != null && p.FirstEntryId == winnerEntryId;
-                var payout = won ? Math.Round(p.BetAmount * p.OddsLocked1, 2) : 0m;
+            decimal totalBet = 0m;
+            decimal totalPayout = 0m;
 
-                totalBet += p.BetAmount;
+            foreach (var prediction in predictions)
+            {
+                var won = winnerEntryId is not null &&
+                          prediction.FirstEntryId == winnerEntryId.Value;
+
+                var payout = won
+                    ? Math.Round(
+                        prediction.BetAmount * prediction.OddsLocked1,
+                        2,
+                        MidpointRounding.AwayFromZero)
+                    : 0m;
+
+                totalBet += prediction.BetAmount;
                 totalPayout += payout;
 
                 int? payoutTxId = null;
+
                 if (won && payout > 0)
                 {
-                    var wallet = wallets.FirstOrDefault(w => w.SpectatorId == p.SpectatorId);
-                    if (wallet is { IsFrozen: false })
-                    {
-                        wallet.Balance += payout;
-                        wallet.UpdatedAt = now;
+                    var wallet = wallets.FirstOrDefault(w =>
+                        w.SpectatorId == prediction.SpectatorId);
 
-                        var payoutTx = new WalletTransaction
-                        {
-                            WalletId = wallet.WalletId,
-                            SpectatorId = p.SpectatorId,
-                            PredictionId = p.PredictionId,
-                            SettlementRunId = run.SettlementRunId,
-                            Type = "Payout",
-                            Amount = payout,
-                            BalanceAfter = wallet.Balance,
-                            Reason = $"Thắng cược race #{race.RaceId}",
-                            CreatedAt = now
-                        };
-                        _context.WalletTransactions.Add(payoutTx);
-                        await _context.SaveChangesAsync(cancellationToken);
-                        payoutTxId = payoutTx.WalletTransactionId;
+                    if (wallet is null)
+                    {
+                        throw new InvalidOperationException(
+                            $"Không tìm thấy ví của spectator #{prediction.SpectatorId}.");
                     }
+
+                    // Settlement là giao dịch hệ thống.
+                    // Vẫn credit payout để kết quả tài chính đúng.
+                    wallet.Balance += payout;
+                    wallet.UpdatedAt = now;
+
+                    var payoutTx = new WalletTransaction
+                    {
+                        WalletId = wallet.WalletId,
+                        SpectatorId = prediction.SpectatorId,
+                        PredictionId = prediction.PredictionId,
+                        SettlementRunId = run.SettlementRunId,
+                        Type = "Payout",
+                        Amount = payout,
+                        BalanceAfter = wallet.Balance,
+                        Reason =
+                            $"Thắng cược race #{race.RaceId}, entry #{prediction.FirstEntryId}, odds {prediction.OddsLocked1}",
+                        CreatedAt = now
+                    };
+
+                    _context.WalletTransactions.Add(payoutTx);
+
+                    await _context.SaveChangesAsync(cancellationToken);
+
+                    payoutTxId = payoutTx.WalletTransactionId;
                 }
 
                 _context.PredictionSettlements.Add(new PredictionSettlement
                 {
                     SettlementRunId = run.SettlementRunId,
-                    PredictionId = p.PredictionId,
+                    PredictionId = prediction.PredictionId,
                     RaceId = race.RaceId,
-                    SpectatorId = p.SpectatorId,
+                    SpectatorId = prediction.SpectatorId,
                     MatchedCount = won ? 1 : 0,
                     Outcome = won ? "Won" : "Lost",
-                    BetAmount = p.BetAmount,
-                    OddsAverage = p.OddsLocked1,
+                    BetAmount = prediction.BetAmount,
+                    OddsAverage = prediction.OddsLocked1,
                     PayoutAmount = payout,
-                    NetAmount = payout - p.BetAmount,
+                    NetAmount = payout - prediction.BetAmount,
                     PayoutTransactionId = payoutTxId,
-                    SettledAt = now
+                    SettledAt = now,
+                    IsRollbacked = false
                 });
 
-                p.Status = won ? "Won" : "Lost";
+                prediction.Status = won
+                    ? PredictionStatus.Won
+                    : PredictionStatus.Lost;
             }
 
             run.TotalPredictions = predictions.Count;

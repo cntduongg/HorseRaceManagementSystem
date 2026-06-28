@@ -5,10 +5,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.Predictions.DeletePrediction;
 
-// Flow 7 — Hủy dự đoán: chỉ khi race còn Scheduled, hoàn 100% tiền cược vào ví (giữ audit).
+
 public sealed class DeletePredictionCommandHandler
     : IRequestHandler<DeletePredictionCommand, bool>
 {
+    private const string RaceScheduled = "Scheduled";
+
     private readonly IApplicationDbContext _context;
 
     public DeletePredictionCommandHandler(IApplicationDbContext context)
@@ -20,54 +22,71 @@ public sealed class DeletePredictionCommandHandler
         DeletePredictionCommand request,
         CancellationToken cancellationToken)
     {
+        if (request.PredictionId <= 0)
+            throw new InvalidOperationException("PredictionId is required.");
+
+        if (request.SpectatorId <= 0)
+            throw new InvalidOperationException("SpectatorId is required.");
+
         var prediction = await _context.Predictions
-            .FirstOrDefaultAsync(x => x.PredictionId == request.PredictionId, cancellationToken);
+            .Include(x => x.Race)
+            .FirstOrDefaultAsync(
+                x => x.PredictionId == request.PredictionId &&
+                     x.SpectatorId == request.SpectatorId,
+                cancellationToken)
+            ?? throw new InvalidOperationException("Prediction not found.");
 
-        if (prediction is null)
-            return false;
+        if (prediction.Status == PredictionStatus.Cancelled)
+            throw new InvalidOperationException("Prediction already cancelled.");
 
-        if (request.CurrentUserId > 0 && prediction.SpectatorId != request.CurrentUserId)
-            throw new UnauthorizedAccessException("Bạn chỉ có thể hủy dự đoán của chính mình.");
+        if (prediction.Status != PredictionStatus.Pending)
+            throw new InvalidOperationException(
+                $"Only pending prediction can be cancelled. Current status: {prediction.Status}");
 
-        if (prediction.Status != "Pending")
-            throw new InvalidOperationException("Chỉ hủy được dự đoán đang hoạt động.");
+        if (prediction.Race is null)
+            throw new InvalidOperationException("Prediction race not found.");
 
-        var race = await _context.Races
-            .FirstOrDefaultAsync(r => r.RaceId == prediction.RaceId, cancellationToken)
-            ?? throw new InvalidOperationException("Race not found.");
+        if (!string.Equals(
+                prediction.Race.Status?.Trim(),
+                RaceScheduled,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Chỉ được hủy prediction khi race đang Scheduled. Current race status: {prediction.Race.Status}");
+        }
 
-        if (race.Status != "Scheduled")
-            throw new InvalidOperationException("Chỉ hủy được cược khi cuộc đua còn Scheduled.");
+        var wallet = await _context.PointWallets
+            .FirstOrDefaultAsync(
+                x => x.SpectatorId == request.SpectatorId,
+                cancellationToken)
+            ?? throw new InvalidOperationException("Không tìm thấy ví điểm.");
+
+        if (wallet.IsFrozen)
+            throw new InvalidOperationException("Ví điểm đang bị đóng băng.");
 
         var now = DateTime.UtcNow;
 
         await using var tx = await _context.Database.BeginTransactionAsync(cancellationToken);
+
         try
         {
-            // Hoàn 100% vào ví.
-            var wallet = await _context.PointWallets
-                .FirstOrDefaultAsync(w => w.SpectatorId == prediction.SpectatorId, cancellationToken);
-
-            if (wallet is { IsFrozen: false })
-            {
-                wallet.Balance += prediction.BetAmount;
-                wallet.UpdatedAt = now;
-
-                _context.WalletTransactions.Add(new WalletTransaction
-                {
-                    WalletId = wallet.WalletId,
-                    SpectatorId = prediction.SpectatorId,
-                    PredictionId = prediction.PredictionId,
-                    Type = "BetRefund",
-                    Amount = prediction.BetAmount,
-                    BalanceAfter = wallet.Balance,
-                    Reason = $"Hoàn cược race #{prediction.RaceId}",
-                    CreatedAt = now
-                });
-            }
-
-            prediction.Status = "Cancelled";
+            prediction.Status = PredictionStatus.Cancelled;
             prediction.CancelledAt = now;
+
+            wallet.Balance += prediction.BetAmount;
+            wallet.UpdatedAt = now;
+
+            _context.WalletTransactions.Add(new WalletTransaction
+            {
+                WalletId = wallet.WalletId,
+                SpectatorId = request.SpectatorId,
+                PredictionId = prediction.PredictionId,
+                Type = "BetRefunded",
+                Amount = prediction.BetAmount,
+                BalanceAfter = wallet.Balance,
+                Reason = $"Hoàn điểm hủy prediction #{prediction.PredictionId}",
+                CreatedAt = now
+            });
 
             await _context.SaveChangesAsync(cancellationToken);
             await tx.CommitAsync(cancellationToken);

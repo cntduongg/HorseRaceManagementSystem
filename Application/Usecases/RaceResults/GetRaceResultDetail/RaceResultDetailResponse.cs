@@ -11,6 +11,7 @@ public sealed record RaceResultDetailResponse(
     bool IsRaceDQ,
     int LegWinCount,
     int LegTop3Count,
+    string? ViolationNote,
     DateTime CreatedAt,
     DateTime? UpdatedAt
 );

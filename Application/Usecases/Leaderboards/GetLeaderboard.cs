@@ -44,10 +44,13 @@ public sealed class GetLeaderboardQueryHandler
         var grouped = await query
             .GroupBy(p => p.UserId)
             .Select(g => new { UserId = g.Key, Points = g.Sum(x => x.Points) })
+            .Where(x => x.Points > 0)
             .ToListAsync(cancellationToken);
 
         if (grouped.Count == 0)
+        {
             return new List<LeaderboardItem>();
+        }
 
         var userIds = grouped.Select(g => g.UserId).ToList();
         var users = await _context.Users
@@ -68,14 +71,20 @@ public sealed class GetLeaderboardQueryHandler
                     g.Points
                 };
             })
-            .Where(x => string.IsNullOrWhiteSpace(request.Role) ||
-                        string.Equals(x.Role, request.Role, StringComparison.OrdinalIgnoreCase))
+            .Where(x =>
+                string.IsNullOrWhiteSpace(request.Role) ||
+                string.Equals(x.Role, request.Role, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(x => x.Points)
             .ThenBy(x => x.FullName)
             .ToList();
 
         return rows
-            .Select((x, i) => new LeaderboardItem(i + 1, x.UserId, x.FullName, x.Role, x.Points))
+            .Select((x, i) => new LeaderboardItem(
+                Rank: i + 1,
+                UserId: x.UserId,
+                FullName: x.FullName,
+                Role: x.Role,
+                PrizePoints: x.Points))
             .ToList();
     }
 }

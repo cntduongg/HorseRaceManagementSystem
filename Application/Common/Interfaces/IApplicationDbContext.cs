@@ -48,6 +48,7 @@ public interface IApplicationDbContext
     DbSet<PasswordResetOtp> PasswordResetOtps { get; }
 
     DbSet<Discrepancy> Discrepancies { get; }
+    
 
     Task<int> SaveChangesAsync(
         CancellationToken cancellationToken = default);

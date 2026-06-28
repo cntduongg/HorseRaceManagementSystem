@@ -1,4 +1,4 @@
-namespace Application.Usecases.Admin.ResultPublication.ReviewRacePublication;
+namespace Application.Usecases.Admin.ResultPublication;
 
 public sealed record ReviewRacePublicationResponse(
     int RaceId,
