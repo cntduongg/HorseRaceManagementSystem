@@ -1,4 +1,3 @@
-using Application.Common.Interfaces;
 using Application.Usecases.Entries.CreateEntry;
 using Application.Usecases.Entries.DeleteEntry;
 using Application.Usecases.Entries.GetEntryDetail;
@@ -7,6 +6,7 @@ using Application.Usecases.Entries.UpdateEntry;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Api.Controllers;
 
@@ -16,14 +16,10 @@ namespace Api.Controllers;
 public sealed class EntriesController : ControllerBase
 {
     private readonly ISender _sender;
-    private readonly ICurrentUser _currentUser;
 
-    public EntriesController(
-        ISender sender,
-        ICurrentUser currentUser)
+    public EntriesController(ISender sender)
     {
         _sender = sender;
-        _currentUser = currentUser;
     }
 
     // Owner nộp Entry — HorseOwnerId lấy từ JWT (không tin body).
@@ -33,11 +29,15 @@ public sealed class EntriesController : ControllerBase
         [FromBody] CreateEntryCommand command,
         CancellationToken cancellationToken)
     {
-        if (!_currentUser.UserId.HasValue)
-            throw new UnauthorizedAccessException("Invalid or missing user.");
+        var claim =
+            User.FindFirst("userId")?.Value ??
+            User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (!int.TryParse(claim, out var ownerId))
+            throw new UnauthorizedAccessException("Invalid or missing userId claim");
 
         var entryId = await _sender.Send(
-            command with { HorseOwnerId = _currentUser.UserId.Value },
+            command with { HorseOwnerId = ownerId },
             cancellationToken);
 
         return CreatedAtAction(
@@ -71,9 +71,16 @@ public sealed class EntriesController : ControllerBase
     {
         int? ownerScope = null;
 
-        if (_currentUser.IsInRole("HORSE_OWNER"))
+        if (User.IsInRole("HORSE_OWNER"))
         {
-            ownerScope = _currentUser.UserId;
+            var claim =
+                User.FindFirst("userId")?.Value ??
+                User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (int.TryParse(claim, out var ownerId))
+            {
+                ownerScope = ownerId;
+            }
         }
 
         var entries = await _sender.Send(

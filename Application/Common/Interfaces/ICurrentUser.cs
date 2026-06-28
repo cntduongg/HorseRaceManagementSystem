@@ -1,10 +1,10 @@
-using System.Security.Claims;
+//using System.Security.Claims;
 
-namespace Application.Common.Interfaces;
+//namespace Application.Common.Interfaces;
 
-public interface ICurrentUser
-{
-    int? UserId { get; }
+//public interface ICurrentUser
+//{
+//    int? UserId { get; }
 
-    bool IsInRole(string role);
-}
+//    bool IsInRole(string role);
+//}

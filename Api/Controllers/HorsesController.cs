@@ -4,9 +4,10 @@ using Application.Usecases.Horses.GetHorseDetail;
 using Application.Usecases.Horses.GetHorseList;
 using Application.Usecases.Horses.UpdateHorse;
 using MediatR;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
-using Application.Common.Interfaces;
+using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
+
 namespace Api.Controllers;
 
 [ApiController]
@@ -15,15 +16,11 @@ namespace Api.Controllers;
 public sealed class HorsesController : ControllerBase
 {
     private readonly ISender _sender;
-    private readonly ICurrentUser _currentUser;
-    public HorsesController(
-        ISender sender,
-        ICurrentUser currentUser)
+
+    public HorsesController(ISender sender)
     {
         _sender = sender;
-        _currentUser = currentUser;
     }
-
 
     [HttpPost]
     [Authorize(Roles = "HORSE_OWNER")]
@@ -41,13 +38,22 @@ public sealed class HorsesController : ControllerBase
 
     [HttpGet]
     public async Task<ActionResult<List<HorseListItemResponse>>> GetAll(
-       CancellationToken cancellationToken)
+        CancellationToken cancellationToken)
     {
         int? ownerScope = null;
 
-        if (_currentUser.IsInRole("HORSE_OWNER"))
+        var roleClaim =
+            User.FindFirst(ClaimTypes.Role)?.Value
+            ?? User.FindFirst("role")?.Value;
+
+        var userIdClaim =
+            User.FindFirst("userId")?.Value
+            ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (roleClaim == "HORSE_OWNER"
+            && int.TryParse(userIdClaim, out var ownerId))
         {
-            ownerScope = _currentUser.UserId;
+            ownerScope = ownerId;
         }
 
         var result = await _sender.Send(
@@ -128,5 +134,4 @@ public sealed class HorsesController : ControllerBase
 
         return NoContent();
     }
-
 }
