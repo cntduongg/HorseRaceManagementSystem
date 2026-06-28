@@ -41,13 +41,14 @@ public class JwtTokenService : IJwtTokenService
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
         var claims = new[]
-        {
-            new Claim(JwtRegisteredClaimNames.Sub, user.UserId.ToString()),
-            new Claim(JwtRegisteredClaimNames.Email, user.Email),
-            new Claim(ClaimTypes.Role, user.Role.Code),
-            new Claim("fullName", user.FullName),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
-        };
+ {
+    new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
+    new Claim(JwtRegisteredClaimNames.Sub, user.UserId.ToString()),
+    new Claim(JwtRegisteredClaimNames.Email, user.Email),
+    new Claim(ClaimTypes.Role, user.Role.Code),
+    new Claim("fullName", user.FullName),
+    new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+};
 
         var token = new JwtSecurityToken(
             issuer: _issuer,

@@ -6,7 +6,7 @@ using Application.Usecases.Horses.UpdateHorse;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
-
+using Application.Common.Interfaces;
 namespace Api.Controllers;
 
 [ApiController]
@@ -15,11 +15,15 @@ namespace Api.Controllers;
 public sealed class HorsesController : ControllerBase
 {
     private readonly ISender _sender;
-
-    public HorsesController(ISender sender)
+    private readonly ICurrentUser _currentUser;
+    public HorsesController(
+        ISender sender,
+        ICurrentUser currentUser)
     {
         _sender = sender;
+        _currentUser = currentUser;
     }
+
 
     [HttpPost]
     [Authorize(Roles = "HORSE_OWNER")]
@@ -37,10 +41,17 @@ public sealed class HorsesController : ControllerBase
 
     [HttpGet]
     public async Task<ActionResult<List<HorseListItemResponse>>> GetAll(
-        CancellationToken cancellationToken)
+       CancellationToken cancellationToken)
     {
+        int? ownerScope = null;
+
+        if (_currentUser.IsInRole("HORSE_OWNER"))
+        {
+            ownerScope = _currentUser.UserId;
+        }
+
         var result = await _sender.Send(
-            new GetHorseListQuery(),
+            new GetHorseListQuery(ownerScope),
             cancellationToken);
 
         return Ok(result);
@@ -117,4 +128,5 @@ public sealed class HorsesController : ControllerBase
 
         return NoContent();
     }
+
 }

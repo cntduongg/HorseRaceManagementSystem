@@ -18,13 +18,19 @@ public sealed class GetHorseListQueryHandler
         GetHorseListQuery request,
         CancellationToken cancellationToken)
     {
-        return await _context.Horses
+        var query = _context.Horses.AsQueryable();
+
+        if (request.OwnerId.HasValue)
+        {
+            query = query.Where(x => x.OwnerId == request.OwnerId.Value);
+        }
+
+        return await query
             .Select(x => new HorseListItemResponse(
                 x.HorseId,
                 x.Name,
                 x.Status,
-                x.Breed
-            ))
+                x.Breed))
             .ToListAsync(cancellationToken);
     }
 }

@@ -1,3 +1,4 @@
+using Application.Common.Interfaces;
 using Application.Usecases.Entries.CreateEntry;
 using Application.Usecases.Entries.DeleteEntry;
 using Application.Usecases.Entries.GetEntryDetail;
@@ -6,7 +7,6 @@ using Application.Usecases.Entries.UpdateEntry;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 
 namespace Api.Controllers;
 
@@ -15,100 +15,99 @@ namespace Api.Controllers;
 [Authorize]
 public sealed class EntriesController : ControllerBase
 {
-	private readonly ISender _sender;
+    private readonly ISender _sender;
+    private readonly ICurrentUser _currentUser;
 
-	public EntriesController(ISender sender)
-	{
-		_sender = sender;
-	}
+    public EntriesController(
+        ISender sender,
+        ICurrentUser currentUser)
+    {
+        _sender = sender;
+        _currentUser = currentUser;
+    }
 
-	// Owner nộp Entry — HorseOwnerId lấy từ JWT (không tin body).
-	[HttpPost]
-	[Authorize(Roles = "HORSE_OWNER")]
-	public async Task<ActionResult<int>> Create(
-		[FromBody] CreateEntryCommand command,
-		CancellationToken cancellationToken)
-	{
-		var claim =
-			User.FindFirst("userId")?.Value ??
-			User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-		if (!int.TryParse(claim, out var ownerId))
-			throw new UnauthorizedAccessException("Invalid or missing userId claim");
+    // Owner nộp Entry — HorseOwnerId lấy từ JWT (không tin body).
+    [HttpPost]
+    [Authorize(Roles = "HORSE_OWNER")]
+    public async Task<ActionResult<int>> Create(
+        [FromBody] CreateEntryCommand command,
+        CancellationToken cancellationToken)
+    {
+        if (!_currentUser.UserId.HasValue)
+            throw new UnauthorizedAccessException("Invalid or missing user.");
 
-		var entryId = await _sender.Send(
-			command with { HorseOwnerId = ownerId }, cancellationToken);
+        var entryId = await _sender.Send(
+            command with { HorseOwnerId = _currentUser.UserId.Value },
+            cancellationToken);
 
-		return CreatedAtAction(
-			nameof(GetById),
-			new { entryId },
-			new { entryId });
-	}
+        return CreatedAtAction(
+            nameof(GetById),
+            new { entryId },
+            new { entryId });
+    }
 
-	[HttpGet("{entryId:int}")]
-	public async Task<ActionResult<EntryDetailResponse>> GetById(
-		int entryId,
-		CancellationToken cancellationToken)
-	{
-		var entry = await _sender.Send(
-			new GetEntryDetailQuery(entryId),
-			cancellationToken);
+    [HttpGet("{entryId:int}")]
+    public async Task<ActionResult<EntryDetailResponse>> GetById(
+        int entryId,
+        CancellationToken cancellationToken)
+    {
+        var entry = await _sender.Send(
+            new GetEntryDetailQuery(entryId),
+            cancellationToken);
 
-		if (entry is null)
-		{
-			return NotFound();
-		}
+        if (entry is null)
+        {
+            return NotFound();
+        }
 
-		return Ok(entry);
-	}
+        return Ok(entry);
+    }
 
-	// HORSE_OWNER chỉ thấy entry của mình; referee/spectator/admin thấy tất cả. Lọc theo raceId nếu có.
-	[HttpGet]
-	public async Task<ActionResult<List<EntryListItemResponse>>> GetAll(
-		[FromQuery] int? raceId,
-		CancellationToken cancellationToken)
-	{
-		int? ownerScope = null;
-		if (User.IsInRole("HORSE_OWNER"))
-		{
-			var claim =
-				User.FindFirst("userId")?.Value ??
-				User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-			if (int.TryParse(claim, out var ownerId))
-				ownerScope = ownerId;
-		}
+    // HORSE_OWNER chỉ thấy entry của mình; referee/spectator/admin thấy tất cả.
+    [HttpGet]
+    public async Task<ActionResult<List<EntryListItemResponse>>> GetAll(
+        [FromQuery] int? raceId,
+        CancellationToken cancellationToken)
+    {
+        int? ownerScope = null;
 
-		var entries = await _sender.Send(
-			new GetEntryListQuery(raceId, ownerScope),
-			cancellationToken);
+        if (_currentUser.IsInRole("HORSE_OWNER"))
+        {
+            ownerScope = _currentUser.UserId;
+        }
 
-		return Ok(entries);
-	}
+        var entries = await _sender.Send(
+            new GetEntryListQuery(raceId, ownerScope),
+            cancellationToken);
 
-	[HttpPut("{entryId:int}")]
-	public async Task<ActionResult> Update(
-		int entryId,
-		UpdateEntryCommand command,
-		CancellationToken cancellationToken)
-	{
-		if (entryId != command.EntryId)
-		{
-			return BadRequest();
-		}
+        return Ok(entries);
+    }
 
-		var result = await _sender.Send(command, cancellationToken);
+    [HttpPut("{entryId:int}")]
+    public async Task<ActionResult> Update(
+        int entryId,
+        UpdateEntryCommand command,
+        CancellationToken cancellationToken)
+    {
+        if (entryId != command.EntryId)
+        {
+            return BadRequest();
+        }
 
-		return Ok(result);
-	}
+        var result = await _sender.Send(command, cancellationToken);
 
-	[HttpDelete("{entryId:int}")]
-	public async Task<ActionResult> Delete(
-		int entryId,
-		CancellationToken cancellationToken)
-	{
-		var result = await _sender.Send(
-			new DeleteEntryCommand(entryId),
-			cancellationToken);
+        return Ok(result);
+    }
 
-		return Ok(result);
-	}
+    [HttpDelete("{entryId:int}")]
+    public async Task<ActionResult> Delete(
+        int entryId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(
+            new DeleteEntryCommand(entryId),
+            cancellationToken);
+
+        return Ok(result);
+    }
 }
