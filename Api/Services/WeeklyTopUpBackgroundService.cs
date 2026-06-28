@@ -3,8 +3,6 @@ using MediatR;
 
 namespace Api.Services;
 
-// Flow 7 — Tác vụ nền: cộng +100 vào ví Spectator mỗi thứ Hai 00:00.
-// Chạy idempotent mỗi giờ (bắt kịp nếu app từng tắt qua mốc thứ Hai); logic chống cộng trùng nằm trong handler.
 public sealed class WeeklyTopUpBackgroundService : BackgroundService
 {
     private static readonly TimeSpan CheckInterval = TimeSpan.FromHours(1);

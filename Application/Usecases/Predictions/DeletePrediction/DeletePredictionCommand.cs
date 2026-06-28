@@ -4,5 +4,5 @@ namespace Application.Usecases.Predictions.DeletePrediction;
 
 public sealed record DeletePredictionCommand(
     int PredictionId,
-    int CurrentUserId = 0
+    int SpectatorId
 ) : IRequest<bool>;

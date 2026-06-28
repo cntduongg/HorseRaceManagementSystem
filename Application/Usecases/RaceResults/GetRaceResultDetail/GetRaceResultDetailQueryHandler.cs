@@ -32,6 +32,7 @@ public sealed class GetRaceResultDetailQueryHandler
           x.IsRaceDQ,
           x.LegWinCount,
           x.LegTop3Count,
+          x.ViolationNote,
           x.CreatedAt,
           x.UpdatedAt
       ))

@@ -26,7 +26,8 @@ public sealed class GetRaceResultListQueryHandler
     x.FinalPosition,
     x.IsRaceDQ,
     x.LegWinCount,
-    x.LegTop3Count
+    x.LegTop3Count,
+    x.ViolationNote
 ))
             .ToListAsync(cancellationToken);
 	}

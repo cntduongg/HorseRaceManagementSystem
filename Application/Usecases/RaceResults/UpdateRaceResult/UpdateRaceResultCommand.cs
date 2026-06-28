@@ -9,5 +9,7 @@ public sealed record UpdateRaceResultCommand(
 	int? FinalPosition,
 	bool IsRaceDQ,
 	int LegWinCount,
-	int LegTop3Count
+	int LegTop3Count,
+	bool IsDisqualified,
+	string? ViolationNote
 ) : IRequest<bool>;

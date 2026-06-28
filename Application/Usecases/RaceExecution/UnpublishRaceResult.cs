@@ -58,8 +58,12 @@ public sealed class UnpublishRaceResultCommandHandler
                 if (s.Outcome == "Won" && s.PayoutAmount > 0 && s.PayoutTransactionId != null)
                 {
                     var wallet = wallets.FirstOrDefault(w => w.SpectatorId == s.SpectatorId);
-                    if (wallet is { IsFrozen: false })
-                    {
+                    if (wallet is null)
+                    
+                        {
+                            throw new InvalidOperationException(
+                                $"Không tìm thấy ví của spectator #{s.SpectatorId}.");
+                        }
                         wallet.Balance -= s.PayoutAmount;
                         wallet.UpdatedAt = now;
 
@@ -78,7 +82,7 @@ public sealed class UnpublishRaceResultCommandHandler
                         });
                         reversed++;
                     }
-                }
+                
 
                 s.IsRollbacked = true;
                 s.RollbackAt = now;
@@ -90,7 +94,13 @@ public sealed class UnpublishRaceResultCommandHandler
                 .Where(p => predictionIds.Contains(p.PredictionId))
                 .ToListAsync(cancellationToken);
             foreach (var p in predictions)
-                p.Status = "Pending";
+            {
+                if (p.Status == PredictionStatus.Won ||
+                    p.Status == PredictionStatus.Lost)
+                {
+                    p.Status = PredictionStatus.Locked;
+                }
+            }
 
             // ── 3. Đánh dấu các SettlementRun đã rollback ──
             var runs = await _context.SettlementRuns

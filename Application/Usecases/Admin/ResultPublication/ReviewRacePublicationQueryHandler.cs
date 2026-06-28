@@ -1,5 +1,4 @@
 using Application.Common.Interfaces;
-using Application.Usecases.Admin.ResultPublication.ReviewRacePublication;
 using Domain.Aggregates.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;

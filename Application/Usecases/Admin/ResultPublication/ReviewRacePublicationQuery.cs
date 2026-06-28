@@ -1,4 +1,3 @@
-using Application.Usecases.Admin.ResultPublication.ReviewRacePublication;
 using MediatR;
 
 namespace Application.Usecases.Admin.ResultPublication;

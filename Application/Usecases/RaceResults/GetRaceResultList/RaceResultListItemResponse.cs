@@ -7,5 +7,6 @@ public sealed record RaceResultListItemResponse(
     int? FinalPosition,
     bool IsRaceDQ,
     int LegWinCount,
-    int LegTop3Count
+    int LegTop3Count,
+    string? ViolationNote
 );

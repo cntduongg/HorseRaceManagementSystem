@@ -1,6 +1,6 @@
+using MediatR;
+
 namespace Application.Usecases.Predictions.GetRacePredictionOdds;
 
-public class GetRacePredictionOddsQuery
-{
-    
-}
+public sealed record GetRacePredictionOddsQuery(int RaceId)
+    : IRequest<RacePredictionOddsResponse>;

@@ -17,6 +17,9 @@ public class RaceResult
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 
+    public bool IsDisqualified { get; set; }
+
+    public string? ViolationNote { get; set; }
     // Navigation
     public Race Race { get; set; } = null!;
     public Entry Entry { get; set; } = null!;

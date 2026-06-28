@@ -2,11 +2,12 @@ using Application.Usecases.Predictions.CreatePrediction;
 using Application.Usecases.Predictions.DeletePrediction;
 using Application.Usecases.Predictions.GetPredictionDetail;
 using Application.Usecases.Predictions.GetPredictionList;
-using Application.Usecases.Predictions.UpdatePrediction;
+using Application.Usecases.Predictions.GetRacePredictionOdds;
 using MediatR;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using Application.DTOs;
 
 namespace Api.Controllers;
 
@@ -22,15 +23,37 @@ public sealed class PredictionsController : ControllerBase
         _sender = sender;
     }
 
-    [HttpPost]
-    [Authorize(Roles = "SPECTATOR")]
-    public async Task<ActionResult<int>> Create(
-        [FromBody] CreatePredictionCommand command,
+    // Flow 7.35
+    // Spectator xem locked odds của từng Entry trong Race đang Scheduled.
+    [HttpGet("races/{raceId:int}/odds")]
+    [Authorize(Roles = "SPECTATOR,ADMIN,REFEREE,HORSE_OWNER")]
+    public async Task<ActionResult<RacePredictionOddsResponse>> GetRaceOdds(
+        [FromRoute] int raceId,
         CancellationToken cancellationToken)
     {
-        // SpectatorId lấy từ JWT — không tin body.
+        var result = await _sender.Send(
+            new GetRacePredictionOddsQuery(raceId),
+            cancellationToken);
+
+        return Ok(result);
+    }
+
+    // Flow 7.36 - 7.38
+    // Spectator đặt prediction: chọn 1 Entry + BetAmount.
+    // RaceId lấy từ route, SpectatorId lấy từ JWT, không tin body.
+    [HttpPost("races/{raceId:int}")]
+    [Authorize(Roles = "SPECTATOR")]
+    public async Task<ActionResult> Create(
+        [FromRoute] int raceId,
+        [FromBody] PredictionRequest request,
+        CancellationToken cancellationToken)
+    {
         var predictionId = await _sender.Send(
-            command with { SpectatorId = GetUserId() },
+            new CreatePredictionCommand(
+                RaceId: raceId,
+                SpectatorId: GetUserId(),
+                FirstEntryId: request.EntryId,
+                BetAmount: request.BetAmount),
             cancellationToken);
 
         return CreatedAtAction(
@@ -70,34 +93,10 @@ public sealed class PredictionsController : ControllerBase
         return Ok(predictions);
     }
 
-    [HttpPut("{predictionId:int}")]
+
+    [HttpDelete("{predictionId:int}/cancel")]
     [Authorize(Roles = "SPECTATOR")]
-    public async Task<ActionResult> Update(
-        [FromRoute] int predictionId,
-        [FromBody] UpdatePredictionCommand command,
-        CancellationToken cancellationToken)
-    {
-        if (predictionId != command.PredictionId)
-        {
-            return BadRequest(new
-            {
-                message = "PredictionId mismatch"
-            });
-        }
-
-        var result = await _sender.Send(
-            command,
-            cancellationToken);
-
-        return Ok(new
-        {
-            success = result
-        });
-    }
-
-    [HttpDelete("{predictionId:int}")]
-    [Authorize(Roles = "SPECTATOR")]
-    public async Task<ActionResult> Delete(
+    public async Task<ActionResult> Cancel(
         [FromRoute] int predictionId,
         CancellationToken cancellationToken)
     {
@@ -115,9 +114,15 @@ public sealed class PredictionsController : ControllerBase
     {
         var claim =
             User.FindFirst("userId")?.Value ??
-            User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            User.FindFirst("UserId")?.Value ??
+            User.FindFirst(ClaimTypes.NameIdentifier)?.Value ??
+            User.FindFirst("sub")?.Value;
+
         if (!int.TryParse(claim, out var userId))
+        {
             throw new UnauthorizedAccessException("Invalid or missing userId claim");
+        }
+
         return userId;
     }
 }
