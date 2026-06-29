@@ -61,6 +61,22 @@ public sealed class CreateJockeyInvitationCommandHandler
         if (string.IsNullOrWhiteSpace(jockey.LicenseNumber) || jockey.Weight is null or <= 0)
             throw new InvalidOperationException("Nài chưa hoàn thiện hồ sơ (License + Weight).");
 
+        //---------------------------------------------------------
+        // Jockey already confirmed another horse in this race
+        //---------------------------------------------------------
+
+        var confirmedElsewhere = await _context.JockeyInvitations.AnyAsync(
+            x =>
+                x.RaceId == request.RaceId &&
+                x.JockeyId == request.JockeyId &&
+                x.Status == "Confirmed",
+            cancellationToken);
+
+        if (confirmedElsewhere)
+        {
+            throw new InvalidOperationException(
+                "Jockey đã xác nhận cưỡi một ngựa khác trong cuộc đua này.");
+        }
         // Không trùng invitation active cho (jockey + horse + race).
         var duplicate = await _context.JockeyInvitations.AnyAsync(
             x => x.JockeyId == request.JockeyId &&
