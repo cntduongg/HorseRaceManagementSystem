@@ -18,18 +18,59 @@ public sealed class DeleteEntryCommandHandler
         DeleteEntryCommand request,
         CancellationToken cancellationToken)
     {
-        var entry = await _context.Entries
-            .FirstOrDefaultAsync(
-                x => x.EntryId == request.EntryId,
-                cancellationToken);
+        await using var tx = await _context.Database.BeginTransactionAsync(cancellationToken);
 
-        if (entry is null)
-            return false;
+        try
+        {
+            var entry = await _context.Entries
+                .FirstOrDefaultAsync(
+                    x => x.EntryId == request.EntryId,
+                    cancellationToken);
 
-        _context.Entries.Remove(entry);
+            if (entry is null)
+            {
+                return false;
+            }
 
-        await _context.SaveChangesAsync(cancellationToken);
+            if (entry.HorseOwnerId != request.HorseOwnerId)
+            {
+                throw new UnauthorizedAccessException("Bạn không có quyền rút entry này.");
+            }
 
-        return true;
+            if (!string.Equals(entry.Status, "Pending", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Chỉ được rút entry đang Pending.");
+            }
+
+            var now = DateTime.UtcNow;
+
+            entry.Status = "Withdrawn";
+            entry.UpdatedAt = now;
+
+            var invitations = await _context.JockeyInvitations
+                .Where(x =>
+                    x.RaceId == entry.RaceId &&
+                    x.HorseId == entry.HorseId &&
+                    (
+                        x.Status == "Pending" ||
+                        x.Status == "Confirmed"
+                    ))
+                .ToListAsync(cancellationToken);
+
+            foreach (var invitation in invitations)
+            {
+                invitation.Status = "Cancelled";
+            }
+
+            await _context.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+
+            return true;
+        }
+        catch
+        {
+            await tx.RollbackAsync(cancellationToken);
+            throw;
+        }
     }
-}
+}   

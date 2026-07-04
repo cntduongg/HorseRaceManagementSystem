@@ -107,14 +107,37 @@ public sealed class EntriesController : ControllerBase
     }
 
     [HttpDelete("{entryId:int}")]
+    [Authorize(Roles = "HORSE_OWNER")]
     public async Task<ActionResult> Delete(
         int entryId,
         CancellationToken cancellationToken)
     {
         var result = await _sender.Send(
-            new DeleteEntryCommand(entryId),
+            new DeleteEntryCommand(entryId, GetUserId()),
             cancellationToken);
 
-        return Ok(result);
+        if (!result)
+        {
+            return NotFound();
+        }
+
+        return Ok(new
+        {
+            entryId,
+            status = "Withdrawn"
+        });
+    }
+    private int GetUserId()
+    {
+        var claim =
+            User.FindFirst("userId")?.Value ??
+            User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (!int.TryParse(claim, out var userId))
+        {
+            throw new UnauthorizedAccessException("Invalid or missing userId claim");
+        }
+
+        return userId;
     }
 }
