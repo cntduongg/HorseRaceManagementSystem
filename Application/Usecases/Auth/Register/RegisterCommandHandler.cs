@@ -1,4 +1,5 @@
 using Application.Common;
+using Application.Common.Interfaces;
 using Domain.Aggregates.Entities;
 using MediatR;
 using ShareKernel.UnitOfWork;
@@ -17,15 +18,18 @@ public sealed class RegisterCommandHandler : IRequestHandler<RegisterCommand, Re
     private readonly IUserRepository _userRepository;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IApplicationDbContext _context;
 
     public RegisterCommandHandler(
         IUserRepository userRepository,
         IPasswordHasher passwordHasher,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IApplicationDbContext context)
     {
         _userRepository = userRepository;
         _passwordHasher = passwordHasher;
         _unitOfWork = unitOfWork;
+        _context = context;
     }
 
     public async Task<RegisterResponse> Handle(RegisterCommand request, CancellationToken cancellationToken)
@@ -41,6 +45,7 @@ public sealed class RegisterCommandHandler : IRequestHandler<RegisterCommand, Re
         {
             if (string.IsNullOrWhiteSpace(request.LicenseNumber))
                 throw new InvalidOperationException("LicenseNumber is required for Jockey registration.");
+
             if (request.Weight is null or <= 0)
                 throw new InvalidOperationException("Weight must be a positive number for Jockey registration.");
         }
@@ -72,8 +77,28 @@ public sealed class RegisterCommandHandler : IRequestHandler<RegisterCommand, Re
 
         await _userRepository.AddAsync(user, cancellationToken);
 
-        // Save explicitly so EF Core populates the DB-generated UserId before returning
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        if (roleCode == "SPECTATOR")
+        {
+            var now = DateTime.UtcNow;
+
+            _context.Spectators.Add(new Spectator
+            {
+                UserId = user.UserId
+            });
+
+            _context.PointWallets.Add(new PointWallet
+            {
+                SpectatorId = user.UserId,
+                Balance = 0,
+                IsFrozen = false,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
 
         return new RegisterResponse(
             UserId:          user.UserId,

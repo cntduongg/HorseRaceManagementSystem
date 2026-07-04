@@ -69,7 +69,6 @@ public sealed class GetRaceExecutionQueryHandler
                     .ToList()))
             .ToList();
 
-        // currentLegIndex = leg đầu tiên chưa Confirmed/Resolved.
         var current = legs.FindIndex(l =>
             l.Status != RaceExecutionConstants.LegConfirmed &&
             l.Status != RaceExecutionConstants.LegResolved);
