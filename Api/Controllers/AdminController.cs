@@ -2,6 +2,10 @@ using Application.Usecases.Admin.ApproveUser;
 using Application.Usecases.Admin.GetPendingUsers;
 using Application.Usecases.Admin.RejectUser;
 using Application.Usecases.Admin.GetReviewHistory;
+using Application.Usecases.Admin.GetInvalidUsers;
+using Application.Usecases.Admin.GetUserHistory;
+using Application.Usecases.Admin.RaceModeration;
+using Application.Usecases.Users.GetUserDetail;
 using Domain.Aggregates.Enums;
 using Application.Usecases.Admin.GetPendingHorses;
 using Application.Usecases.Admin.ApproveHorse;
@@ -72,6 +76,21 @@ public sealed class AdminController : ControllerBase
             new UnpublishRaceResultCommand(raceId, GetUserId()),
             ct));
     }
+
+    // ── Race moderation (tùy chọn, không thuộc 8 flow) ──
+    // Approve = xác nhận Race Scheduled; Reject = Cancel Race; Finish = PendingResult→Finished.
+    [HttpPost("races/{raceId:int}/approve")]
+    public async Task<IActionResult> ApproveRace(int raceId, CancellationToken ct)
+        => Ok(await _sender.Send(new ApproveRaceCommand(raceId, GetUserId()), ct));
+
+    [HttpPost("races/{raceId:int}/reject")]
+    public async Task<IActionResult> RejectRace(
+        int raceId, [FromBody] RejectRaceRequest? req, CancellationToken ct)
+        => Ok(await _sender.Send(new RejectRaceCommand(raceId, GetUserId(), req?.Reason), ct));
+
+    [HttpPost("races/{raceId:int}/finish")]
+    public async Task<IActionResult> FinishRace(int raceId, CancellationToken ct)
+        => Ok(await _sender.Send(new FinishRaceCommand(raceId, GetUserId()), ct));
     // =========================
     // USERS
     // =========================
@@ -102,6 +121,36 @@ public sealed class AdminController : ControllerBase
                 GetUserId(),
                 req.Reason),
             ct));
+
+    // ── Invalid users (tùy chọn) — tài khoản không hoạt động (bị từ chối/khóa) ──
+    [HttpGet("users/invalid")]
+    public async Task<IActionResult> GetInvalidUsers(
+        [FromQuery] string? search, [FromQuery] int page = 1, [FromQuery] int pageSize = 10,
+        CancellationToken ct = default)
+        => Ok(await _sender.Send(new GetInvalidUsersQuery(search, page, pageSize), ct));
+
+    [HttpGet("users/invalid/{id:int}")]
+    public async Task<IActionResult> GetInvalidUserById(int id, CancellationToken ct)
+    {
+        var user = await _sender.Send(new GetUserDetailQuery(id), ct);
+        return user is null ? NotFound(new { message = "User not found" }) : Ok(user);
+    }
+
+    [HttpPost("users/invalid/{id:int}/approve")]
+    public async Task<IActionResult> ApproveInvalidUser(
+        int id, [FromBody] ApproveUserRequest? req, CancellationToken ct)
+        => Ok(await _sender.Send(new ApproveUserCommand(id, GetUserId(), req?.Reason), ct));
+
+    [HttpPost("users/invalid/{id:int}/reject")]
+    public async Task<IActionResult> RejectInvalidUser(
+        int id, [FromBody] RejectUserRequest req, CancellationToken ct)
+        => Ok(await _sender.Send(new RejectUserCommand(id, GetUserId(), req.Reason), ct));
+
+    // Lịch sử hoạt động của 1 user (ví + prize + duyệt hồ sơ).
+    [HttpGet("users/{id:int}/history")]
+    public async Task<IActionResult> GetUserHistory(
+        int id, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+        => Ok(await _sender.Send(new GetUserHistoryQuery(id, page, pageSize), ct));
 
     // Khóa/Mở khóa tài khoản (Flow 7: khóa Spectator → đóng băng ví + hoàn cược Pending).
     [HttpPost("users/{id:int}/lock")]
@@ -280,3 +329,4 @@ public sealed record ResolveDiscrepancyRequest(string Resolution, string Action,
 public sealed record ApproveViolationRequest(string? Penalty, string? AdminNote);
 public sealed record RejectViolationRequest(string? Reason);
 public sealed record LockUserRequest(string? Reason);
+public sealed record RejectRaceRequest(string? Reason);
