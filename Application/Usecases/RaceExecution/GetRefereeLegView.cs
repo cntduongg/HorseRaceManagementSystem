@@ -25,6 +25,7 @@ public sealed record RefereeLegViewResponse(
     int LegNumber,
     IReadOnlyList<RefereeLegEntryDto> Entries,
     IReadOnlyList<RefereeSubmittedItemDto>? MySubmittedData,
+    IReadOnlyList<RefereeSubmittedItemDto>? MyDraftData,
     bool MySubmitted,
     bool OpponentSubmitted,
     bool BothSubmitted,
@@ -113,12 +114,27 @@ public sealed class GetRefereeLegViewQueryHandler
                 .ToList()
             : null;
 
+        // Nháp đã lưu của tôi (nếu chưa submit) — để FE khôi phục khi quay lại.
+        List<RefereeSubmittedItemDto>? myDraftData = null;
+        if (!mySubmitted)
+        {
+            myDraftData = await _context.LegRefereeDrafts
+                .AsNoTracking()
+                .Where(d => d.RaceId == request.RaceId &&
+                            d.LegNumber == legNumber &&
+                            d.RefereeUserId == request.CurrentUserId)
+                .Select(d => new RefereeSubmittedItemDto(d.EntryId, d.Position))
+                .ToListAsync(cancellationToken);
+            if (myDraftData.Count == 0) myDraftData = null;
+        }
+
         return new RefereeLegViewResponse(
             request.RaceId,
             request.LegIndex,
             legNumber,
             entries,
             mySubmittedData,
+            myDraftData,
             mySubmitted,
             opponentSubmitted,
             bothSubmitted,
