@@ -643,7 +643,7 @@ To add a new feature following existing conventions:
 
 ### Testing and behavior
 
-No dedicated tests are present in the workspace. New behavior should be validated by hitting the API routes and verifying EF persistence in PostgreSQL.
+No dedicated tests are present in the workspace. New behavior should be validated by hitting the API routes.
 
 ---
 

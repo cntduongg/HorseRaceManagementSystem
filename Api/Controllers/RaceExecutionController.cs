@@ -52,8 +52,10 @@ public sealed class RaceExecutionController : ControllerBase
     public async Task<IActionResult> Standings(int raceId, CancellationToken ct)
         => Ok(await _sender.Send(new GetRaceStandingsQuery(raceId), ct));
 
+    // ADMIN-only: màn so sánh 2 submission chỉ dành cho Admin resolve conflict.
+    // Referee KHÔNG được xem để giữ nguyên cơ chế Blind Double-Entry (Flow 4).
     [HttpGet("{raceId:int}/pause")]
-    [Authorize(Roles = "REFEREE,ADMIN")]
+    [Authorize(Roles = "ADMIN")]
     public async Task<IActionResult> Pause(int raceId, CancellationToken ct)
         => Ok(await _sender.Send(new GetRacePauseQuery(raceId), ct));
 

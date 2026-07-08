@@ -38,6 +38,7 @@ public sealed class RejectViolationCommandHandler
             throw new InvalidOperationException("Vi phạm này đã được xử lý.");
 
         violation.Status = "Rejected";
+        violation.Penalty = "None"; // từ chối → không áp phạt (UI không còn hiện "Cảnh cáo").
         violation.ReviewedByAdminId = request.AdminId;
         violation.ReviewedAt = DateTime.UtcNow;
         violation.AdminNote = request.Reason.Trim();

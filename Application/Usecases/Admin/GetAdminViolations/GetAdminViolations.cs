@@ -20,6 +20,7 @@ public sealed record AdminViolationItem(
     string Status,
     string? ResolvedByAdminName,
     DateTime? ResolvedAt,
+    string? AdminNote,
     DateTime CreatedAt);
 
 public sealed record AdminViolationsResult(
@@ -72,6 +73,7 @@ public sealed class GetAdminViolationsQueryHandler
                 v.RaceId,
                 RaceName = v.Entry.Race.Name,
                 ViolatorName = v.Entry.Jockey.FullName,
+                ViolatorRole = v.Entry.Jockey.Role.Code,
                 HorseName = v.Entry.Horse.Name,
                 v.ViolationType,
                 v.Description,
@@ -79,6 +81,7 @@ public sealed class GetAdminViolationsQueryHandler
                 v.Status,
                 v.ReviewedAt,
                 v.ReviewedByAdminId,
+                v.AdminNote,
                 v.CreatedAt
             })
             .ToListAsync(cancellationToken);
@@ -95,13 +98,15 @@ public sealed class GetAdminViolationsQueryHandler
             r.RaceId,
             r.RaceName,
             $"{r.ViolatorName} ({r.HorseName})",
-            "JOCKEY",
+            r.ViolatorRole,
             r.ViolationType,
             r.Description,
-            r.Penalty,
+            // Rejected → không áp phạt: chuẩn hóa Penalty="None" cho FE.
+            r.Status == "Rejected" ? "None" : r.Penalty,
             r.Status switch { "Approved" => "Resolved", "Rejected" => "Dismissed", _ => "Pending" },
             r.ReviewedByAdminId != null && adminNames.TryGetValue(r.ReviewedByAdminId.Value, out var n) ? n : null,
             r.ReviewedAt,
+            r.AdminNote,
             r.CreatedAt))
             .ToList();
 

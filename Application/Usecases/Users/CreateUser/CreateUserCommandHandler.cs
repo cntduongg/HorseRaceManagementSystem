@@ -1,3 +1,4 @@
+using Application.Common;
 using Application.Common.Interfaces;
 using Domain.Aggregates.Entities;
 using MediatR;
@@ -8,10 +9,14 @@ public sealed class CreateUserCommandHandler
     : IRequestHandler<CreateUserCommand, int>
 {
     private readonly IApplicationDbContext _context;
+    private readonly IPasswordHasher _passwordHasher;
 
-    public CreateUserCommandHandler(IApplicationDbContext context)
+    public CreateUserCommandHandler(
+        IApplicationDbContext context,
+        IPasswordHasher passwordHasher)
     {
         _context = context;
+        _passwordHasher = passwordHasher;
     }
 
     public async Task<int> Handle(
@@ -19,10 +24,10 @@ public sealed class CreateUserCommandHandler
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Email))
-            throw new InvalidOperationException("Email is required.");  
+            throw new InvalidOperationException("Email is required.");
 
-        if (string.IsNullOrWhiteSpace(request.PasswordHash))
-            throw new InvalidOperationException("PasswordHash is required.");
+        if (string.IsNullOrWhiteSpace(request.Password))
+            throw new InvalidOperationException("Password is required.");
 
         if (string.IsNullOrWhiteSpace(request.FullName))
             throw new InvalidOperationException("FullName is required.");
@@ -44,7 +49,7 @@ public sealed class CreateUserCommandHandler
         var user = new User
         {
             Email = request.Email.Trim(),
-            PasswordHash = request.PasswordHash,
+            PasswordHash = _passwordHasher.Hash(request.Password),
             FullName = request.FullName.Trim(),
             PhoneNumber = request.PhoneNumber,
             AvatarUrl = request.AvatarUrl,
