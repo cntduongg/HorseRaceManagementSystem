@@ -20,26 +20,34 @@ public sealed class UpdateRaceCommandHandler
     {
         if (string.IsNullOrWhiteSpace(request.Name))
             throw new InvalidOperationException("Race name is required.");
-
         if (request.NumberOfLegs < 1 || request.NumberOfLegs > 10)
             throw new InvalidOperationException("NumberOfLegs must be between 1 and 10.");
-
         if (request.Referee1Id <= 0)
             throw new InvalidOperationException("Referee1Id is required.");
-
         if (request.Referee2Id <= 0)
             throw new InvalidOperationException("Referee2Id is required.");
-
         if (request.Referee1Id == request.Referee2Id)
             throw new InvalidOperationException("Referees must be different.");
 
         var race = await _context.Races
-            .FirstOrDefaultAsync(
-                x => x.RaceId == request.RaceId,
-                cancellationToken);
+            .FirstOrDefaultAsync(x => x.RaceId == request.RaceId, cancellationToken);
 
         if (race is null)
             return false;
+
+        var tournament = await _context.Tournaments
+            .FirstOrDefaultAsync(t => t.TournamentId == request.TournamentId, cancellationToken);
+
+        if (tournament is null)
+            throw new KeyNotFoundException("Tournament not found.");
+
+        var scheduledDate = DateOnly.FromDateTime(request.ScheduledStartTime);
+        if (scheduledDate < tournament.StartDate || scheduledDate > tournament.EndDate)
+        {
+            throw new InvalidOperationException(
+                $"ScheduledStartTime phải nằm trong khoảng ngày của Tournament " +
+                $"({tournament.StartDate:yyyy-MM-dd} - {tournament.EndDate:yyyy-MM-dd}).");
+        }
 
         // Khóa số Legs khi đua đã rời Scheduled (đang/đã chạy) — Flow 3.
         if (race.Status != "Scheduled" && request.NumberOfLegs != race.NumberOfLegs)
@@ -48,7 +56,7 @@ public sealed class UpdateRaceCommandHandler
 
         race.TournamentId = request.TournamentId;
         race.Name = request.Name.Trim();
-        race.ScheduledStartTime = request.ScheduledStartTime;
+        race.ScheduledStartTime = request.ScheduledStartTime.ToUniversalTime();
         race.NumberOfLegs = request.NumberOfLegs;
         race.MaxHorses = request.MaxHorses;
         race.RoundType = request.RoundType;
