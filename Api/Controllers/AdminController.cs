@@ -189,8 +189,9 @@ public sealed class AdminController : ControllerBase
     req.Reason), ct));
 
     [HttpPost("horses/{id:int}/revoke")]
-    public async Task<IActionResult> RevokeHorse(int id, CancellationToken ct)
-        => Ok(await _sender.Send(new RevokeHorseCommand(id), ct));
+    public async Task<IActionResult> RevokeHorse(
+    int id, [FromBody] RevokeHorseRequest req, CancellationToken ct)
+    => Ok(await _sender.Send(new RevokeHorseCommand(id, GetUserId(), req.Reason), ct));
 
     // =========================
     // ENTRIES
@@ -318,6 +319,7 @@ public sealed class AdminController : ControllerBase
 // =========================
 // REQUEST DTOs
 // =========================
+public sealed record RevokeHorseRequest(string Reason);
 public sealed record ApproveEntryRequest(string? Reason);
 public sealed record ApproveHorseRequest(string? Reason);
 public sealed record ApproveUserRequest(string? Reason);

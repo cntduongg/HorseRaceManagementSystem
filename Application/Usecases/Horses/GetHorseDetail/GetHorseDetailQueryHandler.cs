@@ -15,24 +15,25 @@ public sealed class GetHorseDetailQueryHandler
     }
 
     public async Task<HorseDetailResponse?> Handle(
-        GetHorseDetailQuery request,
-        CancellationToken cancellationToken)
+    GetHorseDetailQuery request,
+    CancellationToken cancellationToken)
     {
-        if (request.HorseId <= 0)
-            return null;
+        if (request.HorseId <= 0) return null;
 
         return await _context.Horses
             .Where(x => x.HorseId == request.HorseId)
             .Select(x => new HorseDetailResponse(
                 x.HorseId,
                 x.OwnerId,
+                x.Owner.FullName,
                 x.Name,
                 x.Breed,
                 x.BirthYear,
                 x.Color,
                 x.Status,
-                x.ImageUrl
-            ))
+                x.ImageUrl,
+                x.CreatedAt,
+                x.RejectionReason))
             .FirstOrDefaultAsync(cancellationToken);
     }
 }
