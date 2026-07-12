@@ -40,9 +40,9 @@ public sealed class CloseRegistrationCommandHandler
 
             if (race.Status != RaceExecutionConstants.RaceScheduled)
                 throw new InvalidOperationException(
-                    $"Chỉ đóng đăng ký khi đua đang Scheduled (hiện tại: {race.Status}).");
+                    $"Registration can only be closed while the race is Scheduled (current: {race.Status}).");
             if (race.OddsComputedAt != null)
-                throw new InvalidOperationException("Đăng ký đã được đóng trước đó.");
+                throw new InvalidOperationException("Registration has already been closed.");
 
             var entries = await _context.Entries
                 .Where(e => e.RaceId == race.RaceId)
@@ -55,7 +55,7 @@ public sealed class CloseRegistrationCommandHandler
             foreach (var e in pending)
             {
                 e.Status = "Rejected";
-                e.RejectionReason = "Tự động từ chối khi đóng đăng ký (chưa được duyệt).";
+                e.RejectionReason = "Automatically rejected when registration closed (not approved).";
                 e.UpdatedAt = now;
             }
 
@@ -67,7 +67,7 @@ public sealed class CloseRegistrationCommandHandler
 
             if (approved.Count < 2)
                 throw new InvalidOperationException(
-                    "Cần ít nhất 2 entry đã duyệt để đóng đăng ký.");
+                    "At least 2 approved entries are required to close registration.");
 
             // 2) Tính win rate lịch sử cho các ngựa liên quan.
             var horseIds = approved.Select(e => e.HorseId).Distinct().ToList();

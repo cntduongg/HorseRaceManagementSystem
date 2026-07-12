@@ -54,7 +54,7 @@ public sealed class GetUserHistoryQueryHandler
                 "Prize",
                 p.SourceType,
                 p.Points,
-                "Race " + p.RaceId + " · vị trí " + p.FinalPosition,
+                "Race " + p.RaceId + " · position " + p.FinalPosition,
                 p.CreatedAt))
             .ToListAsync(cancellationToken);
 

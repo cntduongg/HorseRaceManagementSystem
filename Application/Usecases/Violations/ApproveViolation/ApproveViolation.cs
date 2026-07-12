@@ -40,7 +40,7 @@ public sealed class ApproveViolationCommandHandler
                 ?? throw new KeyNotFoundException("Violation not found.");
 
             if (violation.Status != "Pending")
-                throw new InvalidOperationException("Vi phạm này đã được xử lý.");
+                throw new InvalidOperationException("This violation has already been processed.");
 
             var penalty = string.IsNullOrWhiteSpace(request.Penalty)
                 ? violation.Penalty

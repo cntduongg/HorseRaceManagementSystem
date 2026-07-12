@@ -29,16 +29,16 @@ public sealed class CreateViolationCommandHandler
         if (request.EntryId <= 0)
             throw new InvalidOperationException("EntryId is invalid.");
         if (request.ReportedByRefereeId <= 0)
-            throw new InvalidOperationException("Không xác định được trọng tài báo cáo.");
+            throw new InvalidOperationException("Could not determine the reporting referee.");
         if (string.IsNullOrWhiteSpace(request.ViolationType))
             throw new InvalidOperationException("ViolationType is required.");
 
         // Entry phải thuộc race.
         var entry = await _context.Entries
             .FirstOrDefaultAsync(e => e.EntryId == request.EntryId, cancellationToken)
-            ?? throw new InvalidOperationException("Entry không tồn tại.");
+            ?? throw new InvalidOperationException("Entry does not exist.");
         if (entry.RaceId != request.RaceId)
-            throw new InvalidOperationException("Entry không thuộc cuộc đua đã chọn.");
+            throw new InvalidOperationException("The entry does not belong to the selected race.");
 
         // LegNumber: nếu không gửi → leg hiện hành (leg mở đầu tiên, hoặc leg cuối).
         var legs = await _context.Legs
@@ -46,7 +46,7 @@ public sealed class CreateViolationCommandHandler
             .OrderBy(l => l.LegNumber)
             .ToListAsync(cancellationToken);
         if (legs.Count == 0)
-            throw new InvalidOperationException("Cuộc đua chưa bắt đầu — chưa thể báo cáo vi phạm.");
+            throw new InvalidOperationException("The race has not started — violations cannot be reported yet.");
 
         var legNumber = request.LegNumber;
         if (legNumber <= 0)
@@ -56,7 +56,7 @@ public sealed class CreateViolationCommandHandler
         }
         else if (legs.All(l => l.LegNumber != legNumber))
         {
-            throw new InvalidOperationException("Leg không tồn tại trong cuộc đua.");
+            throw new InvalidOperationException("The leg does not exist in this race.");
         }
 
         var penalty = string.IsNullOrWhiteSpace(request.Penalty) ? "Warning" : request.Penalty.Trim();

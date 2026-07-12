@@ -46,7 +46,7 @@ public sealed class UpdateRaceCommandHandler
 
         // Giờ kết thúc phải sau giờ bắt đầu.
         if (endUtc <= startUtc)
-            throw new InvalidOperationException("ScheduledEndTime phải sau ScheduledStartTime.");
+            throw new InvalidOperationException("ScheduledEndTime must be after ScheduledStartTime.");
 
         // Cả giờ bắt đầu lẫn kết thúc phải nằm trong khoảng ngày của Tournament.
         var startDate = DateOnly.FromDateTime(request.ScheduledStartTime);
@@ -54,7 +54,7 @@ public sealed class UpdateRaceCommandHandler
         if (startDate < tournament.StartDate || endDate > tournament.EndDate)
         {
             throw new InvalidOperationException(
-                $"Khung giờ phải nằm trong khoảng ngày của Tournament " +
+                $"The time window must fall within the tournament's date range " +
                 $"({tournament.StartDate:yyyy-MM-dd} - {tournament.EndDate:yyyy-MM-dd}).");
         }
 
@@ -66,7 +66,7 @@ public sealed class UpdateRaceCommandHandler
         // Khóa số Legs khi đua đã rời Scheduled (đang/đã chạy) — Flow 3.
         if (race.Status != "Scheduled" && request.NumberOfLegs != race.NumberOfLegs)
             throw new InvalidOperationException(
-                "Không thể đổi số Legs sau khi cuộc đua đã bắt đầu.");
+                "Cannot change the number of Legs after the race has started.");
 
         race.TournamentId = request.TournamentId;
         race.Name = request.Name.Trim();

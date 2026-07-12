@@ -47,13 +47,13 @@ public sealed class SubmitLegResultCommandHandler
 
         if (race.Status != RaceExecutionConstants.RaceInProgress)
             throw new InvalidOperationException(
-                $"Chỉ submit được khi đua đang InProgress (hiện tại: {race.Status}).");
+                $"You can only submit while the race is InProgress (current: {race.Status}).");
 
         var isAssignedReferee =
             request.CurrentUserId == race.Referee1Id ||
             request.CurrentUserId == race.Referee2Id;
         if (!isAssignedReferee)
-            throw new UnauthorizedAccessException("Chỉ trọng tài được phân công mới được submit.");
+            throw new UnauthorizedAccessException("Only an assigned referee can submit.");
 
         var leg = race.Legs.FirstOrDefault(l => l.LegNumber == legNumber)
             ?? throw new KeyNotFoundException("Leg not found.");
@@ -61,7 +61,7 @@ public sealed class SubmitLegResultCommandHandler
         if (leg.Status is RaceExecutionConstants.LegConfirmed
                        or RaceExecutionConstants.LegConflicted
                        or RaceExecutionConstants.LegResolved)
-            throw new InvalidOperationException($"Leg {legNumber} đã khóa ({leg.Status}).");
+            throw new InvalidOperationException($"Leg {legNumber} is already locked ({leg.Status}).");
 
         // ── Validate payload so với entry đã duyệt ──
         var approvedEntryIds = await _context.Entries
@@ -74,9 +74,9 @@ public sealed class SubmitLegResultCommandHandler
         var submittedIds = submitted.Select(x => x.EntryId).ToHashSet();
 
         if (submitted.Count == 0)
-            throw new InvalidOperationException("Phải nhập kết quả cho các entry.");
+            throw new InvalidOperationException("You must enter results for the entries.");
         if (!submittedIds.SetEquals(approvedEntryIds))
-            throw new InvalidOperationException("Danh sách entry không khớp với các entry đã duyệt của cuộc đua.");
+            throw new InvalidOperationException("The entry list does not match the race's approved entries.");
 
         // Không trùng thứ hạng dương.
         var positiveRanks = submitted
@@ -84,7 +84,7 @@ public sealed class SubmitLegResultCommandHandler
             .Select(x => x.Position)
             .ToList();
         if (positiveRanks.Count != positiveRanks.Distinct().Count())
-            throw new InvalidOperationException("Thứ hạng bị trùng — mỗi vị trí chỉ gán cho 1 entry.");
+            throw new InvalidOperationException("Duplicate ranking — each position can be assigned to only one entry.");
 
         // ── Chặn submit trùng (append-only, 1 referee/leg) ──
         var alreadyMine = await _context.LegRefereeEntries.AnyAsync(
@@ -93,7 +93,7 @@ public sealed class SubmitLegResultCommandHandler
                  x.RefereeUserId == request.CurrentUserId,
             cancellationToken);
         if (alreadyMine)
-            throw new InvalidOperationException("Bạn đã submit kết quả cho leg này rồi.");
+            throw new InvalidOperationException("You have already submitted results for this leg.");
 
         var now = DateTime.UtcNow;
 
@@ -138,7 +138,7 @@ public sealed class SubmitLegResultCommandHandler
                 RaceExecutionConstants.LegAwaitingSecondReferee,
                 request.LegIndex,
                 legNumber,
-                "Đã ghi nhận kết quả của bạn. Đang chờ trọng tài còn lại submit.",
+                "Your results have been recorded. Waiting for the other referee to submit.",
                 IsRaceComplete: false,
                 NextLegIndex: null);
         }
@@ -189,8 +189,8 @@ public sealed class SubmitLegResultCommandHandler
                 request.LegIndex,
                 legNumber,
                 isComplete
-                    ? $"Leg {legNumber} khớp. Đã hoàn tất tất cả các leg — chờ công bố kết quả."
-                    : $"Leg {legNumber} khớp hoàn toàn và đã được xác nhận.",
+                    ? $"Leg {legNumber} matches. All legs completed — awaiting result publication."
+                    : $"Leg {legNumber} matches completely and has been confirmed.",
                 isComplete,
                 nextLegIndex);
         }
@@ -207,7 +207,7 @@ public sealed class SubmitLegResultCommandHandler
             "Conflicted",
             request.LegIndex,
             legNumber,
-            $"Phát hiện chênh lệch giữa 2 trọng tài ở Leg {legNumber}. Cuộc đua tạm dừng, chờ Admin xử lý.",
+            $"Discrepancy detected between the two referees at Leg {legNumber}. The race is paused, awaiting Admin resolution.",
             IsRaceComplete: false,
             NextLegIndex: null);
     }

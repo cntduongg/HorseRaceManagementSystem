@@ -32,7 +32,7 @@ public sealed class UnlockUserCommandHandler
                 ?? throw new KeyNotFoundException("User not found.");
 
             if (user.Status != "Locked")
-                throw new InvalidOperationException("Tài khoản không ở trạng thái khóa.");
+                throw new InvalidOperationException("The account is not in a locked state.");
 
             var now = DateTime.UtcNow;
             user.IsActive = true;

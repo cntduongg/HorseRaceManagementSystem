@@ -105,7 +105,7 @@ public sealed class RegisterCommandHandler : IRequestHandler<RegisterCommand, Re
                 Type = "Initial",
                 Amount = 100m,
                 BalanceAfter = 100m,
-                Reason = "Điểm khởi tạo tài khoản (+100)",
+                Reason = "Account initial points (+100)",
                 CreatedAt = now
             });
 

@@ -104,7 +104,7 @@ public static class PredictionOddsCalculator
 
         if (result is null)
         {
-            throw new InvalidOperationException("Entry chưa có odds hợp lệ để đặt prediction.");
+            throw new InvalidOperationException("The entry does not have valid odds to place a prediction.");
         }
 
         return result.CurrentOdds;

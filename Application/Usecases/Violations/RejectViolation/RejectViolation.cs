@@ -28,14 +28,14 @@ public sealed class RejectViolationCommandHandler
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Reason))
-            throw new InvalidOperationException("Lý do từ chối là bắt buộc.");
+            throw new InvalidOperationException("A rejection reason is required.");
 
         var violation = await _context.Violations
             .FirstOrDefaultAsync(v => v.ViolationId == request.ViolationId, cancellationToken)
             ?? throw new KeyNotFoundException("Violation not found.");
 
         if (violation.Status != "Pending")
-            throw new InvalidOperationException("Vi phạm này đã được xử lý.");
+            throw new InvalidOperationException("This violation has already been processed.");
 
         violation.Status = "Rejected";
         violation.Penalty = "None"; // từ chối → không áp phạt (UI không còn hiện "Cảnh cáo").

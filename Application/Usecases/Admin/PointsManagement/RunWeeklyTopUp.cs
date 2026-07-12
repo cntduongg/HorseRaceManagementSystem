@@ -63,7 +63,7 @@ public sealed class RunWeeklyTopUpCommandHandler
                 Type = "WeeklyTopUp",
                 Amount = WeeklyAmount,
                 BalanceAfter = w.Balance,
-                Reason = "Nạp điểm hàng tuần (+100)",
+                Reason = "Weekly points top-up (+100)",
                 CreatedAt = now
             });
             count++;

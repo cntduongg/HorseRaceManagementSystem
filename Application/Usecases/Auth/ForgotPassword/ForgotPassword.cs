@@ -28,7 +28,7 @@ public sealed class ForgotPasswordCommandHandler
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Email))
-            throw new InvalidOperationException("Email là bắt buộc.");
+            throw new InvalidOperationException("Email is required.");
 
         var email = request.Email.Trim().ToLowerInvariant();
 
@@ -38,7 +38,7 @@ public sealed class ForgotPasswordCommandHandler
         // Không tiết lộ email tồn tại hay không.
         if (user is null)
             return new ForgotPasswordResponse(
-                "Nếu email tồn tại, mã OTP đã được gửi.", null, ExpiryMinutes);
+                "If the email exists, an OTP code has been sent.", null, ExpiryMinutes);
 
         var now = DateTime.UtcNow;
 
@@ -62,6 +62,6 @@ public sealed class ForgotPasswordCommandHandler
         await _context.SaveChangesAsync(cancellationToken);
 
         return new ForgotPasswordResponse(
-            "Mã OTP đã được tạo.", code, ExpiryMinutes);
+            "An OTP code has been generated.", code, ExpiryMinutes);
     }
 }

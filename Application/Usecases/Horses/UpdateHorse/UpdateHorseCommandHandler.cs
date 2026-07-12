@@ -39,7 +39,7 @@ public sealed class UpdateHorseCommandHandler
             return new UpdateHorseResult(
                 false,
                 UpdateHorseError.InvalidStatus,
-                "Ngựa đã được duyệt, không thể chỉnh sửa trực tiếp.");
+                "The horse is already approved and cannot be edited directly.");
         }
 
         horse.Name = request.Name.Trim();

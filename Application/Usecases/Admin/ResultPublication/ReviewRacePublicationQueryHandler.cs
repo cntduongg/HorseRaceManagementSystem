@@ -47,12 +47,12 @@ public sealed class ReviewRacePublicationQueryHandler
 
         if (finalStandings.Count == 0)
         {
-            warnings.Add("Race chưa có final standings.");
+            warnings.Add("The race does not have final standings yet.");
         }
 
         if (!finalStandings.Any(x => x.FinalPosition == 1 && !x.IsRaceDQ))
         {
-            warnings.Add("Chưa có ngựa thắng hợp lệ ở vị trí 1.");
+            warnings.Add("There is no valid winning horse in position 1.");
         }
 
         var duplicatedPositions = finalStandings
@@ -64,7 +64,7 @@ public sealed class ReviewRacePublicationQueryHandler
 
         if (duplicatedPositions.Count > 0)
         {
-            warnings.Add($"Có vị trí bị trùng: {string.Join(", ", duplicatedPositions)}.");
+            warnings.Add($"There are duplicate positions: {string.Join(", ", duplicatedPositions)}.");
         }
 
         var winningEntryId = finalStandings
@@ -112,7 +112,7 @@ public sealed class ReviewRacePublicationQueryHandler
 
         if (!canPublish)
         {
-            warnings.Add("Race chưa đủ điều kiện publish.");
+            warnings.Add("The race is not eligible for publishing yet.");
         }
 
         return new ReviewRacePublicationResponse(

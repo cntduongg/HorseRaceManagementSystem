@@ -37,20 +37,20 @@ public sealed class StartRaceCommandHandler
 
         if (race.Status != RaceExecutionConstants.RaceScheduled)
             throw new InvalidOperationException(
-                $"Chỉ có thể bắt đầu đua ở trạng thái Scheduled (hiện tại: {race.Status}).");
+                $"The race can only be started in Scheduled status (current: {race.Status}).");
 
         if (race.Referee1Id is null || race.Referee2Id is null)
-            throw new InvalidOperationException("Cuộc đua chưa được gán đủ 2 trọng tài.");
+            throw new InvalidOperationException("The race has not been assigned 2 referees yet.");
 
         // Phải đóng đăng ký (khóa Odds + gán GateNumber) trước khi bắt đầu — Flow 3.
         if (race.OddsComputedAt is null)
-            throw new InvalidOperationException("Cần đóng đăng ký (khóa Odds) trước khi bắt đầu đua.");
+            throw new InvalidOperationException("Registration must be closed (Odds locked) before starting the race.");
 
         var approvedEntries = race.Entries
             .Count(e => e.Status == RaceExecutionConstants.EntryApproved);
 
         if (approvedEntries < 2)
-            throw new InvalidOperationException("Cần ít nhất 2 entry đã duyệt để bắt đầu đua.");
+            throw new InvalidOperationException("At least 2 approved entries are required to start the race.");
 
         // Tạo Legs nếu chưa có (1..NumberOfLegs).
         if (race.Legs.Count == 0)

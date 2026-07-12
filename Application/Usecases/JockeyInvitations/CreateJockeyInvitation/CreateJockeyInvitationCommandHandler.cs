@@ -34,32 +34,32 @@ public sealed class CreateJockeyInvitationCommandHandler
         if (request.RaceId <= 0)
             throw new InvalidOperationException("RaceId is required.");
         if (request.HorseOwnerId == request.JockeyId)
-            throw new InvalidOperationException("Chủ ngựa và nài phải khác nhau.");
+            throw new InvalidOperationException("Horse owner and jockey must be different.");
 
         // Ngựa: tồn tại, đã duyệt, thuộc sở hữu owner.
         var horse = await _context.Horses
             .FirstOrDefaultAsync(h => h.HorseId == request.HorseId, cancellationToken)
-            ?? throw new InvalidOperationException("Ngựa không tồn tại.");
+            ?? throw new InvalidOperationException("Horse does not exist.");
         if (horse.OwnerId != request.HorseOwnerId)
-            throw new InvalidOperationException("Bạn không sở hữu con ngựa này.");
+            throw new InvalidOperationException("You do not own this horse.");
         if (horse.Status != "Approved")
-            throw new InvalidOperationException("Chỉ mời nài cho ngựa đã được duyệt.");
+            throw new InvalidOperationException("You can only invite a jockey for an approved horse.");
 
         // Race: tồn tại & đang Scheduled.
         var race = await _context.Races
             .FirstOrDefaultAsync(r => r.RaceId == request.RaceId, cancellationToken)
-            ?? throw new InvalidOperationException("Cuộc đua không tồn tại.");
+            ?? throw new InvalidOperationException("Race does not exist.");
         if (race.Status != "Scheduled")
-            throw new InvalidOperationException("Chỉ mời nài khi cuộc đua đang Scheduled.");
+            throw new InvalidOperationException("You can only invite a jockey while the race is Scheduled.");
 
         // Nài: tồn tại, role JOCKEY, hồ sơ đủ License + Weight.
         var jockey = await _context.Users
             .FirstOrDefaultAsync(u => u.UserId == request.JockeyId, cancellationToken)
-            ?? throw new InvalidOperationException("Nài không tồn tại.");
+            ?? throw new InvalidOperationException("Jockey does not exist.");
         if (jockey.RoleId != JockeyRoleId)
-            throw new InvalidOperationException("Người được mời không phải là nài.");
+            throw new InvalidOperationException("The invited user is not a jockey.");
         if (string.IsNullOrWhiteSpace(jockey.LicenseNumber) || jockey.Weight is null or <= 0)
-            throw new InvalidOperationException("Nài chưa hoàn thiện hồ sơ (License + Weight).");
+            throw new InvalidOperationException("The jockey has not completed their profile (License + Weight).");
 
         //---------------------------------------------------------
         // Jockey already confirmed another horse in this race
@@ -75,7 +75,7 @@ public sealed class CreateJockeyInvitationCommandHandler
         if (confirmedElsewhere)
         {
             throw new InvalidOperationException(
-                "Jockey đã xác nhận cưỡi một ngựa khác trong cuộc đua này.");
+                "The jockey has already confirmed riding another horse in this race.");
         }
         // Không trùng invitation active cho (jockey + horse + race).
         var duplicate = await _context.JockeyInvitations.AnyAsync(
@@ -85,7 +85,7 @@ public sealed class CreateJockeyInvitationCommandHandler
                  ActiveStatuses.Contains(x.Status),
             cancellationToken);
         if (duplicate)
-            throw new InvalidOperationException("Đã có lời mời đang hoạt động cho nài này ở cặp Race+Horse.");
+            throw new InvalidOperationException("There is already an active invitation for this jockey for the same Race+Horse pair.");
 
         var invitation = new JockeyInvitation
         {

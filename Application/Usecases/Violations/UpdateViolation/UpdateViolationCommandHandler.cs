@@ -177,8 +177,8 @@ public sealed class UpdateViolationCommandHandler
 
             case "DQ":
                 throw new InvalidOperationException(
-                    "Không thể tự động hoàn tác vi phạm DQ đã áp dụng (vị trí gốc đã bị ghi đè). " +
-                    "Hãy chỉnh lại kết quả leg qua luồng resolve/override thay vì Sửa vi phạm.");
+                    "Cannot automatically revert an applied DQ violation (the original position has been overwritten). " +
+                    "Please adjust the leg result via the resolve/override flow instead of editing the violation.");
 
                 // Warning / None: không có tác động standings để hoàn tác.
         }

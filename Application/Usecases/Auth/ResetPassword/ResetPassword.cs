@@ -33,19 +33,19 @@ public sealed class ResetPasswordCommandHandler
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Email))
-            throw new InvalidOperationException("Email là bắt buộc.");
+            throw new InvalidOperationException("Email is required.");
         if (string.IsNullOrWhiteSpace(request.OtpCode))
-            throw new InvalidOperationException("Mã OTP là bắt buộc.");
+            throw new InvalidOperationException("OTP code is required.");
         if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 8)
-            throw new InvalidOperationException("Mật khẩu mới phải có ít nhất 8 ký tự.");
+            throw new InvalidOperationException("New password must be at least 8 characters.");
         if (request.ConfirmPassword is not null && request.NewPassword != request.ConfirmPassword)
-            throw new InvalidOperationException("Mật khẩu xác nhận không khớp.");
+            throw new InvalidOperationException("Password confirmation does not match.");
 
         var email = request.Email.Trim().ToLowerInvariant();
 
         var user = await _context.Users
             .FirstOrDefaultAsync(u => u.Email == email, cancellationToken)
-            ?? throw new InvalidOperationException("Mã OTP hoặc email không hợp lệ.");
+            ?? throw new InvalidOperationException("Invalid OTP code or email.");
 
         var now = DateTime.UtcNow;
         var otp = await _context.PasswordResetOtps
@@ -55,7 +55,7 @@ public sealed class ResetPasswordCommandHandler
                         o.ExpiresAt > now)
             .OrderByDescending(o => o.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken)
-            ?? throw new InvalidOperationException("Mã OTP không hợp lệ hoặc đã hết hạn.");
+            ?? throw new InvalidOperationException("The OTP code is invalid or has expired.");
 
         user.PasswordHash = _passwordHasher.Hash(request.NewPassword);
         user.UpdatedAt = now;
@@ -63,6 +63,6 @@ public sealed class ResetPasswordCommandHandler
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        return new ResetPasswordResponse(true, "Đặt lại mật khẩu thành công.");
+        return new ResetPasswordResponse(true, "Password reset successfully.");
     }
 }

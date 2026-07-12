@@ -57,6 +57,6 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
     // Nếu inner là vi phạm unique constraint của Postgres (SqlState 23505) thì trả message thân thiện, dễ hiểu.
     private static string ResolveDbUpdateDetail(DbUpdateException exception)
         => exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation }
-            ? "Dữ liệu bị trùng với một bản ghi đã tồn tại (vi phạm ràng buộc duy nhất)."
-            : "Không thể lưu thay đổi do xung đột dữ liệu.";
+            ? "The data conflicts with an existing record (unique constraint violation)."
+            : "Unable to save changes due to a data conflict.";
 }

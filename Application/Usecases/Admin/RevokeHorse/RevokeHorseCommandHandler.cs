@@ -60,7 +60,7 @@ public class RevokeHorseCommandHandler
             if (hasEntryInActiveRace)
             {
                 throw new InvalidOperationException(
-                    "Ngựa đang có Entry trong race đang diễn ra, không thể thu hồi.");
+                    "The horse has an Entry in an ongoing race and cannot be revoked.");
             }
 
             // 1. Revoke — trạng thái riêng, KHÔNG dùng Rejected

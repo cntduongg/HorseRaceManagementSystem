@@ -58,7 +58,7 @@ public sealed class GetRefereeLegViewQueryHandler
 
         if (!isAssignedReferee)
             throw new UnauthorizedAccessException(
-                "Chỉ trọng tài được phân công mới xem được leg view.");
+                "Only an assigned referee can view the leg view.");
 
         var leg = await _context.Legs
             .AsNoTracking()

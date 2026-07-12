@@ -29,14 +29,14 @@ public sealed class ResolveDiscrepancyCommandHandler
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Resolution))
-            throw new InvalidOperationException("Nội dung xử lý là bắt buộc.");
+            throw new InvalidOperationException("A resolution note is required.");
 
         var discrepancy = await _context.Discrepancies
             .FirstOrDefaultAsync(d => d.DiscrepancyId == request.DiscrepancyId, cancellationToken)
             ?? throw new KeyNotFoundException("Discrepancy not found.");
 
         if (discrepancy.Status != "Pending")
-            throw new InvalidOperationException("Sai lệch này đã được xử lý.");
+            throw new InvalidOperationException("This discrepancy has already been resolved.");
 
         var status = request.Action == "AdjustPoints" ? "Resolved" : "Dismissed";
 

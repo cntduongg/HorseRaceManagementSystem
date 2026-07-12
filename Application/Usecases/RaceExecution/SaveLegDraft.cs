@@ -43,7 +43,7 @@ public sealed class SaveLegDraftCommandHandler
             request.CurrentUserId == race.Referee1Id ||
             request.CurrentUserId == race.Referee2Id;
         if (!isAssignedReferee)
-            throw new UnauthorizedAccessException("Chỉ trọng tài được phân công mới lưu nháp.");
+            throw new UnauthorizedAccessException("Only an assigned referee can save a draft.");
 
         var legExists = await _context.Legs.AnyAsync(
             l => l.RaceId == request.RaceId && l.LegNumber == legNumber, cancellationToken);
@@ -58,7 +58,7 @@ public sealed class SaveLegDraftCommandHandler
             .Select(x => x.Position)
             .ToList();
         if (positiveRanks.Count != positiveRanks.Distinct().Count())
-            throw new InvalidOperationException("Thứ hạng bị trùng — mỗi vị trí chỉ gán cho 1 entry.");
+            throw new InvalidOperationException("Duplicate ranking — each position can be assigned to only one entry.");
 
         // EntryId trong nháp phải là entry đã duyệt của cuộc đua (tránh FK sai).
         var approvedEntryIds = await _context.Entries
@@ -68,7 +68,7 @@ public sealed class SaveLegDraftCommandHandler
             .ToListAsync(cancellationToken);
         var approvedSet = approvedEntryIds.ToHashSet();
         if (items.Any(x => !approvedSet.Contains(x.EntryId)))
-            throw new InvalidOperationException("Nháp chứa entry không thuộc danh sách đã duyệt của cuộc đua.");
+            throw new InvalidOperationException("The draft contains an entry that is not in the race's approved list.");
 
         // Upsert: xóa nháp cũ của referee này ở leg này rồi ghi lại toàn bộ.
         var existing = await _context.LegRefereeDrafts

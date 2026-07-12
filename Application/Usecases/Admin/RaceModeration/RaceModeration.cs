@@ -34,12 +34,12 @@ public sealed class ApproveRaceCommandHandler
 
         if (race.Status != RaceExecutionConstants.RaceScheduled)
             throw new InvalidOperationException(
-                $"Chỉ duyệt được Race đang Scheduled (hiện tại: {race.Status}).");
+                $"Only a Scheduled race can be approved (current: {race.Status}).");
 
         race.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(ct);
 
-        return new RaceModerationResponse(race.RaceId, race.Status, "Race đã được xác nhận (Scheduled).");
+        return new RaceModerationResponse(race.RaceId, race.Status, "The race has been confirmed (Scheduled).");
     }
 }
 
@@ -60,13 +60,13 @@ public sealed class RejectRaceCommandHandler
 
         if (race.Status is RaceExecutionConstants.RaceFinished or RaceExecutionConstants.RaceCancelled)
             throw new InvalidOperationException(
-                $"Không thể hủy Race ở trạng thái {race.Status}.");
+                $"Cannot cancel a race in status {race.Status}.");
 
         race.Status = RaceExecutionConstants.RaceCancelled;
         race.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(ct);
 
-        return new RaceModerationResponse(race.RaceId, race.Status, "Race đã bị hủy.");
+        return new RaceModerationResponse(race.RaceId, race.Status, "The race has been cancelled.");
     }
 }
 
@@ -87,14 +87,14 @@ public sealed class FinishRaceCommandHandler
 
         if (race.Status != RaceExecutionConstants.RacePendingResult)
             throw new InvalidOperationException(
-                $"Chỉ Finish được Race đang PendingResult (hiện tại: {race.Status}). " +
-                "Để cộng Prize/quyết toán cược, dùng Publish thay vì Finish.");
+                $"Only a PendingResult race can be Finished (current: {race.Status}). " +
+                "To award Prize points/settle bets, use Publish instead of Finish.");
 
         race.Status = RaceExecutionConstants.RaceFinished;
         race.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(ct);
 
         return new RaceModerationResponse(race.RaceId, race.Status,
-            "Race đã đóng (Finished). Lưu ý: chưa chạy settlement — dùng Publish nếu cần cộng Prize/quyết toán.");
+            "The race is closed (Finished). Note: settlement has not run — use Publish if you need to award Prize/settle bets.");
     }
 }

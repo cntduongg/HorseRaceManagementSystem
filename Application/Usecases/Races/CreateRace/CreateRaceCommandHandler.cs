@@ -41,7 +41,7 @@ public sealed class CreateRaceCommandHandler
 
         // Giờ kết thúc phải sau giờ bắt đầu.
         if (endUtc <= startUtc)
-            throw new InvalidOperationException("ScheduledEndTime phải sau ScheduledStartTime.");
+            throw new InvalidOperationException("ScheduledEndTime must be after ScheduledStartTime.");
 
         // Cả giờ bắt đầu lẫn kết thúc phải nằm trong khoảng ngày của Tournament.
         var startDate = DateOnly.FromDateTime(request.ScheduledStartTime);
@@ -49,7 +49,7 @@ public sealed class CreateRaceCommandHandler
         if (startDate < tournament.StartDate || endDate > tournament.EndDate)
         {
             throw new InvalidOperationException(
-                $"Khung giờ phải nằm trong khoảng ngày của Tournament " +
+                $"The time window must fall within the tournament's date range " +
                 $"({tournament.StartDate:yyyy-MM-dd} - {tournament.EndDate:yyyy-MM-dd}).");
         }
 

@@ -42,13 +42,13 @@ public sealed class PublishRaceResultCommandHandler
 
             if (race.Status != RaceExecutionConstants.RacePendingResult)
                 throw new InvalidOperationException(
-                    $"Chỉ publish được race ở PendingResult (hiện tại: {race.Status}).");
+                    $"Only a PendingResult race can be published (current: {race.Status}).");
 
             var allLegsDone = race.Legs.Count > 0 && race.Legs.All(l =>
                 l.Status is RaceExecutionConstants.LegConfirmed
                     or RaceExecutionConstants.LegResolved);
             if (!allLegsDone)
-                throw new InvalidOperationException("Vẫn còn leg chưa được xác nhận.");
+                throw new InvalidOperationException("There are still unconfirmed legs.");
 
             var entries = await _context.Entries
                 .Where(e => e.RaceId == race.RaceId &&
@@ -241,7 +241,7 @@ public sealed class PublishRaceResultCommandHandler
                     if (wallet is null)
                     {
                         throw new InvalidOperationException(
-                            $"Không tìm thấy ví của spectator #{prediction.SpectatorId}.");
+                            $"Wallet not found for spectator #{prediction.SpectatorId}.");
                     }
 
                     // Settlement là giao dịch hệ thống.
@@ -259,7 +259,7 @@ public sealed class PublishRaceResultCommandHandler
                         Amount = payout,
                         BalanceAfter = wallet.Balance,
                         Reason =
-                            $"Thắng cược race #{race.RaceId}, entry #{prediction.FirstEntryId}, odds {prediction.OddsLocked1}",
+                            $"Won bet on race #{race.RaceId}, entry #{prediction.FirstEntryId}, odds {prediction.OddsLocked1}",
                         CreatedAt = now
                     };
 

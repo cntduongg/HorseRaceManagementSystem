@@ -38,7 +38,7 @@ public sealed class UnpublishRaceResultCommandHandler
 
             if (race.Status != RaceExecutionConstants.RaceFinished)
                 throw new InvalidOperationException(
-                    $"Chỉ unpublish được race đã Finished (hiện tại: {race.Status}).");
+                    $"Only a Finished race can be unpublished (current: {race.Status}).");
 
             var now = DateTime.UtcNow;
 
@@ -62,7 +62,7 @@ public sealed class UnpublishRaceResultCommandHandler
                     
                         {
                             throw new InvalidOperationException(
-                                $"Không tìm thấy ví của spectator #{s.SpectatorId}.");
+                                $"Wallet not found for spectator #{s.SpectatorId}.");
                         }
                         wallet.Balance -= s.PayoutAmount;
                         wallet.UpdatedAt = now;

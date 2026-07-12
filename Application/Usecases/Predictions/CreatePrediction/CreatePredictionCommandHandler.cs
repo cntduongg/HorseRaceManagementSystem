@@ -34,7 +34,7 @@ public sealed class CreatePredictionCommandHandler
             throw new InvalidOperationException("EntryId is required.");
 
         if (request.BetAmount < MinBet)
-            throw new InvalidOperationException($"Số điểm cược tối thiểu là {MinBet} điểm.");
+            throw new InvalidOperationException($"The minimum bet is {MinBet} points.");
 
         var race = await _context.Races
             .FirstOrDefaultAsync(x => x.RaceId == request.RaceId, cancellationToken)
@@ -43,13 +43,13 @@ public sealed class CreatePredictionCommandHandler
         if (!string.Equals(race.Status?.Trim(), RaceScheduled, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
-                $"Chỉ được đặt cược khi cuộc đua đang Scheduled. Current status: {race.Status}");
+                $"You can only place a bet while the race is Scheduled. Current status: {race.Status}");
         }
 
         if (race.OddsComputedAt is null)
         {
             throw new InvalidOperationException(
-                "Odds chưa được khóa. Admin cần close registration trước khi spectator đặt prediction.");
+                "Odds have not been locked. Admin must close registration before spectators can place a prediction.");
         }
 
         var spectator = await _context.Spectators
@@ -57,25 +57,25 @@ public sealed class CreatePredictionCommandHandler
             ?? throw new InvalidOperationException("Spectator not found.");
 
         if (!spectator.IsActive)
-            throw new InvalidOperationException("Tài khoản khán giả đang bị khóa.");
+            throw new InvalidOperationException("The spectator account is locked.");
 
         var entry = await _context.Entries
             .FirstOrDefaultAsync(
                 e => e.EntryId == request.FirstEntryId &&
                      e.RaceId == request.RaceId,
                 cancellationToken)
-            ?? throw new InvalidOperationException("Entry không thuộc cuộc đua đã chọn.");
+            ?? throw new InvalidOperationException("The entry does not belong to the selected race.");
 
         if (!string.Equals(entry.Status?.Trim(), EntryApproved, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
-                $"Entry chưa được duyệt. Current status: {entry.Status}");
+                $"The entry has not been approved. Current status: {entry.Status}");
         }
 
         if (entry.Odds <= 0)
         {
             throw new InvalidOperationException(
-                "Entry chưa có locked odds hợp lệ.");
+                "The entry does not have valid locked odds.");
         }
 
         var hasActive = await _context.Predictions.AnyAsync(
@@ -85,22 +85,22 @@ public sealed class CreatePredictionCommandHandler
             cancellationToken);
 
         if (hasActive)
-            throw new InvalidOperationException("Bạn đã có một dự đoán đang hoạt động cho cuộc đua này.");
+            throw new InvalidOperationException("You already have an active prediction for this race.");
 
         var wallet = await _context.PointWallets
             .FirstOrDefaultAsync(w => w.SpectatorId == request.SpectatorId, cancellationToken)
-            ?? throw new InvalidOperationException("Không tìm thấy ví điểm.");
+            ?? throw new InvalidOperationException("Point wallet not found.");
 
         if (wallet.IsFrozen)
-            throw new InvalidOperationException("Ví điểm đang bị đóng băng.");
+            throw new InvalidOperationException("The point wallet is frozen.");
 
         if (wallet.Balance < request.BetAmount)
-            throw new InvalidOperationException("Số dư không đủ.");
+            throw new InvalidOperationException("Insufficient balance.");
 
         var maxBet = wallet.Balance * 0.5m;
 
         if (request.BetAmount > maxBet)
-            throw new InvalidOperationException("Số điểm cược không được vượt quá 50% số dư.");
+            throw new InvalidOperationException("The bet amount cannot exceed 50% of the balance.");
 
         var odds = await PredictionOddsCalculator.CalculateEntryOddsAsync(
             _context,
@@ -148,7 +148,7 @@ public sealed class CreatePredictionCommandHandler
                 Type = "BetPlaced",
                 Amount = -request.BetAmount,
                 BalanceAfter = wallet.Balance,
-                Reason = $"Đặt cược race #{request.RaceId}, entry #{request.FirstEntryId}, odds {odds}",
+                Reason = $"Bet placed on race #{request.RaceId}, entry #{request.FirstEntryId}, odds {odds}",
                 CreatedAt = now
             });
 

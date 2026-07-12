@@ -31,12 +31,12 @@ public sealed class SetPointBalanceCommandHandler
         CancellationToken cancellationToken)
     {
         if (request.Balance < 0)
-            throw new InvalidOperationException("Số dư không được âm.");
+            throw new InvalidOperationException("Balance cannot be negative.");
 
         var spectatorExists = await _context.Spectators
             .AnyAsync(s => s.UserId == request.UserId, cancellationToken);
         if (!spectatorExists)
-            throw new InvalidOperationException("Người dùng không phải khán giả hoặc không tồn tại.");
+            throw new InvalidOperationException("The user is not a spectator or does not exist.");
 
         var now = DateTime.UtcNow;
 
@@ -74,7 +74,7 @@ public sealed class SetPointBalanceCommandHandler
                 Amount = delta,
                 BalanceAfter = wallet.Balance,
                 Reason = string.IsNullOrWhiteSpace(request.Reason)
-                    ? $"Admin đặt số dư = {request.Balance}"
+                    ? $"Admin set balance = {request.Balance}"
                     : request.Reason.Trim(),
                 CreatedAt = now
             });

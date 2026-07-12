@@ -50,13 +50,13 @@ internal static class RaceScheduleGuard
 
             if (other.TournamentId == tournamentId)
                 throw new InvalidOperationException(
-                    $"Khung giờ này chồng lấn với cuộc đua \"{other.Name}\" trong cùng giải đấu. " +
-                    $"Hai cuộc đua trong một giải không được diễn ra cùng lúc.");
+                    $"This time slot overlaps race \"{other.Name}\" in the same tournament. " +
+                    $"Two races in the same tournament cannot run at the same time.");
 
             // Khác giải mà vẫn lọt vào candidates ⇒ do dùng chung trọng tài.
             throw new InvalidOperationException(
-                $"Trọng tài được phân công đang bận điều hành cuộc đua \"{other.Name}\" " +
-                $"trong khung giờ này (ở một giải đấu khác).");
+                $"An assigned referee is already officiating race \"{other.Name}\" " +
+                $"during this time slot (in a different tournament).");
         }
     }
 }
