@@ -88,14 +88,28 @@ public sealed class RegisterCommandHandler : IRequestHandler<RegisterCommand, Re
                 UserId = user.UserId
             });
 
-            _context.PointWallets.Add(new PointWallet
+            // Flow 7 — ví điểm khởi tạo với 100 điểm.
+            var wallet = new PointWallet
             {
                 SpectatorId = user.UserId,
-                Balance = 0,
+                Balance = 100,
                 IsFrozen = false,
                 CreatedAt = now,
                 UpdatedAt = now
+            };
+
+            // Ghi giao dịch khởi tạo để lịch sử ví khớp số dư (BalanceAfter = 100).
+            wallet.Transactions.Add(new WalletTransaction
+            {
+                SpectatorId = user.UserId,
+                Type = "Initial",
+                Amount = 100m,
+                BalanceAfter = 100m,
+                Reason = "Điểm khởi tạo tài khoản (+100)",
+                CreatedAt = now
             });
+
+            _context.PointWallets.Add(wallet);
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }

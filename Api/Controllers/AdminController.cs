@@ -265,6 +265,21 @@ public sealed class AdminController : ControllerBase
         => Ok(await _sender.Send(
             new AdjustPointsCommand(req.UserId, req.Amount, req.Type, req.Reason, GetUserId()), ct));
 
+    // Xem ví + giao dịch gần nhất của 1 khán giả.
+    [HttpGet("points/{userId:int}")]
+    public async Task<IActionResult> GetUserWallet(int userId, CancellationToken ct)
+    {
+        var wallet = await _sender.Send(new GetUserWalletQuery(userId), ct);
+        return wallet is null ? NotFound() : Ok(wallet);
+    }
+
+    // Đặt thẳng số dư ví về một giá trị chính xác (buff điểm phục vụ test).
+    [HttpPut("points/{userId:int}")]
+    public async Task<IActionResult> SetPointBalance(
+        int userId, [FromBody] SetPointBalanceRequest req, CancellationToken ct)
+        => Ok(await _sender.Send(
+            new SetPointBalanceCommand(userId, req.Balance, req.Reason, GetUserId()), ct));
+
     // Kích hoạt thủ công top-up tuần (tiện test; thực tế chạy tự động qua background service).
     [HttpPost("points/weekly-topup")]
     public async Task<IActionResult> RunWeeklyTopUp(CancellationToken ct)
@@ -327,6 +342,7 @@ public sealed record RejectUserRequest(string? Reason);
 public sealed record RejectHorseRequest(string? Reason);
 public sealed record RejectEntryRequest(string? Reason);
 public sealed record AdjustPointsRequest(int UserId, decimal Amount, string Type, string? Reason);
+public sealed record SetPointBalanceRequest(decimal Balance, string? Reason);
 public sealed record ResolveDiscrepancyRequest(string Resolution, string Action, int AdjustedPointsAwarded);
 public sealed record ApproveViolationRequest(string? Penalty, string? AdminNote);
 public sealed record RejectViolationRequest(string? Reason);

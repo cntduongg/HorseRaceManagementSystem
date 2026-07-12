@@ -31,8 +31,10 @@ public sealed class RunWeeklyTopUpCommandHandler
         var now = DateTime.UtcNow;
         var weekStart = MostRecentMondayUtc(now);
 
+        // Bỏ qua ví đóng băng, và ví MỚI TẠO trong tuần này (đã nhận 100 điểm khởi tạo lúc đăng ký)
+        // → tránh cộng thêm +100 ngay trong tuần đăng ký (sẽ nhận vào thứ Hai tuần kế).
         var wallets = await _context.PointWallets
-            .Where(w => !w.IsFrozen)
+            .Where(w => !w.IsFrozen && w.CreatedAt < weekStart)
             .ToListAsync(cancellationToken);
         if (wallets.Count == 0)
             return new RunWeeklyTopUpResponse(0, weekStart);
