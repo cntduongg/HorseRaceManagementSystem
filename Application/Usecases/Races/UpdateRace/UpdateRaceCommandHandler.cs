@@ -7,6 +7,9 @@ namespace Application.Usecases.Races.UpdateRace;
 public sealed class UpdateRaceCommandHandler
     : IRequestHandler<UpdateRaceCommand, bool>
 {
+    // Khoảng đệm tối thiểu (phút) giữa 2 cuộc đua trong cùng một giải đấu.
+    private const int MinGapBetweenRacesMinutes = 30;
+
     private readonly IApplicationDbContext _context;
 
     public UpdateRaceCommandHandler(IApplicationDbContext context)
@@ -47,6 +50,25 @@ public sealed class UpdateRaceCommandHandler
             throw new InvalidOperationException(
                 $"ScheduledStartTime phải nằm trong khoảng ngày của Tournament " +
                 $"({tournament.StartDate:yyyy-MM-dd} - {tournament.EndDate:yyyy-MM-dd}).");
+        }
+
+        // Chống trùng/chồng lấn khung giờ với race KHÁC trong CÙNG tournament (loại chính nó ra).
+        // Race không có thời lượng cố định nên coi mỗi race cần cách nhau tối thiểu
+        // MinGapBetweenRacesMinutes phút để có thời gian vận hành. Bỏ qua race đã Cancelled.
+        var scheduledUtc = request.ScheduledStartTime.ToUniversalTime();
+        var siblingStartTimes = await _context.Races
+            .Where(r => r.TournamentId == request.TournamentId
+                        && r.RaceId != request.RaceId
+                        && r.Status != "Cancelled")
+            .Select(r => r.ScheduledStartTime)
+            .ToListAsync(cancellationToken);
+
+        if (siblingStartTimes.Any(t =>
+                Math.Abs((t - scheduledUtc).TotalMinutes) < MinGapBetweenRacesMinutes))
+        {
+            throw new InvalidOperationException(
+                $"Khung giờ này trùng hoặc chồng lấn với một cuộc đua khác trong cùng giải đấu. " +
+                $"Hai cuộc đua phải cách nhau tối thiểu {MinGapBetweenRacesMinutes} phút.");
         }
 
         // Khóa số Legs khi đua đã rời Scheduled (đang/đã chạy) — Flow 3.
