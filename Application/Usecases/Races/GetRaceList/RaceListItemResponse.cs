@@ -6,6 +6,7 @@ public sealed record RaceListItemResponse(
     string? TournamentName,
     string Name,
     DateTime ScheduledAt,
+    DateTime ScheduledEndTime,
     int NumberOfLegs,
     int MaxHorses,
     string RoundType,

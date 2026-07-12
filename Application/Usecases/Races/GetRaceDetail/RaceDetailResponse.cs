@@ -5,6 +5,7 @@ public sealed record RaceDetailResponse(
     int TournamentId,
     string Name,
     DateTime ScheduledStartTime,
+    DateTime ScheduledEndTime,
     int NumberOfLegs,
     int MaxHorses,
     string RoundType,

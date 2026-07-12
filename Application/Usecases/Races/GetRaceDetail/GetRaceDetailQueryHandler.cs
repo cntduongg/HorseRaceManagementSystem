@@ -25,6 +25,7 @@ public sealed class GetRaceDetailQueryHandler
                 x.TournamentId,
                 x.Name,
                 x.ScheduledStartTime,
+                x.ScheduledEndTime,
                 x.NumberOfLegs,
                 x.MaxHorses,
                 x.RoundType,

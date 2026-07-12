@@ -8,9 +8,6 @@ namespace Application.Usecases.Races.CreateRace;
 public sealed class CreateRaceCommandHandler
     : IRequestHandler<CreateRaceCommand, int>
 {
-    // Khoảng đệm tối thiểu (phút) giữa 2 cuộc đua trong cùng một giải đấu.
-    private const int MinGapBetweenRacesMinutes = 30;
-
     private readonly IApplicationDbContext _context;
 
     public CreateRaceCommandHandler(IApplicationDbContext context)
@@ -39,36 +36,34 @@ public sealed class CreateRaceCommandHandler
         if (tournament is null)
             throw new KeyNotFoundException("Tournament not found.");
 
-        var scheduledDate = DateOnly.FromDateTime(request.ScheduledStartTime);
-        if (scheduledDate < tournament.StartDate || scheduledDate > tournament.EndDate)
+        var startUtc = request.ScheduledStartTime.ToUniversalTime();
+        var endUtc = request.ScheduledEndTime.ToUniversalTime();
+
+        // Giờ kết thúc phải sau giờ bắt đầu.
+        if (endUtc <= startUtc)
+            throw new InvalidOperationException("ScheduledEndTime phải sau ScheduledStartTime.");
+
+        // Cả giờ bắt đầu lẫn kết thúc phải nằm trong khoảng ngày của Tournament.
+        var startDate = DateOnly.FromDateTime(request.ScheduledStartTime);
+        var endDate = DateOnly.FromDateTime(request.ScheduledEndTime);
+        if (startDate < tournament.StartDate || endDate > tournament.EndDate)
         {
             throw new InvalidOperationException(
-                $"ScheduledStartTime phải nằm trong khoảng ngày của Tournament " +
+                $"Khung giờ phải nằm trong khoảng ngày của Tournament " +
                 $"({tournament.StartDate:yyyy-MM-dd} - {tournament.EndDate:yyyy-MM-dd}).");
         }
 
-        // Chống trùng/chồng lấn khung giờ với race khác trong CÙNG tournament.
-        // Race không có thời lượng cố định nên coi mỗi race cần cách nhau tối thiểu
-        // MinGapBetweenRacesMinutes phút để có thời gian vận hành. Bỏ qua race đã Cancelled.
-        var scheduledUtc = request.ScheduledStartTime.ToUniversalTime();
-        var siblingStartTimes = await _context.Races
-            .Where(r => r.TournamentId == request.TournamentId && r.Status != "Cancelled")
-            .Select(r => r.ScheduledStartTime)
-            .ToListAsync(cancellationToken);
-
-        if (siblingStartTimes.Any(t =>
-                Math.Abs((t - scheduledUtc).TotalMinutes) < MinGapBetweenRacesMinutes))
-        {
-            throw new InvalidOperationException(
-                $"Khung giờ này trùng hoặc chồng lấn với một cuộc đua khác trong cùng giải đấu. " +
-                $"Hai cuộc đua phải cách nhau tối thiểu {MinGapBetweenRacesMinutes} phút.");
-        }
+        // Chống đè lịch (overlap) với race khác — cùng giải đấu hoặc trùng trọng tài.
+        await RaceScheduleGuard.EnsureNoOverlapAsync(
+            _context, request.TournamentId, excludeRaceId: null,
+            startUtc, endUtc, request.Referee1Id, request.Referee2Id, cancellationToken);
 
         var race = new Race
         {
             TournamentId = request.TournamentId,
             Name = request.Name.Trim(),
-            ScheduledStartTime = request.ScheduledStartTime.ToUniversalTime(),
+            ScheduledStartTime = startUtc,
+            ScheduledEndTime = endUtc,
             NumberOfLegs = request.NumberOfLegs,
             MaxHorses = request.MaxHorses,
             RoundType = request.RoundType,

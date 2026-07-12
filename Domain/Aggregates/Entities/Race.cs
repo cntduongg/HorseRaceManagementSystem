@@ -5,6 +5,7 @@ public class Race
     public int TournamentId { get; set; }
     public string Name { get; set; } = null!;
     public DateTime ScheduledStartTime { get; set; }
+    public DateTime ScheduledEndTime { get; set; } // Giờ kết thúc dự kiến — dùng để check trùng lịch chính xác.
     public int NumberOfLegs { get; set; } = 3; // 1..10
     public int MaxHorses { get; set; }
     public string RoundType { get; set; } = null!; // Qualifying|Semifinal|Final|Regular
