@@ -14,13 +14,18 @@ public class JockeyInvitationConfiguration : IEntityTypeConfiguration<JockeyInvi
             .HasMaxLength(20)
             .IsRequired();
 
+        // Chỉ chặn TRÙNG khi invitation còn ACTIVE (Pending/Accepted/Confirmed).
+        // Declined/Cancelled/Expired KHÔNG bị chặn → cho phép mời lại đúng cặp (owner,jockey,horse,race).
+        // Khớp với logic ở CreateJockeyInvitationCommandHandler (ActiveStatuses).
         builder.HasIndex(i => new
         {
             i.HorseOwnerId,
             i.JockeyId,
             i.HorseId,
             i.RaceId
-        }).IsUnique();
+        })
+        .IsUnique()
+        .HasFilter("\"Status\" IN ('Pending', 'Accepted', 'Confirmed')");
 
         builder.HasOne(i => i.HorseOwner)
             .WithMany(u => u.SentInvitations)
