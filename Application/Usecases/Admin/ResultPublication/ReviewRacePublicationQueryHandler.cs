@@ -44,6 +44,15 @@ public sealed class ReviewRacePublicationQueryHandler
             warnings.Add("There are still unconfirmed legs.");
         }
 
+        // Còn vi phạm chưa duyệt → chưa được publish (khớp guard trong PublishRaceResultCommandHandler).
+        var pendingViolations = await _context.Violations
+            .CountAsync(v => v.RaceId == request.RaceId && v.Status == "Pending", cancellationToken);
+        var hasNoPendingViolations = pendingViolations == 0;
+        if (!hasNoPendingViolations)
+        {
+            warnings.Add($"There are still {pendingViolations} unresolved violation(s) to review.");
+        }
+
         // Bảng điểm "sống": tính trực tiếp từ LegOfficialResults + Violations (Approved, DQ),
         // KHÔNG đọc RaceResults (bảng đó chỉ có dữ liệu SAU khi publish chạy).
         var entries = await _context.Entries
@@ -146,6 +155,7 @@ public sealed class ReviewRacePublicationQueryHandler
         var canPublish =
             isPendingResult &&
             allLegsDone &&
+            hasNoPendingViolations &&
             finalStandings.Count > 0 &&
             winningEntryId is not null;
 

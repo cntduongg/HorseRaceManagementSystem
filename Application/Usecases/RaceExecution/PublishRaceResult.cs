@@ -50,6 +50,14 @@ public sealed class PublishRaceResultCommandHandler
             if (!allLegsDone)
                 throw new InvalidOperationException("There are still unconfirmed legs.");
 
+            // Không cho publish khi còn vi phạm CHƯA duyệt: một Violation Pending
+            // (DQ/Demote) nếu được duyệt sau đó sẽ thay đổi standings đã chốt (Flow 6 → 8).
+            var pendingViolations = await _context.Violations
+                .CountAsync(v => v.RaceId == race.RaceId && v.Status == "Pending", cancellationToken);
+            if (pendingViolations > 0)
+                throw new InvalidOperationException(
+                    $"There are still {pendingViolations} unresolved violation(s). Please review them before publishing.");
+
             var entries = await _context.Entries
                 .Where(e => e.RaceId == race.RaceId &&
                             e.Status == RaceExecutionConstants.EntryApproved)
