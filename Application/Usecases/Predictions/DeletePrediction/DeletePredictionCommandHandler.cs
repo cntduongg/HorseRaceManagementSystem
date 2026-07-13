@@ -81,7 +81,7 @@ public sealed class DeletePredictionCommandHandler
                 WalletId = wallet.WalletId,
                 SpectatorId = request.SpectatorId,
                 PredictionId = prediction.PredictionId,
-                Type = "BetRefunded",
+                Type = "BetRefund",
                 Amount = prediction.BetAmount,
                 BalanceAfter = wallet.Balance,
                 Reason = $"Refund for cancelled prediction #{prediction.PredictionId}",

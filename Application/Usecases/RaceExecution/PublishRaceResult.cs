@@ -69,37 +69,11 @@ public sealed class PublishRaceResultCommandHandler
                 .ToListAsync(cancellationToken)).ToHashSet();
 
             // ── 1. Tính tổng điểm & xếp hạng (DQ luôn xuống đáy) ──
-            // Tie-break: tổng điểm → nhiều 1st nhất → nhiều 2nd nhất → vị trí Leg cuối tốt hơn.
-            var lastLegNumber = officials.Count > 0 ? officials.Max(o => o.LegNumber) : 0;
-            var ranked = entries.Select(e =>
-                {
-                    var isDq = dqSet.Contains(e.EntryId);
-                    var rows = officials.Where(o => o.EntryId == e.EntryId).ToList();
-                    var finished = rows.Where(r => r.ResultStatus == RaceExecutionConstants.ResultFinished).ToList();
-                    var lastLeg = rows.FirstOrDefault(r => r.LegNumber == lastLegNumber);
-                    return new
-                    {
-                        Entry = e,
-                        IsDq = isDq,
-                        TotalPoints = isDq ? 0 : rows.Sum(r => r.LegPoints),
-                        LegWins = isDq ? 0 : finished.Count(r => r.FinishPosition == 1),
-                        Leg2nds = isDq ? 0 : finished.Count(r => r.FinishPosition == 2),
-                        LegTop3 = isDq ? 0 : finished.Count(r => r.FinishPosition is >= 1 and <= 3),
-                        LastLegPos = (!isDq && lastLeg is
-                            { ResultStatus: RaceExecutionConstants.ResultFinished, FinishPosition: not null })
-                            ? lastLeg.FinishPosition!.Value
-                            : int.MaxValue
-                    };
-                })
-                .OrderBy(x => x.IsDq)
-                .ThenByDescending(x => x.TotalPoints)
-                .ThenByDescending(x => x.LegWins)
-                .ThenByDescending(x => x.Leg2nds)
-                .ThenBy(x => x.LastLegPos)
-                .ToList();
+            // Công thức chung với màn "xem trước" (ReviewRacePublicationQueryHandler)
+            // để bảng điểm trước publish khớp tuyệt đối với kết quả publish thật.
+            var ranked = RaceRankingCalculator.Rank(entries, officials, dqSet);
 
             // ── 2. Ghi RaceResult ──
-            var position = 1;
             int? winnerEntryId = null;
             foreach (var r in ranked)
             {
@@ -110,21 +84,19 @@ public sealed class PublishRaceResultCommandHandler
                     RaceId = race.RaceId,
                     EntryId = r.Entry.EntryId,
                     TotalPoints = r.TotalPoints,
-                    FinalPosition = position,
+                    FinalPosition = r.FinalPosition,
                     IsRaceDQ = r.IsDq,
                     LegWinCount = r.LegWins,
                     LegTop3Count = r.LegTop3,
                     PublishedAt = now,
                     CreatedAt = now
                 });
-                position++;
             }
 
             await _context.SaveChangesAsync(
                 cancellationToken); // RaceResult tồn tại trước khi PrizePointTransaction tham chiếu FK
 
             // ── 3. Cộng Prize Points cho Owner & Jockey (bỏ qua entry DQ) ──
-            position = 1;
             foreach (var r in ranked)
             {
                 if (r.IsDq)
@@ -132,7 +104,7 @@ public sealed class PublishRaceResultCommandHandler
                     continue;
                 }
 
-                var finalPosition = ranked.IndexOf(r) + 1;
+                var finalPosition = r.FinalPosition;
                 var prize = RaceExecutionConstants.PrizePointsFor(finalPosition);
 
                 if (prize <= 0)
@@ -166,20 +138,17 @@ public sealed class PublishRaceResultCommandHandler
             var profiles = await _context.JockeyProfiles
                 .Where(p => jockeyIds.Contains(p.UserId))
                 .ToListAsync(cancellationToken);
-            position = 1;
             foreach (var r in ranked)
             {
                 var profile = profiles.FirstOrDefault(p => p.UserId == r.Entry.JockeyId);
                 if (profile is not null)
                 {
                     profile.TotalRaces += 1;
-                    if (!r.IsDq && position == 1) profile.TotalWins += 1;
-                    if (!r.IsDq && position <= 3) profile.TotalTop3 += 1;
-                    profile.CareerPrizePoints += r.IsDq ? 0 : RaceExecutionConstants.PrizePointsFor(position);
+                    if (!r.IsDq && r.FinalPosition == 1) profile.TotalWins += 1;
+                    if (!r.IsDq && r.FinalPosition <= 3) profile.TotalTop3 += 1;
+                    profile.CareerPrizePoints += r.IsDq ? 0 : RaceExecutionConstants.PrizePointsFor(r.FinalPosition);
                     profile.UpdatedAt = now;
                 }
-
-                position++;
             }
 
             // ── 4. Quyết toán dự đoán ──
