@@ -1,6 +1,8 @@
 using Application.Common;
 using Application.Common.Interfaces;
 using Application.Usecases.RaceExecution;
+using Domain.Aggregates.Entities;
+using Domain.Aggregates.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -22,16 +24,25 @@ public sealed class ApproveViolationCommandHandler
     : IRequestHandler<ApproveViolationCommand, ApproveViolationResponse>
 {
     private readonly IApplicationDbContext _context;
+    private readonly IReviewHistoryRepository _reviewHistoryRepository;
 
-    public ApproveViolationCommandHandler(IApplicationDbContext context)
+    public ApproveViolationCommandHandler(
+        IApplicationDbContext context,
+        IReviewHistoryRepository reviewHistoryRepository)
     {
         _context = context;
+        _reviewHistoryRepository = reviewHistoryRepository;
     }
 
     public async Task<ApproveViolationResponse> Handle(
         ApproveViolationCommand request,
         CancellationToken cancellationToken)
     {
+        var adminNote = ReviewHistoryReason.Normalize(
+            request.AdminNote,
+            required: false,
+            fieldName: "Admin note");
+
         await using var tx = await _context.Database.BeginTransactionAsync(cancellationToken);
         try
         {
@@ -50,14 +61,39 @@ public sealed class ApproveViolationCommandHandler
 
             var now = DateTime.UtcNow;
 
+            List<LegOfficialResult> affectedOfficials;
             switch (penalty)
             {
                 case "Demote":
-                    var official = await _context.LegOfficialResults.FirstOrDefaultAsync(
-                        o => o.RaceId == violation.RaceId &&
-                             o.LegNumber == violation.LegNumber &&
-                             o.EntryId == violation.EntryId,
-                        cancellationToken);
+                    affectedOfficials = await _context.LegOfficialResults
+                        .Where(o =>
+                            o.RaceId == violation.RaceId &&
+                            o.LegNumber == violation.LegNumber &&
+                            o.EntryId == violation.EntryId)
+                        .ToListAsync(cancellationToken);
+                    break;
+
+                case "DQ":
+                    affectedOfficials = await _context.LegOfficialResults
+                        .Where(o =>
+                            o.RaceId == violation.RaceId &&
+                            o.EntryId == violation.EntryId)
+                        .ToListAsync(cancellationToken);
+                    break;
+
+                default:
+                    affectedOfficials = [];
+                    break;
+            }
+
+            var beforeData = ViolationAuditSnapshot.Serialize(
+                violation,
+                ViolationAuditSnapshot.Standings(affectedOfficials));
+
+            switch (penalty)
+            {
+                case "Demote":
+                    var official = affectedOfficials.FirstOrDefault();
                     if (official is { ResultStatus: RaceExecutionConstants.ResultFinished, FinishPosition: not null })
                     {
                         official.FinishPosition += 1;
@@ -67,10 +103,7 @@ public sealed class ApproveViolationCommandHandler
                     break;
 
                 case "DQ":
-                    var allOfficial = await _context.LegOfficialResults
-                        .Where(o => o.RaceId == violation.RaceId && o.EntryId == violation.EntryId)
-                        .ToListAsync(cancellationToken);
-                    foreach (var o in allOfficial)
+                    foreach (var o in affectedOfficials)
                     {
                         o.ResultStatus = RaceExecutionConstants.ResultDq;
                         o.FinishPosition = null;
@@ -85,7 +118,22 @@ public sealed class ApproveViolationCommandHandler
             violation.Penalty = penalty;
             violation.ReviewedByAdminId = request.AdminId;
             violation.ReviewedAt = now;
-            violation.AdminNote = request.AdminNote?.Trim();
+            violation.AdminNote = adminNote;
+
+            await _reviewHistoryRepository.AddAsync(
+                new ReviewHistory
+                {
+                    EntityType = ReviewEntity.Violation,
+                    EntityId = violation.ViolationId,
+                    Action = ReviewAction.Approved,
+                    Reason = violation.AdminNote,
+                    BeforeData = beforeData,
+                    AfterData = ViolationAuditSnapshot.Serialize(
+                        violation,
+                        ViolationAuditSnapshot.Standings(affectedOfficials)),
+                    AdminId = request.AdminId
+                },
+                cancellationToken);
 
             await _context.SaveChangesAsync(cancellationToken);
             await tx.CommitAsync(cancellationToken);

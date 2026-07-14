@@ -1,5 +1,8 @@
+using Application.Common;
 using Application.Common.Interfaces;
 using Application.Usecases.RaceExecution;
+using Domain.Aggregates.Entities;
+using Domain.Aggregates.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,10 +12,14 @@ public sealed class UpdateViolationCommandHandler
     : IRequestHandler<UpdateViolationCommand, bool>
 {
     private readonly IApplicationDbContext _context;
+    private readonly IReviewHistoryRepository _reviewHistoryRepository;
 
-    public UpdateViolationCommandHandler(IApplicationDbContext context)
+    public UpdateViolationCommandHandler(
+        IApplicationDbContext context,
+        IReviewHistoryRepository reviewHistoryRepository)
     {
         _context = context;
+        _reviewHistoryRepository = reviewHistoryRepository;
     }
 
     public async Task<bool> Handle(
@@ -33,6 +40,9 @@ public sealed class UpdateViolationCommandHandler
 
         if (request.ReportedByRefereeId <= 0)
             throw new InvalidOperationException("ReportedByRefereeId is invalid.");
+
+        if (request.ActorAdminId <= 0)
+            throw new InvalidOperationException("ActorAdminId is invalid.");
 
         if (string.IsNullOrWhiteSpace(request.ViolationType))
             throw new InvalidOperationException("ViolationType is required.");
@@ -66,6 +76,16 @@ public sealed class UpdateViolationCommandHandler
             throw new InvalidOperationException(
                 "Status must be Pending, Approved or Rejected.");
 
+        var requestedStatus = request.Status.Trim();
+        var requestedPenalty = request.Penalty.Trim();
+        if (requestedStatus == "Approved" && requestedPenalty == "None")
+            throw new InvalidOperationException(
+                "An approved violation must use Warning, Demote or DQ.");
+
+        if (requestedStatus == "Rejected" && requestedPenalty != "None")
+            throw new InvalidOperationException(
+                "A rejected violation must use penalty None.");
+
         var violation = await _context.Violations
             .FirstOrDefaultAsync(
                 x => x.ViolationId == request.ViolationId,
@@ -77,7 +97,29 @@ public sealed class UpdateViolationCommandHandler
         // Giữ lại trạng thái/án phạt hiện tại để rollback standings nếu cần (Task 4).
         var oldStatus = violation.Status;
         var oldPenalty = violation.Penalty;
-        var newStatus = request.Status.Trim();
+        var newStatus = requestedStatus;
+        var newPenalty = requestedPenalty;
+        var newNote = ReviewHistoryReason.Normalize(
+            request.AdminNote,
+            required: false,
+            fieldName: "Admin note");
+        var newType = request.ViolationType.Trim();
+        var newDescription = request.Description?.Trim();
+
+        // No-op: bỏ qua audit + timestamp churn nếu không có thay đổi thực sự.
+        var isNoOp =
+            violation.RaceId == request.RaceId &&
+            violation.LegNumber == request.LegNumber &&
+            violation.EntryId == request.EntryId &&
+            violation.ReportedByRefereeId == request.ReportedByRefereeId &&
+            string.Equals(violation.ViolationType, newType, StringComparison.Ordinal) &&
+            string.Equals(violation.Description ?? "", newDescription ?? "", StringComparison.Ordinal) &&
+            string.Equals(oldPenalty, newPenalty, StringComparison.Ordinal) &&
+            string.Equals(oldStatus, newStatus, StringComparison.Ordinal) &&
+            string.Equals(violation.AdminNote ?? "", newNote ?? "", StringComparison.Ordinal);
+
+        if (isNoOp)
+            return true;
 
         var legExists = await _context.Legs
             .AnyAsync(x =>
@@ -90,11 +132,12 @@ public sealed class UpdateViolationCommandHandler
 
         var entryExists = await _context.Entries
             .AnyAsync(x =>
-                x.EntryId == request.EntryId,
+                x.EntryId == request.EntryId &&
+                x.RaceId == request.RaceId,
                 cancellationToken);
 
         if (!entryExists)
-            throw new InvalidOperationException("Entry does not exist.");
+            throw new InvalidOperationException("Entry does not belong to the race.");
 
         var refereeExists = await _context.Users
             .AnyAsync(x =>
@@ -104,38 +147,107 @@ public sealed class UpdateViolationCommandHandler
         if (!refereeExists)
             throw new InvalidOperationException("Reported referee does not exist.");
 
-        if (request.ReviewedByAdminId.HasValue)
-        {
-            var adminExists = await _context.Users
-                .AnyAsync(x =>
-                    x.UserId == request.ReviewedByAdminId.Value,
-                    cancellationToken);
+        var adminExists = await _context.Users
+            .AnyAsync(x => x.UserId == request.ActorAdminId, cancellationToken);
 
-            if (!adminExists)
-                throw new InvalidOperationException("Reviewed admin does not exist.");
-        }
+        if (!adminExists)
+            throw new InvalidOperationException("Reviewed admin does not exist.");
 
         await using var tx = await _context.Database.BeginTransactionAsync(cancellationToken);
         try
         {
-            // Rollback standings khi một vi phạm ĐÃ Approved bị chuyển khỏi Approved
-            // (vd Approved → Pending/Rejected qua modal Sửa). Đảo ngược đúng án phạt cũ.
-            if (oldStatus == "Approved" && newStatus != "Approved")
-            {
-                await ReverseAppliedPenaltyAsync(violation, oldPenalty, cancellationToken);
-            }
+            var raceOrEntryChanged =
+                violation.RaceId != request.RaceId ||
+                violation.EntryId != request.EntryId;
+            var legChanged = violation.LegNumber != request.LegNumber;
+            var penaltyChanged = !string.Equals(
+                oldPenalty,
+                newPenalty,
+                StringComparison.Ordinal);
+            var oldPenaltyContextChanged =
+                raceOrEntryChanged ||
+                (oldPenalty == "Demote" && legChanged);
+            var newPenaltyContextChanged =
+                raceOrEntryChanged ||
+                (newPenalty == "Demote" && legChanged);
+
+            var mustReverseOldPenalty =
+                oldStatus == "Approved" &&
+                (newStatus != "Approved" ||
+                 penaltyChanged ||
+                 oldPenaltyContextChanged);
+            var mustApplyNewPenalty =
+                newStatus == "Approved" &&
+                (oldStatus != "Approved" ||
+                 penaltyChanged ||
+                 newPenaltyContextChanged);
+
+            var oldAffectedResults = mustReverseOldPenalty
+                ? await LoadAffectedResultsAsync(
+                    violation.RaceId,
+                    violation.LegNumber,
+                    violation.EntryId,
+                    oldPenalty,
+                    cancellationToken)
+                : [];
+
+            var newAffectedResults = mustApplyNewPenalty
+                ? await LoadAffectedResultsAsync(
+                    request.RaceId,
+                    request.LegNumber,
+                    request.EntryId,
+                    newPenalty,
+                    cancellationToken)
+                : [];
+
+            var affectedResults = oldAffectedResults
+                .Concat(newAffectedResults)
+                .DistinctBy(x => new { x.RaceId, x.LegNumber, x.EntryId })
+                .ToList();
+
+            var beforeData = ViolationAuditSnapshot.Serialize(
+                violation,
+                ViolationAuditSnapshot.Standings(affectedResults));
+
+            if (mustReverseOldPenalty)
+                ReverseAppliedPenalty(oldPenalty, oldAffectedResults);
 
             violation.RaceId = request.RaceId;
             violation.LegNumber = request.LegNumber;
             violation.EntryId = request.EntryId;
             violation.ReportedByRefereeId = request.ReportedByRefereeId;
-            violation.ViolationType = request.ViolationType.Trim();
-            violation.Description = request.Description?.Trim();
-            violation.Penalty = request.Penalty.Trim();
+            violation.ViolationType = newType;
+            violation.Description = newDescription;
+            violation.Penalty = newPenalty;
             violation.Status = newStatus;
-            violation.ReviewedByAdminId = request.ReviewedByAdminId;
-            violation.AdminNote = request.AdminNote?.Trim();
+            violation.ReviewedByAdminId =
+                newStatus is "Approved" or "Rejected"
+                    ? request.ActorAdminId
+                    : null;
+            violation.AdminNote = newNote;
             violation.ReviewedAt = newStatus is "Approved" or "Rejected" ? DateTime.UtcNow : null;
+
+            if (mustApplyNewPenalty)
+                ApplyPenalty(newPenalty, newAffectedResults);
+
+            var action = penaltyChanged
+                ? ReviewAction.PenaltyChanged
+                : ReviewAction.Updated;
+
+            await _reviewHistoryRepository.AddAsync(
+                new ReviewHistory
+                {
+                    EntityType = ReviewEntity.Violation,
+                    EntityId = violation.ViolationId,
+                    Action = action,
+                    Reason = newNote,
+                    BeforeData = beforeData,
+                    AfterData = ViolationAuditSnapshot.Serialize(
+                        violation,
+                        ViolationAuditSnapshot.Standings(affectedResults)),
+                    AdminId = request.ActorAdminId
+                },
+                cancellationToken);
 
             await _context.SaveChangesAsync(cancellationToken);
             await tx.CommitAsync(cancellationToken);
@@ -149,38 +261,93 @@ public sealed class UpdateViolationCommandHandler
         }
     }
 
-    // Đảo ngược tác động lên standings của một án phạt đã áp (mirror của ApproveViolation).
-    //  - Demote: FinishPosition -= 1 rồi recompute Leg Points (đảo ngược chính xác).
-    //  - DQ: ApproveViolation ghi đè FinishPosition = null (mất vị trí gốc) nên KHÔNG thể
-    //        khôi phục tự động → chặn thao tác để tránh làm sai standings âm thầm.
-    //  - Warning/None: không đụng standings.
-    private async Task ReverseAppliedPenaltyAsync(
-        Domain.Aggregates.Entities.Violation violation,
-        string oldPenalty,
+    private async Task<List<LegOfficialResult>> LoadAffectedResultsAsync(
+        int raceId,
+        int legNumber,
+        int entryId,
+        string penalty,
         CancellationToken cancellationToken)
     {
-        switch (oldPenalty)
+        return penalty switch
+        {
+            "Demote" => await _context.LegOfficialResults
+                .Where(o =>
+                    o.RaceId == raceId &&
+                    o.LegNumber == legNumber &&
+                    o.EntryId == entryId)
+                .ToListAsync(cancellationToken),
+
+            "DQ" => await _context.LegOfficialResults
+                .Where(o =>
+                    o.RaceId == raceId &&
+                    o.EntryId == entryId)
+                .ToListAsync(cancellationToken),
+
+            _ => []
+        };
+    }
+
+    private static void ApplyPenalty(
+        string penalty,
+        IReadOnlyList<LegOfficialResult> affectedResults)
+    {
+        switch (penalty)
         {
             case "Demote":
-                var official = await _context.LegOfficialResults.FirstOrDefaultAsync(
-                    o => o.RaceId == violation.RaceId &&
-                         o.LegNumber == violation.LegNumber &&
-                         o.EntryId == violation.EntryId,
-                    cancellationToken);
-                if (official is { ResultStatus: RaceExecutionConstants.ResultFinished, FinishPosition: > 1 })
+                var official = affectedResults.FirstOrDefault();
+                if (official is
+                    {
+                        ResultStatus: RaceExecutionConstants.ResultFinished,
+                        FinishPosition: not null
+                    })
+                {
+                    official.FinishPosition += 1;
+                    official.LegPoints = RaceExecutionConstants.LegPointsFor(
+                        official.FinishPosition,
+                        official.ResultStatus);
+                }
+                break;
+
+            case "DQ":
+                foreach (var result in affectedResults)
+                {
+                    result.ResultStatus = RaceExecutionConstants.ResultDq;
+                    result.FinishPosition = null;
+                    result.LegPoints = 0;
+                }
+                break;
+        }
+    }
+
+    // DQ cannot be reversed because the legacy model overwrote original positions.
+    private static void ReverseAppliedPenalty(
+        string penalty,
+        IReadOnlyList<LegOfficialResult> affectedResults)
+    {
+        switch (penalty)
+        {
+            case "Demote":
+                var official = affectedResults.FirstOrDefault();
+                if (official is
+                    {
+                        ResultStatus: RaceExecutionConstants.ResultFinished,
+                        FinishPosition: > 1
+                    })
                 {
                     official.FinishPosition -= 1;
                     official.LegPoints = RaceExecutionConstants.LegPointsFor(
-                        official.FinishPosition, official.ResultStatus);
+                        official.FinishPosition,
+                        official.ResultStatus);
                 }
                 break;
 
             case "DQ":
                 throw new InvalidOperationException(
-                    "Cannot automatically revert an applied DQ violation (the original position has been overwritten). " +
-                    "Please adjust the leg result via the resolve/override flow instead of editing the violation.");
-
-                // Warning / None: không có tác động standings để hoàn tác.
+                    "Cannot automatically revert an applied DQ violation " +
+                    "(the original position has been overwritten). " +
+                    "Please adjust the leg result via the resolve/override flow " +
+                    "instead of editing the violation.");
         }
+
     }
 }

@@ -22,10 +22,14 @@ public sealed class PublishRaceResultCommandHandler
     : IRequestHandler<PublishRaceResultCommand, PublishRaceResultResponse>
 {
     private readonly IApplicationDbContext _context;
+    private readonly IReviewHistoryRepository _reviewHistoryRepository;
 
-    public PublishRaceResultCommandHandler(IApplicationDbContext context)
+    public PublishRaceResultCommandHandler(
+        IApplicationDbContext context,
+        IReviewHistoryRepository reviewHistoryRepository)
     {
         _context = context;
+        _reviewHistoryRepository = reviewHistoryRepository;
     }
 
     public async Task<PublishRaceResultResponse> Handle(
@@ -57,6 +61,14 @@ public sealed class PublishRaceResultCommandHandler
             if (pendingViolations > 0)
                 throw new InvalidOperationException(
                     $"There are still {pendingViolations} unresolved violation(s). Please review them before publishing.");
+
+            var beforeSnapshot = ReviewHistoryJson.Serialize(new
+            {
+                raceId = race.RaceId,
+                name = race.Name,
+                status = race.Status,
+                publishedAt = race.PublishedAt
+            });
 
             var entries = await _context.Entries
                 .Where(e => e.RaceId == race.RaceId &&
@@ -277,6 +289,29 @@ public sealed class PublishRaceResultCommandHandler
             race.Status = RaceExecutionConstants.RaceFinished;
             race.PublishedAt = now;
             race.UpdatedAt = now;
+
+            await _reviewHistoryRepository.AddAsync(
+                new ReviewHistory
+                {
+                    EntityType = ReviewEntity.Race,
+                    EntityId = race.RaceId,
+                    Action = ReviewAction.Published,
+                    Reason = null,
+                    BeforeData = beforeSnapshot,
+                    AfterData = ReviewHistoryJson.Serialize(new
+                    {
+                        raceId = race.RaceId,
+                        name = race.Name,
+                        status = race.Status,
+                        publishedAt = race.PublishedAt,
+                        settlementRunId = run.SettlementRunId,
+                        resultsCount = ranked.Count,
+                        settledPredictions = predictions.Count,
+                        totalPayout
+                    }),
+                    AdminId = request.AdminUserId
+                },
+                cancellationToken);
 
             await _context.SaveChangesAsync(cancellationToken);
             await tx.CommitAsync(cancellationToken);

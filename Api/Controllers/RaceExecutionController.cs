@@ -99,8 +99,12 @@ public sealed class RaceExecutionController : ControllerBase
 
     [HttpPost("{raceId:int}/unpublish")]
     [Authorize(Roles = "ADMIN")]
-    public async Task<IActionResult> Unpublish(int raceId, CancellationToken ct)
-        => Ok(await _sender.Send(new UnpublishRaceResultCommand(raceId, GetUserId()), ct));
+    public async Task<IActionResult> Unpublish(
+        int raceId,
+        [FromBody] UnpublishRaceRequest req,
+        CancellationToken ct)
+        => Ok(await _sender.Send(
+            new UnpublishRaceResultCommand(raceId, GetUserId(), req?.Reason ?? ""), ct));
 
     // ── Helpers ──────────────────────────────────────────────────────
 

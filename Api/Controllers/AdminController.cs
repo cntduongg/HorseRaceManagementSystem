@@ -70,10 +70,11 @@ public sealed class AdminController : ControllerBase
     [HttpPost("races/{raceId:int}/unpublish")]
     public async Task<IActionResult> UnpublishRaceResult(
         [FromRoute] int raceId,
+        [FromBody] UnpublishRaceRequest req,
         CancellationToken ct)
     {
         return Ok(await _sender.Send(
-            new UnpublishRaceResultCommand(raceId, GetUserId()),
+            new UnpublishRaceResultCommand(raceId, GetUserId(), req?.Reason ?? ""),
             ct));
     }
 
@@ -348,3 +349,4 @@ public sealed record ApproveViolationRequest(string? Penalty, string? AdminNote)
 public sealed record RejectViolationRequest(string? Reason);
 public sealed record LockUserRequest(string? Reason);
 public sealed record RejectRaceRequest(string? Reason);
+public sealed record UnpublishRaceRequest(string Reason);

@@ -30,6 +30,8 @@ public sealed class GetReviewHistoryQueryHandler
                 x.EntityId,
                 x.Action.ToString(),
                 x.Reason,
+                ReviewHistoryJson.Parse(x.BeforeData),
+                ReviewHistoryJson.Parse(x.AfterData),
                 x.AdminId,
                 x.Admin.FullName,
                 x.CreatedAt))

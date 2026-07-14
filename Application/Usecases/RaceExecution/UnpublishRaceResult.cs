@@ -1,13 +1,14 @@
 using Application.Common;
 using Application.Common.Interfaces;
 using Domain.Aggregates.Entities;
+using Domain.Aggregates.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.RaceExecution;
 
 // POST /api/races/{raceId}/unpublish — Admin rollback kết quả + payout (ATOMIC) → PendingResult.
-public sealed record UnpublishRaceResultCommand(int RaceId, int AdminUserId)
+public sealed record UnpublishRaceResultCommand(int RaceId, int AdminUserId, string Reason)
     : ICommand<UnpublishRaceResultResponse>;
 
 public sealed record UnpublishRaceResultResponse(
@@ -19,16 +20,25 @@ public sealed class UnpublishRaceResultCommandHandler
     : IRequestHandler<UnpublishRaceResultCommand, UnpublishRaceResultResponse>
 {
     private readonly IApplicationDbContext _context;
+    private readonly IReviewHistoryRepository _reviewHistoryRepository;
 
-    public UnpublishRaceResultCommandHandler(IApplicationDbContext context)
+    public UnpublishRaceResultCommandHandler(
+        IApplicationDbContext context,
+        IReviewHistoryRepository reviewHistoryRepository)
     {
         _context = context;
+        _reviewHistoryRepository = reviewHistoryRepository;
     }
 
     public async Task<UnpublishRaceResultResponse> Handle(
         UnpublishRaceResultCommand request,
         CancellationToken cancellationToken)
     {
+        var reason = ReviewHistoryReason.Normalize(
+            request.Reason,
+            required: true,
+            fieldName: "Unpublish reason")!;
+
         await using var tx = await _context.Database.BeginTransactionAsync(cancellationToken);
         try
         {
@@ -39,6 +49,18 @@ public sealed class UnpublishRaceResultCommandHandler
             if (race.Status != RaceExecutionConstants.RaceFinished)
                 throw new InvalidOperationException(
                     $"Only a Finished race can be unpublished (current: {race.Status}).");
+
+            var resultsCount = await _context.RaceResults
+                .CountAsync(r => r.RaceId == race.RaceId, cancellationToken);
+
+            var beforeSnapshot = ReviewHistoryJson.Serialize(new
+            {
+                raceId = race.RaceId,
+                name = race.Name,
+                status = race.Status,
+                publishedAt = race.PublishedAt,
+                resultsCount
+            });
 
             var now = DateTime.UtcNow;
 
@@ -59,30 +81,29 @@ public sealed class UnpublishRaceResultCommandHandler
                 {
                     var wallet = wallets.FirstOrDefault(w => w.SpectatorId == s.SpectatorId);
                     if (wallet is null)
-                    
-                        {
-                            throw new InvalidOperationException(
-                                $"Wallet not found for spectator #{s.SpectatorId}.");
-                        }
-                        wallet.Balance -= s.PayoutAmount;
-                        wallet.UpdatedAt = now;
-
-                        _context.WalletTransactions.Add(new WalletTransaction
-                        {
-                            WalletId = wallet.WalletId,
-                            SpectatorId = s.SpectatorId,
-                            PredictionId = s.PredictionId,
-                            SettlementRunId = s.SettlementRunId,
-                            Type = "PayoutRollback",
-                            Amount = -s.PayoutAmount,
-                            BalanceAfter = wallet.Balance,
-                            Reason = $"Rollback payout race #{race.RaceId}",
-                            RollbackOfTransactionId = s.PayoutTransactionId,
-                            CreatedAt = now
-                        });
-                        reversed++;
+                    {
+                        throw new InvalidOperationException(
+                            $"Wallet not found for spectator #{s.SpectatorId}.");
                     }
-                
+
+                    wallet.Balance -= s.PayoutAmount;
+                    wallet.UpdatedAt = now;
+
+                    _context.WalletTransactions.Add(new WalletTransaction
+                    {
+                        WalletId = wallet.WalletId,
+                        SpectatorId = s.SpectatorId,
+                        PredictionId = s.PredictionId,
+                        SettlementRunId = s.SettlementRunId,
+                        Type = "PayoutRollback",
+                        Amount = -s.PayoutAmount,
+                        BalanceAfter = wallet.Balance,
+                        Reason = $"Rollback payout race #{race.RaceId}",
+                        RollbackOfTransactionId = s.PayoutTransactionId,
+                        CreatedAt = now
+                    });
+                    reversed++;
+                }
 
                 s.IsRollbacked = true;
                 s.RollbackAt = now;
@@ -152,6 +173,27 @@ public sealed class UnpublishRaceResultCommandHandler
             race.Status = RaceExecutionConstants.RacePendingResult;
             race.PublishedAt = null;
             race.UpdatedAt = now;
+
+            await _reviewHistoryRepository.AddAsync(
+                new ReviewHistory
+                {
+                    EntityType = ReviewEntity.Race,
+                    EntityId = race.RaceId,
+                    Action = ReviewAction.Unpublished,
+                    Reason = reason,
+                    BeforeData = beforeSnapshot,
+                    AfterData = ReviewHistoryJson.Serialize(new
+                    {
+                        raceId = race.RaceId,
+                        name = race.Name,
+                        status = race.Status,
+                        publishedAt = race.PublishedAt,
+                        reversedPayouts = reversed,
+                        rolledBackSettlementRuns = runs.Count
+                    }),
+                    AdminId = request.AdminUserId
+                },
+                cancellationToken);
 
             await _context.SaveChangesAsync(cancellationToken);
             await tx.CommitAsync(cancellationToken);

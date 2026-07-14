@@ -2,6 +2,7 @@ using MediatR;
 
 namespace Application.Usecases.Violations.UpdateViolation;
 
+/// <param name="ActorAdminId">Admin acting on the record — set from JWT by the controller; never trust body.</param>
 public sealed record UpdateViolationCommand(
 	int ViolationId,
 	int RaceId,
@@ -12,6 +13,6 @@ public sealed record UpdateViolationCommand(
 	string? Description,
 	string Penalty,
 	string Status,
-	int? ReviewedByAdminId,
-	string? AdminNote
+	string? AdminNote,
+	int ActorAdminId
 ) : IRequest<bool>;
