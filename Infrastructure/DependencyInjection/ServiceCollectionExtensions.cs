@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ShareKernel.Repository;
 using ShareKernel.UnitOfWork;
 using Application.Common.Interfaces;
+using Infrastructure.Options;
 
 namespace Infrastructure.DependencyInjection;
 
@@ -45,6 +46,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IEntryRepository, EntryRepository>();
         services.AddScoped<IReviewHistoryRepository, ReviewHistoryRepository>();
         services.AddScoped<IRegistrationService, RegistrationService>();
+        services.Configure<SmtpOptions>(configuration.GetSection(SmtpOptions.SectionName));
+        services.AddScoped<IPasswordResetOtpProtector, HmacPasswordResetOtpProtector>();
+        services.AddScoped<IPasswordResetEmailSender, SmtpPasswordResetEmailSender>();
         //services.AddScoped<ICurrentUser, CurrentUser>();
         return services;
     }
