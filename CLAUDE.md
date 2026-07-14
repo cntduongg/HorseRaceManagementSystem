@@ -32,6 +32,8 @@ Sharekernel/      ← Khối dùng chung: AggregateRoot, Entity, IRepository, Un
 
 ## 3. Quy ước Use Case (rất quan trọng khi thêm tính năng)
 
+> **Không sửa FE, chỉ sửa BE và lấy FE làm gốc để sửa BE.**
+
 Mỗi use case là 1 thư mục `Application/Usecases/<Feature>/<Action>/` chứa:
 - `XxxCommand.cs` / `XxxQuery.cs` — input (record), implement `ICommand`/`IQuery`.
 - `XxxCommandHandler.cs` / `XxxQueryHandler.cs` — logic, implement `IRequestHandler<,>`.

@@ -84,6 +84,11 @@ builder.Services.AddInfrastructure(builder.Configuration);
 // Flow 7 — tác vụ nền cộng điểm ví +100 mỗi thứ Hai.
 builder.Services.AddHostedService<Api.Services.WeeklyTopUpBackgroundService>();
 
+// Flow 3/4 — tự động đóng ĐK + start Race khi tới ScheduledStartTime.
+builder.Services.Configure<Api.Services.RaceAutoStartOptions>(
+    builder.Configuration.GetSection(Api.Services.RaceAutoStartOptions.SectionName));
+builder.Services.AddHostedService<Api.Services.RaceAutoStartBackgroundService>();
+
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"]
     ?? throw new InvalidOperationException("JwtSettings:SecretKey is not configured.");

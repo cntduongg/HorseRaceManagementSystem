@@ -26,5 +26,9 @@ public class RaceConfiguration : IEntityTypeConfiguration<Race>
             .HasForeignKey(r => r.Referee2Id)
             .HasConstraintName("FK_Races_Referee2")
             .OnDelete(DeleteBehavior.NoAction);
+
+        // Auto-start worker: quét Status=Scheduled + ScheduledStartTime <= now
+        builder.HasIndex(r => new { r.Status, r.ScheduledStartTime })
+            .HasDatabaseName("IX_Races_Status_ScheduledStartTime");
     }
 }
