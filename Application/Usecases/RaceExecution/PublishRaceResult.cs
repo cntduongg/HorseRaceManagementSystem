@@ -23,13 +23,16 @@ public sealed class PublishRaceResultCommandHandler
 {
     private readonly IApplicationDbContext _context;
     private readonly IReviewHistoryRepository _reviewHistoryRepository;
+    private readonly IRaceLiveChangeTracker _liveTracker;
 
     public PublishRaceResultCommandHandler(
         IApplicationDbContext context,
-        IReviewHistoryRepository reviewHistoryRepository)
+        IReviewHistoryRepository reviewHistoryRepository,
+        IRaceLiveChangeTracker liveTracker)
     {
         _context = context;
         _reviewHistoryRepository = reviewHistoryRepository;
+        _liveTracker = liveTracker;
     }
 
     public async Task<PublishRaceResultResponse> Handle(
@@ -315,6 +318,10 @@ public sealed class PublishRaceResultCommandHandler
 
             await _context.SaveChangesAsync(cancellationToken);
             await tx.CommitAsync(cancellationToken);
+
+            // Race → Finished. Đánh dấu ở handler (không phải controller) nên phủ cả
+            // POST /api/races/{id}/publish lẫn POST /api/admin/races/{id}/publish (2 route trùng nhau).
+            _liveTracker.MarkChanged(race.RaceId);
 
             return new PublishRaceResultResponse(
                 race.RaceId,

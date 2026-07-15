@@ -52,6 +52,12 @@ public sealed class RaceExecutionController : ControllerBase
     public async Task<IActionResult> Standings(int raceId, CancellationToken ct)
         => Ok(await _sender.Send(new GetRaceStandingsQuery(raceId), ct));
 
+    // Snapshot theo dõi trực tiếp (Spectator). Payload giống hệt nhau cho mọi người xem —
+    // đó chính là thứ khiến nó broadcast được qua SignalR (RaceLiveHub).
+    [HttpGet("{raceId:int}/live")]
+    public async Task<IActionResult> Live(int raceId, CancellationToken ct)
+        => Ok(await _sender.Send(new GetRaceLiveQuery(raceId), ct));
+
     // ADMIN-only: màn so sánh 2 submission chỉ dành cho Admin resolve conflict.
     // Referee KHÔNG được xem để giữ nguyên cơ chế Blind Double-Entry (Flow 4).
     [HttpGet("{raceId:int}/pause")]

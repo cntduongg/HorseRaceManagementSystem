@@ -28,10 +28,14 @@ public sealed class SubmitLegResultCommandHandler
     : IRequestHandler<SubmitLegResultCommand, SubmitLegResultResponse>
 {
     private readonly IApplicationDbContext _context;
+    private readonly IRaceLiveChangeTracker _liveTracker;
 
-    public SubmitLegResultCommandHandler(IApplicationDbContext context)
+    public SubmitLegResultCommandHandler(
+        IApplicationDbContext context,
+        IRaceLiveChangeTracker liveTracker)
     {
         _context = context;
+        _liveTracker = liveTracker;
     }
 
     public async Task<SubmitLegResultResponse> Handle(
@@ -129,6 +133,9 @@ public sealed class SubmitLegResultCommandHandler
             .ToListAsync(cancellationToken);
 
         // Referee kia chưa submit → chờ.
+        // CỐ Ý KHÔNG MarkChanged ở nhánh này: đẩy push lúc này là báo cho mọi spectator
+        // "một trọng tài vừa nộp" — đúng nghĩa kênh phụ thời-gian-thực trên Blind Double-Entry.
+        // Snapshot lúc này cũng giống hệt bản cũ (chưa có LegOfficialResult) nên không mất gì.
         if (opponentEntries.Count == 0)
         {
             leg.Status = RaceExecutionConstants.LegAwaitingSecondReferee;
@@ -184,6 +191,9 @@ public sealed class SubmitLegResultCommandHandler
             var (isComplete, nextLegIndex) = AdvanceRaceIfComplete(race, legNumber);
             await _context.SaveChangesAsync(cancellationToken);
 
+            // Leg đã chốt → vị trí chính thức xuất hiện, đẩy cho spectator.
+            _liveTracker.MarkChanged(request.RaceId);
+
             return new SubmitLegResultResponse(
                 "Matched",
                 request.LegIndex,
@@ -202,6 +212,9 @@ public sealed class SubmitLegResultCommandHandler
         race.UpdatedAt = now;
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        // Leg lệch → race Paused. Spectator thấy "Đang xem xét" (không lộ submission nào).
+        _liveTracker.MarkChanged(request.RaceId);
 
         return new SubmitLegResultResponse(
             "Conflicted",

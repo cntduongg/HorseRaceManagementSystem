@@ -18,6 +18,7 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
 builder.Services.AddControllers();
+builder.Services.AddSignalR(); // Flow 4 — push diễn biến đua trực tiếp (RaceLiveHub).
 //builder.Services.AddHttpContextAccessor();
 var allowedOrigins = builder.Configuration
                          .GetSection("Cors:AllowedOrigins")
@@ -31,7 +32,11 @@ builder.Services.AddCors(options =>
         policy
             .WithOrigins(allowedOrigins)
             .AllowAnyHeader()
-            .AllowAnyMethod();
+            .AllowAnyMethod()
+            // Bắt buộc cho SignalR browser client (negotiate gửi withCredentials: true).
+            // KHÔNG đổi WithOrigins thành AllowAnyOrigin(): kèm AllowCredentials() sẽ ném
+            // InvalidOperationException lúc khởi động (spec cấm "*" đi với credentials).
+            .AllowCredentials();
     });
 });
 
@@ -87,6 +92,10 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
+// Hiện thực kênh push của Application bằng SignalR (Application không phụ thuộc ASP.NET).
+builder.Services.AddScoped<Application.Common.Interfaces.IRaceLiveNotifier,
+                           Api.Services.SignalRRaceLiveNotifier>();
+
 // Flow 7 — tác vụ nền cộng điểm ví +100 mỗi thứ Hai.
 builder.Services.AddHostedService<Api.Services.WeeklyTopUpBackgroundService>();
 
@@ -117,6 +126,24 @@ builder.Services
 
         options.Events = new JwtBearerEvents
         {
+            // SignalR qua WebSocket không gửi được header Authorization → token đi bằng query string.
+            // Guard StartsWithSegments là phần quan trọng về bảo mật: thiếu nó thì ?access_token=
+            // trở thành auth hợp lệ trên MỌI endpoint (token lọt vào history/referrer/log proxy,
+            // và mở bề mặt CSRF cho các POST đổi dữ liệu).
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+
+                if (!string.IsNullOrEmpty(accessToken) &&
+                    path.StartsWithSegments(Api.Hubs.RaceLiveHub.Path))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            },
+
             OnChallenge = async context =>
             {
                 context.HandleResponse();
@@ -202,6 +229,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<Api.Hubs.RaceLiveHub>(Api.Hubs.RaceLiveHub.Path);
 
 
 app.Run();
