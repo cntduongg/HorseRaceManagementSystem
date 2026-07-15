@@ -76,6 +76,7 @@ EF mapping: `Infrastructure/Data/Configurations/*Configuration.cs` (mỗi entity
   - `POST /api/auth/register/{spectator|horse-owner|jockey}` — Spectator active ngay; Horse Owner & Jockey chờ Admin duyệt.
   - `POST /api/auth/login` — trả access + refresh token (JWT, claim role).
   - `GET /api/auth/profile` [Authorize] — hồ sơ user hiện tại, resolve UserId từ JWT claims (✅ thêm 2026-06-25, `Auth/GetProfile`).
+  - `PUT /api/auth/profile` [Authorize] — **user tự sửa hồ sơ của mình** (✅ thêm 2026-07-15, `Auth/UpdateProfile`; UserId từ JWT, body `{FullName, PhoneNumber}` → trả `{ user }`). Chỉ đổi FullName/PhoneNumber → không tự nâng quyền/mở khóa được. Cần thiết vì `PUT /api/users/{id}` là **ADMIN-only + full-replace** (ghi đè cả RoleId/IsActive) nên Owner/Jockey không dùng để tự sửa hồ sơ được.
   - `POST /api/auth/logout` — revoke refresh token (yêu cầu Bearer).
   - `POST /api/auth/refresh-token` — token rotation.
   - `POST /api/auth/forgot-password` + `reset-password` — qua `PasswordResetOtp` (✅ thêm 2026-06-25, `Auth/ForgotPassword`+`ResetPassword`; DEV trả OTP trong response vì chưa có email service).

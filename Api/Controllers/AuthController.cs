@@ -3,6 +3,7 @@ using Application.Usecases.Auth.Logout;
 using Application.Usecases.Auth.Register;
 using Application.Usecases.Auth.RefreshToken;
 using Application.Usecases.Auth.GetProfile;
+using Application.Usecases.Auth.UpdateProfile;
 using Application.Usecases.Auth.ForgotPassword;
 using Application.Usecases.Auth.ResetPassword;
 using MediatR;
@@ -132,6 +133,22 @@ public sealed class AuthController : ControllerBase
     }
 
     /// <summary>
+    /// User tự sửa hồ sơ của chính mình (resolve UserId từ JWT, không tin body).
+    /// Chỉ đổi được FullName/PhoneNumber — không đụng tới RoleId/IsActive như PUT /api/users/{id}.
+    /// </summary>
+    [HttpPut("profile")]
+    [Authorize]
+    public async Task<IActionResult> UpdateProfile(
+        [FromBody] UpdateProfileRequest request,
+        CancellationToken cancellationToken)
+    {
+        var user = await _sender.Send(
+            new UpdateProfileCommand(GetUserId(), request.FullName, request.PhoneNumber),
+            cancellationToken);
+        return Ok(new { user });
+    }
+
+    /// <summary>
     /// Phát mã OTP đặt lại mật khẩu. (DEV: trả OTP trong response do chưa có email service.)
     /// </summary>
     [HttpPost("forgot-password")]
@@ -166,6 +183,7 @@ public sealed class AuthController : ControllerBase
 
 public sealed record LogoutRequest(string RefreshToken);
 public sealed record RefreshTokenRequest(string RefreshToken);
+public sealed record UpdateProfileRequest(string FullName, string? PhoneNumber);
 public sealed record ForgotPasswordRequest(string Email);
 public sealed record ResetPasswordRequest(
     string Email,
