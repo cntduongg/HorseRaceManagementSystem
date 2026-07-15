@@ -189,10 +189,12 @@ public sealed class AdminController : ControllerBase
     GetUserId(),
     req.Reason), ct));
 
+    // Body là tùy chọn: FE gọi revoke không kèm reason (không có ô nhập lý do),
+    // nên request đến không có Content-Type → phải cho phép empty body, nếu không sẽ 415.
     [HttpPost("horses/{id:int}/revoke")]
     public async Task<IActionResult> RevokeHorse(
-    int id, [FromBody] RevokeHorseRequest req, CancellationToken ct)
-    => Ok(await _sender.Send(new RevokeHorseCommand(id, GetUserId(), req.Reason), ct));
+    int id, [FromBody] RevokeHorseRequest? req, CancellationToken ct)
+    => Ok(await _sender.Send(new RevokeHorseCommand(id, GetUserId(), req?.Reason), ct));
 
     // =========================
     // ENTRIES
@@ -335,7 +337,7 @@ public sealed class AdminController : ControllerBase
 // =========================
 // REQUEST DTOs
 // =========================
-public sealed record RevokeHorseRequest(string Reason);
+public sealed record RevokeHorseRequest(string? Reason);
 public sealed record ApproveEntryRequest(string? Reason);
 public sealed record ApproveHorseRequest(string? Reason);
 public sealed record ApproveUserRequest(string? Reason);
