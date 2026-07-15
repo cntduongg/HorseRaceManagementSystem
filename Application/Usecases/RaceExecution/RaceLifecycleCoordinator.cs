@@ -49,13 +49,16 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
 {
     private readonly IApplicationDbContext _context;
     private readonly TimeProvider _timeProvider;
+    private readonly IRaceLiveChangeTracker _liveTracker;
 
     public RaceLifecycleCoordinator(
         IApplicationDbContext context,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IRaceLiveChangeTracker liveTracker)
     {
         _context = context;
         _timeProvider = timeProvider;
+        _liveTracker = liveTracker;
     }
 
     public async Task<CloseRegistrationLifecycleResult> CloseRegistrationAsync(
@@ -228,6 +231,12 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
 
             await _context.SaveChangesAsync(cancellationToken);
             await tx.CommitAsync(cancellationToken);
+
+            // Race vừa vào InProgress → đẩy snapshot cho spectator đang xem.
+            // Đặt ở đây (thay vì trong StartRaceCommandHandler) để phủ CẢ endpoint thủ công
+            // POST /start LẪN worker auto-start (RaceAutoStartBackgroundService) — cả hai đều
+            // đi qua đúng hàm này.
+            _liveTracker.MarkChanged(race.RaceId);
 
             return new RaceStartLifecycleResult(
                 race.RaceId,

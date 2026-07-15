@@ -21,13 +21,16 @@ public sealed class UnpublishRaceResultCommandHandler
 {
     private readonly IApplicationDbContext _context;
     private readonly IReviewHistoryRepository _reviewHistoryRepository;
+    private readonly IRaceLiveChangeTracker _liveTracker;
 
     public UnpublishRaceResultCommandHandler(
         IApplicationDbContext context,
-        IReviewHistoryRepository reviewHistoryRepository)
+        IReviewHistoryRepository reviewHistoryRepository,
+        IRaceLiveChangeTracker liveTracker)
     {
         _context = context;
         _reviewHistoryRepository = reviewHistoryRepository;
+        _liveTracker = liveTracker;
     }
 
     public async Task<UnpublishRaceResultResponse> Handle(
@@ -197,6 +200,9 @@ public sealed class UnpublishRaceResultCommandHandler
 
             await _context.SaveChangesAsync(cancellationToken);
             await tx.CommitAsync(cancellationToken);
+
+            // Rollback về PendingResult → đẩy để spectator thấy đúng trạng thái.
+            _liveTracker.MarkChanged(race.RaceId);
 
             return new UnpublishRaceResultResponse(race.RaceId, race.Status, reversed);
         }

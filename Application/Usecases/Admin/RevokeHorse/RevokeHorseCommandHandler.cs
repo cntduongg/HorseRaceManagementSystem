@@ -19,6 +19,9 @@ public class RevokeHorseCommandHandler
         RaceStatus.Cancelled
     };
 
+    // Lý do mặc định khi Admin revoke mà không nhập lý do (FE không có ô nhập).
+    private const string DefaultRevokeReason = "Revoked by admin.";
+
     private readonly IApplicationDbContext _context;
     private readonly IReviewHistoryRepository _reviewHistoryRepository;
 
@@ -34,8 +37,9 @@ public class RevokeHorseCommandHandler
         RevokeHorseCommand request,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Reason))
-            throw new ArgumentException("Reason is required.");
+        var reason = string.IsNullOrWhiteSpace(request.Reason)
+            ? DefaultRevokeReason
+            : request.Reason.Trim();
 
         await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
         try
@@ -65,7 +69,7 @@ public class RevokeHorseCommandHandler
 
             // 1. Revoke — trạng thái riêng, KHÔNG dùng Rejected
             horse.Status = HorseStatus.Revoked;
-            horse.RejectionReason = request.Reason;
+            horse.RejectionReason = reason;
             horse.UpdatedAt = DateTime.UtcNow;
 
             // 2. Chỉ tự động Cancel Entry đang Pending.
@@ -94,7 +98,7 @@ public class RevokeHorseCommandHandler
                     EntityType = ReviewEntity.Horse,
                     EntityId = horse.HorseId,
                     Action = ReviewAction.Revoked,
-                    Reason = request.Reason,
+                    Reason = reason,
                     AdminId = request.AdminId
                 },
                 cancellationToken);

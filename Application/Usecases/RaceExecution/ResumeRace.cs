@@ -14,10 +14,14 @@ public sealed class ResumeRaceCommandHandler
     : IRequestHandler<ResumeRaceCommand, ResumeRaceResponse>
 {
     private readonly IApplicationDbContext _context;
+    private readonly IRaceLiveChangeTracker _liveTracker;
 
-    public ResumeRaceCommandHandler(IApplicationDbContext context)
+    public ResumeRaceCommandHandler(
+        IApplicationDbContext context,
+        IRaceLiveChangeTracker liveTracker)
     {
         _context = context;
+        _liveTracker = liveTracker;
     }
 
     public async Task<ResumeRaceResponse> Handle(
@@ -45,6 +49,9 @@ public sealed class ResumeRaceCommandHandler
         race.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        // Paused → InProgress: đẩy để spectator bỏ trạng thái tạm dừng.
+        _liveTracker.MarkChanged(race.RaceId);
 
         return new ResumeRaceResponse(race.RaceId, race.Status);
     }

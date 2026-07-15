@@ -28,10 +28,14 @@ public sealed class OverrideLegResultCommandHandler
     : IRequestHandler<OverrideLegResultCommand, OverrideLegResultResponse>
 {
     private readonly IApplicationDbContext _context;
+    private readonly IRaceLiveChangeTracker _liveTracker;
 
-    public OverrideLegResultCommandHandler(IApplicationDbContext context)
+    public OverrideLegResultCommandHandler(
+        IApplicationDbContext context,
+        IRaceLiveChangeTracker liveTracker)
     {
         _context = context;
+        _liveTracker = liveTracker;
     }
 
     public async Task<OverrideLegResultResponse> Handle(
@@ -119,6 +123,9 @@ public sealed class OverrideLegResultCommandHandler
         race.UpdatedAt = now;
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        // Admin đã resolve → leg có vị trí chính thức (AdminOverride) + race hết Paused.
+        _liveTracker.MarkChanged(request.RaceId);
 
         return new OverrideLegResultResponse(
             request.LegIndex,

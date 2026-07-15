@@ -1,3 +1,4 @@
+using Application.Common;
 using Application.Usecases.RaceExecution;
 using Domain.Aggregates.Entities;
 using Infrastructure.Data;
@@ -20,7 +21,9 @@ public class RaceLifecycleCoordinatorTests
 
         var db = new ApplicationDbContext(options);
         var clock = new FakeTimeProvider(now ?? DateTimeOffset.UtcNow);
-        var sut = new RaceLifecycleCoordinator(db, clock);
+        // Tracker thật (không có phụ thuộc gì) — chỉ gom raceId vào HashSet trong bộ nhớ.
+        // Việc đẩy snapshot do RaceLiveBroadcastBehavior lo, nằm ngoài phạm vi test này.
+        var sut = new RaceLifecycleCoordinator(db, clock, new RaceLiveChangeTracker());
         return (db, sut, clock);
     }
 
