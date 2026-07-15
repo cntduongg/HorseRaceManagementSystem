@@ -52,17 +52,17 @@ public sealed class DeletePredictionCommandHandler
                 StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
-                $"Chỉ được hủy prediction khi race đang Scheduled. Current race status: {prediction.Race.Status}");
+                $"A prediction can only be cancelled while the race is Scheduled. Current race status: {prediction.Race.Status}");
         }
 
         var wallet = await _context.PointWallets
             .FirstOrDefaultAsync(
                 x => x.SpectatorId == request.SpectatorId,
                 cancellationToken)
-            ?? throw new InvalidOperationException("Không tìm thấy ví điểm.");
+            ?? throw new InvalidOperationException("Point wallet not found.");
 
         if (wallet.IsFrozen)
-            throw new InvalidOperationException("Ví điểm đang bị đóng băng.");
+            throw new InvalidOperationException("The point wallet is frozen.");
 
         var now = DateTime.UtcNow;
 
@@ -81,10 +81,10 @@ public sealed class DeletePredictionCommandHandler
                 WalletId = wallet.WalletId,
                 SpectatorId = request.SpectatorId,
                 PredictionId = prediction.PredictionId,
-                Type = "BetRefunded",
+                Type = "BetRefund",
                 Amount = prediction.BetAmount,
                 BalanceAfter = wallet.Balance,
-                Reason = $"Hoàn điểm hủy prediction #{prediction.PredictionId}",
+                Reason = $"Refund for cancelled prediction #{prediction.PredictionId}",
                 CreatedAt = now
             });
 

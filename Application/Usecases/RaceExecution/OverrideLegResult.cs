@@ -39,7 +39,7 @@ public sealed class OverrideLegResultCommandHandler
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.OverrideReason))
-            throw new InvalidOperationException("Lý do override là bắt buộc.");
+            throw new InvalidOperationException("An override reason is required.");
 
         var legNumber = request.LegIndex + 1;
 
@@ -53,7 +53,7 @@ public sealed class OverrideLegResultCommandHandler
 
         if (leg.Status != RaceExecutionConstants.LegConflicted)
             throw new InvalidOperationException(
-                $"Chỉ resolve được leg đang Conflicted (hiện tại: {leg.Status}).");
+                $"Only a Conflicted leg can be resolved (current: {leg.Status}).");
 
         var approvedEntryIds = await _context.Entries
             .Where(e => e.RaceId == request.RaceId &&
@@ -64,12 +64,12 @@ public sealed class OverrideLegResultCommandHandler
         var decisions = request.Decisions ?? new List<OverrideDecisionItem>();
         var decisionIds = decisions.Select(d => d.EntryId).ToHashSet();
         if (!decisionIds.SetEquals(approvedEntryIds))
-            throw new InvalidOperationException("Quyết định không khớp với các entry đã duyệt.");
+            throw new InvalidOperationException("The decision does not match the approved entries.");
 
         var positiveRanks = decisions.Where(d => d.OfficialPosition > 0)
             .Select(d => d.OfficialPosition).ToList();
         if (positiveRanks.Count != positiveRanks.Distinct().Count())
-            throw new InvalidOperationException("Thứ hạng bị trùng.");
+            throw new InvalidOperationException("Duplicate ranking.");
 
         var now = DateTime.UtcNow;
         var reason = request.OverrideReason!.Trim();

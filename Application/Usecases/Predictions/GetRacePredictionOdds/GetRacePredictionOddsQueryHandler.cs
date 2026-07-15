@@ -39,13 +39,13 @@ public sealed class GetRacePredictionOddsQueryHandler
         if (!string.Equals(race.Status?.Trim(), RaceScheduled, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
-                $"Chỉ hiển thị odds để betting khi race đang Scheduled. Current status: {race.Status}");
+                $"Betting odds are only shown while the race is Scheduled. Current status: {race.Status}");
         }
 
         if (race.OddsComputedAt is null)
         {
             throw new InvalidOperationException(
-                "Odds chưa được tạo. Admin cần close registration trước.");
+                "Odds have not been generated. Admin must close registration first.");
         }
 
         var dynamicOdds = await PredictionOddsCalculator.CalculateRaceOddsAsync(
@@ -104,7 +104,7 @@ public sealed class GetRacePredictionOddsQueryHandler
 
         if (resultEntries.Count == 0)
         {
-            throw new InvalidOperationException("Race chưa có entry Approved với odds hợp lệ.");
+            throw new InvalidOperationException("The race has no Approved entries with valid odds.");
         }
 
         return new RacePredictionOddsResponse(

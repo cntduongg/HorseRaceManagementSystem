@@ -4,7 +4,7 @@ namespace Application.Usecases.Users.CreateUser;
 
 public sealed record CreateUserCommand(
 	string Email,
-	string PasswordHash,
+	string Password,
 	string FullName,
 	string? PhoneNumber,
 	string? AvatarUrl,

@@ -50,14 +50,14 @@ public sealed class UpdateJockeyInvitationCommandHandler
                 request.CurrentUserId != invitation.JockeyId)
             {
                 throw new UnauthorizedAccessException(
-                    "Chỉ nài được mời mới có thể Accept/Decline.");
+                    "Only the invited jockey can Accept/Decline.");
             }
 
             if (OwnerActions.Contains(status) &&
                 request.CurrentUserId != invitation.HorseOwnerId)
             {
                 throw new UnauthorizedAccessException(
-                    "Chỉ chủ ngựa mới có thể Confirm/Cancel.");
+                    "Only the horse owner can Confirm/Cancel.");
             }
         }
 

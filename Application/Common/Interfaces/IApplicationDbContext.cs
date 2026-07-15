@@ -23,6 +23,8 @@ public interface IApplicationDbContext
 
     DbSet<LegRefereeEntry> LegRefereeEntries { get; }
 
+    DbSet<LegRefereeDraft> LegRefereeDrafts { get; }
+
     DbSet<LegOfficialResult> LegOfficialResults { get; }
 
     DbSet<RaceResult> RaceResults { get; }

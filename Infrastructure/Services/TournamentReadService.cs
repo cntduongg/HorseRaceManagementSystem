@@ -23,6 +23,7 @@ public sealed class TournamentReadService : ITournamentReadService
             .Select(x => new TournamentListItemResponse(
                 x.TournamentId,
                 x.Name,
+                x.Location,
                 x.StartDate,
                 x.EndDate,
                 x.Status,

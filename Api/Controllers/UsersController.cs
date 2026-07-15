@@ -82,17 +82,17 @@ public sealed class UsersController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<List<UserListItemResponse>>> GetAll(
+    public async Task<ActionResult<PagedUserListResponse>> GetAll(
+        [FromQuery] GetUserListQuery query,
         CancellationToken cancellationToken)
     {
-        var users = await _sender.Send(
-            new GetUserListQuery(),
-            cancellationToken);
+        var users = await _sender.Send(query, cancellationToken);
 
         return Ok(users);
     }
 
     [HttpPut("{userId:int}")]
+    [Authorize(Roles = "ADMIN")]
     public async Task<ActionResult> Update(
         [FromRoute] int userId,
         [FromBody] UpdateUserCommand command,

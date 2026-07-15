@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Application.Usecases.Horses.DeleteHorse;
 
 public sealed class DeleteHorseCommandHandler
-    : IRequestHandler<DeleteHorseCommand, bool>
+    : IRequestHandler<DeleteHorseCommand, DeleteHorseResult>
 {
     private readonly IApplicationDbContext _context;
 
@@ -14,23 +14,25 @@ public sealed class DeleteHorseCommandHandler
         _context = context;
     }
 
-    public async Task<bool> Handle(
+    public async Task<DeleteHorseResult> Handle(
         DeleteHorseCommand request,
         CancellationToken cancellationToken)
     {
         if (request.HorseId <= 0)
-            return false;
+            return new DeleteHorseResult(false, DeleteHorseError.NotFound);
 
         var horse = await _context.Horses
             .FirstOrDefaultAsync(x => x.HorseId == request.HorseId, cancellationToken);
 
         if (horse is null)
-            return false;
+            return new DeleteHorseResult(false, DeleteHorseError.NotFound);
+
+        if (horse.OwnerId != request.OwnerId)
+            return new DeleteHorseResult(false, DeleteHorseError.Forbidden);
 
         _context.Horses.Remove(horse);
-
         await _context.SaveChangesAsync(cancellationToken);
 
-        return true;
+        return new DeleteHorseResult(true, DeleteHorseError.None);
     }
 }

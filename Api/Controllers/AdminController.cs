@@ -2,6 +2,10 @@ using Application.Usecases.Admin.ApproveUser;
 using Application.Usecases.Admin.GetPendingUsers;
 using Application.Usecases.Admin.RejectUser;
 using Application.Usecases.Admin.GetReviewHistory;
+using Application.Usecases.Admin.GetInvalidUsers;
+using Application.Usecases.Admin.GetUserHistory;
+using Application.Usecases.Admin.RaceModeration;
+using Application.Usecases.Users.GetUserDetail;
 using Domain.Aggregates.Enums;
 using Application.Usecases.Admin.GetPendingHorses;
 using Application.Usecases.Admin.ApproveHorse;
@@ -66,12 +70,28 @@ public sealed class AdminController : ControllerBase
     [HttpPost("races/{raceId:int}/unpublish")]
     public async Task<IActionResult> UnpublishRaceResult(
         [FromRoute] int raceId,
+        [FromBody] UnpublishRaceRequest req,
         CancellationToken ct)
     {
         return Ok(await _sender.Send(
-            new UnpublishRaceResultCommand(raceId, GetUserId()),
+            new UnpublishRaceResultCommand(raceId, GetUserId(), req?.Reason ?? ""),
             ct));
     }
+
+    // ── Race moderation (tùy chọn, không thuộc 8 flow) ──
+    // Approve = xác nhận Race Scheduled; Reject = Cancel Race; Finish = PendingResult→Finished.
+    [HttpPost("races/{raceId:int}/approve")]
+    public async Task<IActionResult> ApproveRace(int raceId, CancellationToken ct)
+        => Ok(await _sender.Send(new ApproveRaceCommand(raceId, GetUserId()), ct));
+
+    [HttpPost("races/{raceId:int}/reject")]
+    public async Task<IActionResult> RejectRace(
+        int raceId, [FromBody] RejectRaceRequest? req, CancellationToken ct)
+        => Ok(await _sender.Send(new RejectRaceCommand(raceId, GetUserId(), req?.Reason), ct));
+
+    [HttpPost("races/{raceId:int}/finish")]
+    public async Task<IActionResult> FinishRace(int raceId, CancellationToken ct)
+        => Ok(await _sender.Send(new FinishRaceCommand(raceId, GetUserId()), ct));
     // =========================
     // USERS
     // =========================
@@ -102,6 +122,36 @@ public sealed class AdminController : ControllerBase
                 GetUserId(),
                 req.Reason),
             ct));
+
+    // ── Invalid users (tùy chọn) — tài khoản không hoạt động (bị từ chối/khóa) ──
+    [HttpGet("users/invalid")]
+    public async Task<IActionResult> GetInvalidUsers(
+        [FromQuery] string? search, [FromQuery] int page = 1, [FromQuery] int pageSize = 10,
+        CancellationToken ct = default)
+        => Ok(await _sender.Send(new GetInvalidUsersQuery(search, page, pageSize), ct));
+
+    [HttpGet("users/invalid/{id:int}")]
+    public async Task<IActionResult> GetInvalidUserById(int id, CancellationToken ct)
+    {
+        var user = await _sender.Send(new GetUserDetailQuery(id), ct);
+        return user is null ? NotFound(new { message = "User not found" }) : Ok(user);
+    }
+
+    [HttpPost("users/invalid/{id:int}/approve")]
+    public async Task<IActionResult> ApproveInvalidUser(
+        int id, [FromBody] ApproveUserRequest? req, CancellationToken ct)
+        => Ok(await _sender.Send(new ApproveUserCommand(id, GetUserId(), req?.Reason), ct));
+
+    [HttpPost("users/invalid/{id:int}/reject")]
+    public async Task<IActionResult> RejectInvalidUser(
+        int id, [FromBody] RejectUserRequest req, CancellationToken ct)
+        => Ok(await _sender.Send(new RejectUserCommand(id, GetUserId(), req.Reason), ct));
+
+    // Lịch sử hoạt động của 1 user (ví + prize + duyệt hồ sơ).
+    [HttpGet("users/{id:int}/history")]
+    public async Task<IActionResult> GetUserHistory(
+        int id, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+        => Ok(await _sender.Send(new GetUserHistoryQuery(id, page, pageSize), ct));
 
     // Khóa/Mở khóa tài khoản (Flow 7: khóa Spectator → đóng băng ví + hoàn cược Pending).
     [HttpPost("users/{id:int}/lock")]
@@ -140,8 +190,9 @@ public sealed class AdminController : ControllerBase
     req.Reason), ct));
 
     [HttpPost("horses/{id:int}/revoke")]
-    public async Task<IActionResult> RevokeHorse(int id, CancellationToken ct)
-        => Ok(await _sender.Send(new RevokeHorseCommand(id), ct));
+    public async Task<IActionResult> RevokeHorse(
+    int id, [FromBody] RevokeHorseRequest req, CancellationToken ct)
+    => Ok(await _sender.Send(new RevokeHorseCommand(id, GetUserId(), req.Reason), ct));
 
     // =========================
     // ENTRIES
@@ -215,6 +266,21 @@ public sealed class AdminController : ControllerBase
         => Ok(await _sender.Send(
             new AdjustPointsCommand(req.UserId, req.Amount, req.Type, req.Reason, GetUserId()), ct));
 
+    // Xem ví + giao dịch gần nhất của 1 khán giả.
+    [HttpGet("points/{userId:int}")]
+    public async Task<IActionResult> GetUserWallet(int userId, CancellationToken ct)
+    {
+        var wallet = await _sender.Send(new GetUserWalletQuery(userId), ct);
+        return wallet is null ? NotFound() : Ok(wallet);
+    }
+
+    // Đặt thẳng số dư ví về một giá trị chính xác (buff điểm phục vụ test).
+    [HttpPut("points/{userId:int}")]
+    public async Task<IActionResult> SetPointBalance(
+        int userId, [FromBody] SetPointBalanceRequest req, CancellationToken ct)
+        => Ok(await _sender.Send(
+            new SetPointBalanceCommand(userId, req.Balance, req.Reason, GetUserId()), ct));
+
     // Kích hoạt thủ công top-up tuần (tiện test; thực tế chạy tự động qua background service).
     [HttpPost("points/weekly-topup")]
     public async Task<IActionResult> RunWeeklyTopUp(CancellationToken ct)
@@ -269,6 +335,7 @@ public sealed class AdminController : ControllerBase
 // =========================
 // REQUEST DTOs
 // =========================
+public sealed record RevokeHorseRequest(string Reason);
 public sealed record ApproveEntryRequest(string? Reason);
 public sealed record ApproveHorseRequest(string? Reason);
 public sealed record ApproveUserRequest(string? Reason);
@@ -276,7 +343,10 @@ public sealed record RejectUserRequest(string? Reason);
 public sealed record RejectHorseRequest(string? Reason);
 public sealed record RejectEntryRequest(string? Reason);
 public sealed record AdjustPointsRequest(int UserId, decimal Amount, string Type, string? Reason);
+public sealed record SetPointBalanceRequest(decimal Balance, string? Reason);
 public sealed record ResolveDiscrepancyRequest(string Resolution, string Action, int AdjustedPointsAwarded);
 public sealed record ApproveViolationRequest(string? Penalty, string? AdminNote);
 public sealed record RejectViolationRequest(string? Reason);
 public sealed record LockUserRequest(string? Reason);
+public sealed record RejectRaceRequest(string? Reason);
+public sealed record UnpublishRaceRequest(string Reason);

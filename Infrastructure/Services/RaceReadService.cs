@@ -26,6 +26,7 @@ public sealed class RaceReadService : IRaceReadService
                 x.Tournament.Name,
                 x.Name,
                 x.ScheduledStartTime,
+                x.ScheduledEndTime,
                 x.NumberOfLegs,
                 x.MaxHorses,
                 x.RoundType,

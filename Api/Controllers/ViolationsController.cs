@@ -76,13 +76,15 @@ public sealed class ViolationsController : ControllerBase
 		return Ok(violations);
 	}
 
+	// Admin-only: chỉnh sửa vi phạm đã xử lý. ActorAdminId lấy từ JWT, không tin body.
 	[HttpPut("{violationId:int}")]
+	[Authorize(Roles = "ADMIN")]
 	public async Task<ActionResult> Update(
 		[FromRoute] int violationId,
-		[FromBody] UpdateViolationCommand command,
+		[FromBody] UpdateViolationRequest body,
 		CancellationToken cancellationToken)
 	{
-		if (violationId != command.ViolationId)
+		if (violationId != body.ViolationId)
 		{
 			return BadRequest(new
 			{
@@ -91,7 +93,18 @@ public sealed class ViolationsController : ControllerBase
 		}
 
 		var result = await _sender.Send(
-			command,
+			new UpdateViolationCommand(
+				body.ViolationId,
+				body.RaceId,
+				body.LegNumber,
+				body.EntryId,
+				body.ReportedByRefereeId,
+				body.ViolationType,
+				body.Description,
+				body.Penalty,
+				body.Status,
+				body.AdminNote,
+				GetUserId()),
 			cancellationToken);
 
 		return Ok(new
@@ -115,4 +128,28 @@ public sealed class ViolationsController : ControllerBase
 			success = result
 		});
 	}
+
+	private int GetUserId()
+	{
+		var claim =
+			User.FindFirst("userId")?.Value ??
+			User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+		if (!int.TryParse(claim, out var userId))
+			throw new UnauthorizedAccessException("Invalid or missing userId claim");
+
+		return userId;
+	}
 }
+
+public sealed record UpdateViolationRequest(
+	int ViolationId,
+	int RaceId,
+	int LegNumber,
+	int EntryId,
+	int ReportedByRefereeId,
+	string ViolationType,
+	string? Description,
+	string Penalty,
+	string Status,
+	string? AdminNote);

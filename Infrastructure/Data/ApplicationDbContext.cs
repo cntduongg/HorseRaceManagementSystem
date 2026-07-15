@@ -35,6 +35,7 @@ public class ApplicationDbContext
     public DbSet<Entry> Entries => Set<Entry>();
 
     public DbSet<LegRefereeEntry> LegRefereeEntries => Set<LegRefereeEntry>();
+    public DbSet<LegRefereeDraft> LegRefereeDrafts => Set<LegRefereeDraft>();
     public DbSet<LegOfficialResult> LegOfficialResults => Set<LegOfficialResult>();
     public DbSet<Violation> Violations => Set<Violation>();
     public DbSet<RaceResult> RaceResults => Set<RaceResult>();

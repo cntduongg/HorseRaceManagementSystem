@@ -29,9 +29,9 @@ public sealed class OpenRegistrationCommandHandler
             ?? throw new KeyNotFoundException("Race not found.");
 
         if (race.Status != RaceExecutionConstants.RaceScheduled)
-            throw new InvalidOperationException("Chỉ mở đăng ký khi đua đang Scheduled.");
+            throw new InvalidOperationException("Registration can only be opened while the race is Scheduled.");
         if (race.OddsComputedAt != null)
-            throw new InvalidOperationException("Đăng ký đã đóng, không thể mở lại.");
+            throw new InvalidOperationException("Registration is closed and cannot be reopened.");
 
         var now = DateTime.UtcNow;
         race.RegistrationOpenAt = now;

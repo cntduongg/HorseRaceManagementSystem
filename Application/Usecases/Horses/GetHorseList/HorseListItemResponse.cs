@@ -3,6 +3,13 @@ namespace Application.Usecases.Horses.GetHorseList;
 public sealed record HorseListItemResponse(
     int HorseId,
     string Name,
+    string? Breed,
+    string? Color,
+    int? BirthYear,
     string Status,
-    string? Breed
+    int OwnerId,
+    string OwnerName,
+    DateTime CreatedAt,
+    string? ImageUrl,
+    string? RejectionReason
 );

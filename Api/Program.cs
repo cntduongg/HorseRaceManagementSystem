@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Application.Common;
+using Application.DTOs;
 using Infrastructure.Data.Seed;
 using Microsoft.OpenApi;
 
@@ -18,12 +19,17 @@ builder.Services.AddProblemDetails();
 
 builder.Services.AddControllers();
 //builder.Services.AddHttpContextAccessor();
+var allowedOrigins = builder.Configuration
+                         .GetSection("Cors:AllowedOrigins")
+                         .Get<string[]>()
+                     ?? [];
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendPolicy", policy =>
     {
         policy
-            .AllowAnyOrigin()
+            .WithOrigins(allowedOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
@@ -84,9 +90,14 @@ builder.Services.AddInfrastructure(builder.Configuration);
 // Flow 7 — tác vụ nền cộng điểm ví +100 mỗi thứ Hai.
 builder.Services.AddHostedService<Api.Services.WeeklyTopUpBackgroundService>();
 
+// Flow 3/4 — tự động đóng ĐK + start Race khi tới ScheduledStartTime.
+builder.Services.Configure<Api.Services.RaceAutoStartOptions>(
+    builder.Configuration.GetSection(Api.Services.RaceAutoStartOptions.SectionName));
+builder.Services.AddHostedService<Api.Services.RaceAutoStartBackgroundService>();
+
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"]
-    ?? throw new InvalidOperationException("JwtSettings:SecretKey is not configured.");
+                ?? throw new InvalidOperationException("JwtSettings:SecretKey is not configured.");
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -142,6 +153,11 @@ builder.Services
 
 builder.Services.AddAuthorization();
 
+builder.Services.Configure<PasswordResetOptions>(
+    builder.Configuration.GetSection(
+        PasswordResetOptions.SectionName));
+
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -151,13 +167,25 @@ using (var scope = app.Services.CreateScope())
 
     await db.Database.MigrateAsync();
 
+    var seedTestDataEnabled =
+        builder.Configuration.GetValue<bool>("SeedTestData");
+
+    if (app.Environment.IsProduction() &&
+        seedTestDataEnabled)
+    {
+        throw new InvalidOperationException(
+            "SeedTestData cannot be enabled in Production.");
+    }
+
     var shouldSeedTestData =
-        app.Environment.IsDevelopment()
-        || builder.Configuration.GetValue<bool>("SeedTestData");
+        app.Environment.IsDevelopment() ||
+        seedTestDataEnabled;
 
     if (shouldSeedTestData)
     {
-        await DatabaseSeeder.SeedAsync(db, passwordHasher);
+        await DatabaseSeeder.SeedAsync(
+            db,
+            passwordHasher);
     }
 }
 
@@ -174,5 +202,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
 
 app.Run();

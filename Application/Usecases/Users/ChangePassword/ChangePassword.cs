@@ -32,25 +32,25 @@ public sealed class ChangePasswordCommandHandler
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.CurrentPassword))
-            throw new InvalidOperationException("Mật khẩu hiện tại là bắt buộc.");
+            throw new InvalidOperationException("Current password is required.");
         if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 8)
-            throw new InvalidOperationException("Mật khẩu mới phải có ít nhất 8 ký tự.");
+            throw new InvalidOperationException("New password must be at least 8 characters.");
 
         var user = await _context.Users
             .FirstOrDefaultAsync(u => u.UserId == request.UserId, cancellationToken)
             ?? throw new KeyNotFoundException("User not found.");
 
         if (!_passwordHasher.Verify(request.CurrentPassword, user.PasswordHash))
-            throw new InvalidOperationException("Mật khẩu hiện tại không đúng.");
+            throw new InvalidOperationException("Current password is incorrect.");
 
         if (_passwordHasher.Verify(request.NewPassword, user.PasswordHash))
-            throw new InvalidOperationException("Mật khẩu mới phải khác mật khẩu cũ.");
+            throw new InvalidOperationException("New password must be different from the old password.");
 
         user.PasswordHash = _passwordHasher.Hash(request.NewPassword);
         user.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        return new ChangePasswordResponse(true, "Đổi mật khẩu thành công.");
+        return new ChangePasswordResponse(true, "Password changed successfully.");
     }
 }

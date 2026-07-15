@@ -34,12 +34,12 @@ public sealed class DeleteEntryCommandHandler
 
             if (entry.HorseOwnerId != request.HorseOwnerId)
             {
-                throw new UnauthorizedAccessException("Bạn không có quyền rút entry này.");
+                throw new UnauthorizedAccessException("You do not have permission to withdraw this entry.");
             }
 
             if (!string.Equals(entry.Status, "Pending", StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidOperationException("Chỉ được rút entry đang Pending.");
+                throw new InvalidOperationException("Only a Pending entry can be withdrawn.");
             }
 
             var now = DateTime.UtcNow;

@@ -31,7 +31,7 @@ public sealed class ResumeRaceCommandHandler
 
         if (race.Status != RaceExecutionConstants.RacePaused)
             throw new InvalidOperationException(
-                $"Chỉ có thể resume đua đang Paused (hiện tại: {race.Status}).");
+                $"You can only resume a Paused race (current: {race.Status}).");
 
         // Còn leg nào Conflicted chưa resolve thì không cho resume.
         var hasUnresolvedConflict = race.Legs
@@ -39,7 +39,7 @@ public sealed class ResumeRaceCommandHandler
 
         if (hasUnresolvedConflict)
             throw new InvalidOperationException(
-                "Vẫn còn leg đang Conflicted chưa được resolve.");
+                "There are still Conflicted legs that have not been resolved.");
 
         race.Status = RaceExecutionConstants.RaceInProgress;
         race.UpdatedAt = DateTime.UtcNow;

@@ -35,7 +35,7 @@ public sealed class LockUserCommandHandler
                 ?? throw new KeyNotFoundException("User not found.");
 
             if (user.Status == "Locked")
-                throw new InvalidOperationException("Tài khoản đã bị khóa.");
+                throw new InvalidOperationException("The account is already locked.");
 
             var now = DateTime.UtcNow;
             user.IsActive = false;
@@ -72,7 +72,7 @@ public sealed class LockUserCommandHandler
                             Type = "BetRefund",
                             Amount = p.BetAmount,
                             BalanceAfter = wallet.Balance,
-                            Reason = "Hoàn cược do khóa tài khoản",
+                            Reason = "Bet refund due to account lock",
                             CreatedAt = now
                         });
                     }

@@ -266,7 +266,8 @@ namespace Infrastructure.Migrations
                     b.HasIndex("RaceId");
 
                     b.HasIndex("HorseOwnerId", "JockeyId", "HorseId", "RaceId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("\"Status\" IN ('Pending', 'Accepted', 'Confirmed')");
 
                     b.ToTable("JockeyInvitations");
                 });
@@ -402,6 +403,44 @@ namespace Infrastructure.Migrations
                     b.ToTable("LegOfficialResults");
                 });
 
+            modelBuilder.Entity("Domain.Aggregates.Entities.LegRefereeDraft", b =>
+                {
+                    b.Property<long>("LegRefereeDraftId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("LegRefereeDraftId"));
+
+                    b.Property<int>("EntryId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LegNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RaceId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RefereeUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("LegRefereeDraftId");
+
+                    b.HasIndex("EntryId");
+
+                    b.HasIndex("RefereeUserId");
+
+                    b.HasIndex("RaceId", "LegNumber", "RefereeUserId", "EntryId")
+                        .IsUnique();
+
+                    b.ToTable("LegRefereeDrafts");
+                });
+
             modelBuilder.Entity("Domain.Aggregates.Entities.LegRefereeEntry", b =>
                 {
                     b.Property<long>("LegRefereeEntryId")
@@ -459,11 +498,19 @@ namespace Infrastructure.Migrations
                     b.Property<DateTime>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("OtpCode")
+                    b.Property<int>("FailedAttempts")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("OtpCodeHash")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<DateTime?>("UsedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("UserId")
@@ -471,7 +518,9 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("OtpId");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId", "CreatedAt")
+                        .HasDatabaseName("IX_PasswordResetOtps_Active_UserId_CreatedAt")
+                        .HasFilter("\"UsedAt\" IS NULL");
 
                     b.ToTable("PasswordResetOtps");
                 });
@@ -789,6 +838,9 @@ namespace Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime>("ScheduledEndTime")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime>("ScheduledStartTime")
                         .HasColumnType("timestamp with time zone");
 
@@ -809,6 +861,9 @@ namespace Infrastructure.Migrations
                     b.HasIndex("Referee2Id");
 
                     b.HasIndex("TournamentId");
+
+                    b.HasIndex("Status", "ScheduledStartTime")
+                        .HasDatabaseName("IX_Races_Status_ScheduledStartTime");
 
                     b.ToTable("Races", t =>
                         {
@@ -924,6 +979,12 @@ namespace Infrastructure.Migrations
                     b.Property<int>("AdminId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("AfterData")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("BeforeData")
+                        .HasColumnType("jsonb");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -940,6 +1001,9 @@ namespace Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AdminId");
+
+                    b.HasIndex("EntityType", "EntityId", "CreatedAt")
+                        .HasDatabaseName("IX_ReviewHistories_EntityType_EntityId_CreatedAt");
 
                     b.ToTable("ReviewHistories");
                 });
@@ -1472,6 +1536,34 @@ namespace Infrastructure.Migrations
                     b.Navigation("Entry");
 
                     b.Navigation("Leg");
+                });
+
+            modelBuilder.Entity("Domain.Aggregates.Entities.LegRefereeDraft", b =>
+                {
+                    b.HasOne("Domain.Aggregates.Entities.Entry", "Entry")
+                        .WithMany()
+                        .HasForeignKey("EntryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Aggregates.Entities.User", "Referee")
+                        .WithMany()
+                        .HasForeignKey("RefereeUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_LegRefereeDrafts_Referee");
+
+                    b.HasOne("Domain.Aggregates.Entities.Leg", "Leg")
+                        .WithMany()
+                        .HasForeignKey("RaceId", "LegNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Entry");
+
+                    b.Navigation("Leg");
+
+                    b.Navigation("Referee");
                 });
 
             modelBuilder.Entity("Domain.Aggregates.Entities.LegRefereeEntry", b =>

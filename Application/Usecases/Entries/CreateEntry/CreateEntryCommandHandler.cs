@@ -47,15 +47,15 @@ public sealed class CreateEntryCommandHandler
             .FirstOrDefaultAsync(
                 h => h.HorseId == request.HorseId,
                 cancellationToken)
-            ?? throw new InvalidOperationException("Ngựa không tồn tại.");
+            ?? throw new InvalidOperationException("Horse does not exist.");
 
         if (horse.OwnerId != request.HorseOwnerId)
             throw new InvalidOperationException(
-                "Bạn không sở hữu con ngựa này.");
+                "You do not own this horse.");
 
         if (horse.Status != "Approved")
             throw new InvalidOperationException(
-                "Chỉ ngựa đã duyệt mới được nộp Entry.");
+                "Only an approved horse can submit an Entry.");
 
         //---------------------------------------------------------
         // Race
@@ -66,11 +66,11 @@ public sealed class CreateEntryCommandHandler
                 r => r.RaceId == request.RaceId,
                 cancellationToken)
             ?? throw new InvalidOperationException(
-                "Cuộc đua không tồn tại.");
+                "Race does not exist.");
 
         if (race.Status != "Scheduled")
             throw new InvalidOperationException(
-                "Chỉ nộp Entry khi cuộc đua đang Scheduled.");
+                "You can only submit an Entry while the race is Scheduled.");
         var now = DateTime.UtcNow;
 
   
@@ -79,13 +79,13 @@ public sealed class CreateEntryCommandHandler
         // Registration chưa mở
         if (race.RegistrationOpenAt == null)
             throw new InvalidOperationException(
-                "Registration chưa được mở.");
+                "Registration has not been opened.");
 
         // Registration đã đóng
         if (race.RegistrationCloseAt != null &&
             race.RegistrationCloseAt <= now)
             throw new InvalidOperationException(
-                "Registration đã đóng.");
+                "Registration is closed.");
         //---------------------------------------------------------
         // Registration full
         //---------------------------------------------------------
@@ -115,7 +115,7 @@ public sealed class CreateEntryCommandHandler
                     x.Status == "Confirmed",
                 cancellationToken)
             ?? throw new InvalidOperationException(
-                "Chưa có nài được xác nhận cho cặp Ngựa + Cuộc đua này.");
+                "No confirmed jockey for this Horse + Race pair yet.");
 
         var jockeyId = confirmed.JockeyId;
 
@@ -132,7 +132,7 @@ public sealed class CreateEntryCommandHandler
 
         if (horseTaken)
             throw new InvalidOperationException(
-                "Ngựa này đã có Entry trong cuộc đua.");
+                "This horse already has an Entry in the race.");
 
         //---------------------------------------------------------
         // Duplicate jockey
@@ -147,7 +147,7 @@ public sealed class CreateEntryCommandHandler
 
         if (jockeyTaken)
             throw new InvalidOperationException(
-                "Nài này đã có Entry trong cuộc đua.");
+                "This jockey already has an Entry in the race.");
 
         //---------------------------------------------------------
         // Create

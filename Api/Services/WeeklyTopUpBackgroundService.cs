@@ -30,7 +30,7 @@ public sealed class WeeklyTopUpBackgroundService : BackgroundService
 
                 if (result.WalletsToppedUp > 0)
                     _logger.LogInformation(
-                        "Weekly top-up: +100 cho {Count} ví (tuần {Week:yyyy-MM-dd}).",
+                        "Weekly top-up: +100 to {Count} wallet(s) (week {Week:yyyy-MM-dd}).",
                         result.WalletsToppedUp, result.WeekStart);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -39,7 +39,7 @@ public sealed class WeeklyTopUpBackgroundService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Weekly top-up thất bại, sẽ thử lại sau.");
+                _logger.LogError(ex, "Weekly top-up failed, will retry later.");
             }
 
             try

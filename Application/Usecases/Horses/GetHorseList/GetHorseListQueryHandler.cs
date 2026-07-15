@@ -15,8 +15,8 @@ public sealed class GetHorseListQueryHandler
     }
 
     public async Task<List<HorseListItemResponse>> Handle(
-        GetHorseListQuery request,
-        CancellationToken cancellationToken)
+     GetHorseListQuery request,
+     CancellationToken cancellationToken)
     {
         var query = _context.Horses.AsQueryable();
 
@@ -26,11 +26,19 @@ public sealed class GetHorseListQueryHandler
         }
 
         return await query
+            .OrderByDescending(x => x.CreatedAt)
             .Select(x => new HorseListItemResponse(
                 x.HorseId,
                 x.Name,
+                x.Breed,
+                x.Color,
+                x.BirthYear,
                 x.Status,
-                x.Breed))
+                x.OwnerId,
+                x.Owner.FullName,
+                x.CreatedAt,
+                x.ImageUrl,
+                x.RejectionReason))
             .ToListAsync(cancellationToken);
     }
 }

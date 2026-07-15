@@ -32,11 +32,11 @@ public sealed class AdjustPointsCommandHandler
         CancellationToken cancellationToken)
     {
         if (request.Amount <= 0)
-            throw new InvalidOperationException("Số điểm phải lớn hơn 0.");
+            throw new InvalidOperationException("The amount must be greater than 0.");
         if (string.IsNullOrWhiteSpace(request.Type))
-            throw new InvalidOperationException("Loại điều chỉnh là bắt buộc.");
+            throw new InvalidOperationException("Adjustment type is required.");
         if (string.IsNullOrWhiteSpace(request.Reason))
-            throw new InvalidOperationException("Lý do là bắt buộc.");
+            throw new InvalidOperationException("A reason is required.");
 
         var isCredit = CreditTypes.Contains(request.Type, StringComparer.OrdinalIgnoreCase);
         var delta = isCredit ? request.Amount : -request.Amount;
@@ -44,7 +44,7 @@ public sealed class AdjustPointsCommandHandler
         var spectatorExists = await _context.Spectators
             .AnyAsync(s => s.UserId == request.UserId, cancellationToken);
         if (!spectatorExists)
-            throw new InvalidOperationException("Người dùng không phải khán giả hoặc không tồn tại.");
+            throw new InvalidOperationException("The user is not a spectator or does not exist.");
 
         var now = DateTime.UtcNow;
 
@@ -67,7 +67,7 @@ public sealed class AdjustPointsCommandHandler
             }
 
             if (wallet.Balance + delta < 0)
-                throw new InvalidOperationException("Số dư không đủ để trừ.");
+                throw new InvalidOperationException("Insufficient balance to deduct.");
 
             wallet.Balance += delta;
             wallet.UpdatedAt = now;

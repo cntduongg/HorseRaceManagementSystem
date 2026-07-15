@@ -6,6 +6,7 @@ public sealed record CreateRaceCommand(
     int TournamentId,
     string Name,
     DateTime ScheduledStartTime,
+    DateTime ScheduledEndTime,
     int NumberOfLegs,
     int MaxHorses,
     string RoundType,
