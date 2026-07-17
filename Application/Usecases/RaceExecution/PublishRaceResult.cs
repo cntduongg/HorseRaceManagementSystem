@@ -181,113 +181,154 @@ public sealed class PublishRaceResultCommandHandler
                 Type = "Publish",
                 Status = "Completed",
                 TriggeredByAdminId = request.AdminUserId,
-                CreatedAt = now
+                CreatedAt = now,
+                TotalPredictions = 0,
+                TotalBetAmount = 0m,
+                TotalPayoutAmount = 0m
             };
-
             _context.SettlementRuns.Add(run);
-            await _context.SaveChangesAsync(cancellationToken); // lấy SettlementRunId
+            await _context.SaveChangesAsync(cancellationToken);
 
-            var predictions = await _context.Predictions
-                .Where(p =>
-                    p.RaceId == race.RaceId &&
-                    (
-                        p.Status == PredictionStatus.Pending ||
-                        p.Status == PredictionStatus.Locked
-                    ))
+            var settledPredictionsCount = 0;
+            var totalPayout = 0m;
+
+            // var run = new SettlementRun
+            // {
+            //     RaceId = race.RaceId,
+            //     Type = "Publish",
+            //     Status = "Completed",
+            //     TriggeredByAdminId = request.AdminUserId,
+            //     CreatedAt = now
+            // };
+            //
+            // _context.SettlementRuns.Add(run);
+            // await _context.SaveChangesAsync(cancellationToken); // lấy SettlementRunId
+            //
+            // var predictions = await _context.Predictions
+            //     .Where(p =>
+            //         p.RaceId == race.RaceId &&
+            //         (
+            //             p.Status == PredictionStatus.Pending ||
+            //             p.Status == PredictionStatus.Locked
+            //         ))
+            //     .ToListAsync(cancellationToken);
+            //
+            // var spectatorIds = predictions
+            //     .Select(p => p.SpectatorId)
+            //     .Distinct()
+            //     .ToList();
+            //
+            // var wallets = await _context.PointWallets
+            //     .Where(w => spectatorIds.Contains(w.SpectatorId))
+            //     .ToListAsync(cancellationToken);
+            //
+            // decimal totalBet = 0m;
+            // decimal totalPayout = 0m;
+            //
+            // foreach (var prediction in predictions)
+            // {
+            //     var won = winnerEntryId is not null &&
+            //               prediction.FirstEntryId == winnerEntryId.Value;
+            //
+            //     var payout = won
+            //         ? Math.Round(
+            //             prediction.BetAmount * prediction.OddsLocked1,
+            //             2,
+            //             MidpointRounding.AwayFromZero)
+            //         : 0m;
+            //
+            //     totalBet += prediction.BetAmount;
+            //     totalPayout += payout;
+            //
+            //     int? payoutTxId = null;
+            //
+            //     if (won && payout > 0)
+            //     {
+            //         var wallet = wallets.FirstOrDefault(w =>
+            //             w.SpectatorId == prediction.SpectatorId);
+            //
+            //         if (wallet is null)
+            //         {
+            //             throw new InvalidOperationException(
+            //                 $"Wallet not found for spectator #{prediction.SpectatorId}.");
+            //         }
+            //
+            //         // Settlement là giao dịch hệ thống.
+            //         // Vẫn credit payout để kết quả tài chính đúng.
+            //         wallet.Balance += payout;
+            //         wallet.UpdatedAt = now;
+            //
+            //         var payoutTx = new WalletTransaction
+            //         {
+            //             WalletId = wallet.WalletId,
+            //             SpectatorId = prediction.SpectatorId,
+            //             PredictionId = prediction.PredictionId,
+            //             SettlementRunId = run.SettlementRunId,
+            //             Type = "Payout",
+            //             Amount = payout,
+            //             BalanceAfter = wallet.Balance,
+            //             Reason =
+            //                 $"Won bet on race #{race.RaceId}, entry #{prediction.FirstEntryId}, odds {prediction.OddsLocked1}",
+            //             CreatedAt = now
+            //         };
+            //
+            //         _context.WalletTransactions.Add(payoutTx);
+            //
+            //         await _context.SaveChangesAsync(cancellationToken);
+            //
+            //         payoutTxId = payoutTx.WalletTransactionId;
+            //     }
+            //
+            //     _context.PredictionSettlements.Add(new PredictionSettlement
+            //     {
+            //         SettlementRunId = run.SettlementRunId,
+            //         PredictionId = prediction.PredictionId,
+            //         RaceId = race.RaceId,
+            //         SpectatorId = prediction.SpectatorId,
+            //         MatchedCount = won ? 1 : 0,
+            //         Outcome = won ? "Won" : "Lost",
+            //         BetAmount = prediction.BetAmount,
+            //         OddsAverage = prediction.OddsLocked1,
+            //         PayoutAmount = payout,
+            //         NetAmount = payout - prediction.BetAmount,
+            //         PayoutTransactionId = payoutTxId,
+            //         SettledAt = now,
+            //         IsRollbacked = false
+            //     });
+            //
+            //     prediction.Status = won
+            //         ? PredictionStatus.Won
+            //         : PredictionStatus.Lost;
+            // }
+            //
+            // run.TotalPredictions = predictions.Count;
+            // run.TotalBetAmount = totalBet;
+            // run.TotalPayoutAmount = totalPayout;
+            
+// 1. Lấy danh sách ID các ngựa đã thực tế tham gia cuộc đua
+            var participantHorseIds = entries.Select(e => e.HorseId).Distinct().ToList();
+// 2. Trừ 1 điểm thể lực của tất cả ngựa tham gia đua (Tối thiểu về 0)
+            var participantHorses = await _context.Horses
+                .Where(h => participantHorseIds.Contains(h.HorseId))
                 .ToListAsync(cancellationToken);
-
-            var spectatorIds = predictions
-                .Select(p => p.SpectatorId)
-                .Distinct()
-                .ToList();
-
-            var wallets = await _context.PointWallets
-                .Where(w => spectatorIds.Contains(w.SpectatorId))
-                .ToListAsync(cancellationToken);
-
-            decimal totalBet = 0m;
-            decimal totalPayout = 0m;
-
-            foreach (var prediction in predictions)
+            foreach (var h in participantHorses)
             {
-                var won = winnerEntryId is not null &&
-                          prediction.FirstEntryId == winnerEntryId.Value;
-
-                var payout = won
-                    ? Math.Round(
-                        prediction.BetAmount * prediction.OddsLocked1,
-                        2,
-                        MidpointRounding.AwayFromZero)
-                    : 0m;
-
-                totalBet += prediction.BetAmount;
-                totalPayout += payout;
-
-                int? payoutTxId = null;
-
-                if (won && payout > 0)
-                {
-                    var wallet = wallets.FirstOrDefault(w =>
-                        w.SpectatorId == prediction.SpectatorId);
-
-                    if (wallet is null)
-                    {
-                        throw new InvalidOperationException(
-                            $"Wallet not found for spectator #{prediction.SpectatorId}.");
-                    }
-
-                    // Settlement là giao dịch hệ thống.
-                    // Vẫn credit payout để kết quả tài chính đúng.
-                    wallet.Balance += payout;
-                    wallet.UpdatedAt = now;
-
-                    var payoutTx = new WalletTransaction
-                    {
-                        WalletId = wallet.WalletId,
-                        SpectatorId = prediction.SpectatorId,
-                        PredictionId = prediction.PredictionId,
-                        SettlementRunId = run.SettlementRunId,
-                        Type = "Payout",
-                        Amount = payout,
-                        BalanceAfter = wallet.Balance,
-                        Reason =
-                            $"Won bet on race #{race.RaceId}, entry #{prediction.FirstEntryId}, odds {prediction.OddsLocked1}",
-                        CreatedAt = now
-                    };
-
-                    _context.WalletTransactions.Add(payoutTx);
-
-                    await _context.SaveChangesAsync(cancellationToken);
-
-                    payoutTxId = payoutTx.WalletTransactionId;
-                }
-
-                _context.PredictionSettlements.Add(new PredictionSettlement
-                {
-                    SettlementRunId = run.SettlementRunId,
-                    PredictionId = prediction.PredictionId,
-                    RaceId = race.RaceId,
-                    SpectatorId = prediction.SpectatorId,
-                    MatchedCount = won ? 1 : 0,
-                    Outcome = won ? "Won" : "Lost",
-                    BetAmount = prediction.BetAmount,
-                    OddsAverage = prediction.OddsLocked1,
-                    PayoutAmount = payout,
-                    NetAmount = payout - prediction.BetAmount,
-                    PayoutTransactionId = payoutTxId,
-                    SettledAt = now,
-                    IsRollbacked = false
-                });
-
-                prediction.Status = won
-                    ? PredictionStatus.Won
-                    : PredictionStatus.Lost;
+                h.Stamina = Math.Max(0, h.Stamina - 1);
+                h.UpdatedAt = now;
             }
 
-            run.TotalPredictions = predictions.Count;
-            run.TotalBetAmount = totalBet;
-            run.TotalPayoutAmount = totalPayout;
+// 3. Hồi phục full 3 điểm thể lực cho các ngựa hoạt động khác (Nghỉ ngơi không đua trận này)
+            var restingHorses = await _context.Horses
+                .Where(h => h.Status == "Approved" && !participantHorseIds.Contains(h.HorseId))
+                .ToListAsync(cancellationToken);
+            foreach (var h in restingHorses)
+            {
+                h.Stamina = 3;
+                h.UpdatedAt = now;
+            }
 
+// Lưu thay đổi thể lực xuống database
+            await _context.SaveChangesAsync(cancellationToken);
             // ── 5. Chốt race ──
             race.Status = RaceExecutionConstants.RaceFinished;
             race.PublishedAt = now;
@@ -309,8 +350,8 @@ public sealed class PublishRaceResultCommandHandler
                         publishedAt = race.PublishedAt,
                         settlementRunId = run.SettlementRunId,
                         resultsCount = ranked.Count,
-                        settledPredictions = predictions.Count,
-                        totalPayout
+                        settledPredictions = settledPredictionsCount,
+                        totalPayout = totalPayout
                     }),
                     AdminId = request.AdminUserId
                 },
@@ -327,7 +368,7 @@ public sealed class PublishRaceResultCommandHandler
                 race.RaceId,
                 race.Status,
                 ranked.Count,
-                predictions.Count,
+                settledPredictionsCount,
                 totalPayout);
         }
         catch

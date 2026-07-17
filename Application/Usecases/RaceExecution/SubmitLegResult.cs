@@ -17,7 +17,7 @@ public sealed record SubmitLegResultCommand(
 public sealed record SubmitPositionItem(int EntryId, int Position);
 
 public sealed record SubmitLegResultResponse(
-    string Status,            // AwaitingSecondReferee | Matched | Conflicted
+    string Status, // AwaitingSecondReferee | Matched | Conflicted
     int LegIndex,
     int LegNumber,
     string Message,
@@ -29,6 +29,94 @@ public sealed class SubmitLegResultCommandHandler
 {
     private readonly IApplicationDbContext _context;
     private readonly IRaceLiveChangeTracker _liveTracker;
+
+    private async Task SettleLegPredictionsAsync(int raceId, int legNumber, DateTime now, CancellationToken ct)
+    {
+        var winnerResult = await _context.LegOfficialResults
+            .FirstOrDefaultAsync(r => r.RaceId == raceId && r.LegNumber == legNumber && r.FinishPosition == 1, ct);
+
+        if (winnerResult == null) return;
+
+        var run = new SettlementRun
+        {
+            RaceId = raceId,
+            Type = $"Leg{legNumber}Publish",
+            Status = "Completed",
+            CreatedAt = now
+        };
+        _context.SettlementRuns.Add(run);
+        await _context.SaveChangesAsync(ct);
+
+        var predictions = await _context.Predictions
+            .Where(p => p.RaceId == raceId && p.LegNumber == legNumber && p.Status == PredictionStatus.Locked)
+            .ToListAsync(ct);
+
+        var spectatorIds = predictions.Select(p => p.SpectatorId).Distinct().ToList();
+        var wallets = await _context.PointWallets.Where(w => spectatorIds.Contains(w.SpectatorId)).ToListAsync(ct);
+
+        decimal totalBet = 0m;
+        decimal totalPayout = 0m;
+
+        foreach (var prediction in predictions)
+        {
+            var won = prediction.FirstEntryId == winnerResult.EntryId;
+            var payout = won
+                ? Math.Round(prediction.BetAmount * prediction.OddsLocked1, 2, MidpointRounding.AwayFromZero)
+                : 0m;
+
+            totalBet += prediction.BetAmount;
+            totalPayout += payout;
+            int? payoutTxId = null;
+
+            if (won && payout > 0)
+            {
+                var wallet = wallets.FirstOrDefault(w => w.SpectatorId == prediction.SpectatorId);
+                if (wallet is not null)
+                {
+                    wallet.Balance += payout;
+                    wallet.UpdatedAt = now;
+
+                    var payoutTx = new WalletTransaction
+                    {
+                        WalletId = wallet.WalletId,
+                        SpectatorId = prediction.SpectatorId,
+                        PredictionId = prediction.PredictionId,
+                        SettlementRunId = run.SettlementRunId,
+                        Type = "Payout",
+                        Amount = payout,
+                        BalanceAfter = wallet.Balance,
+                        Reason = $"Payout Leg #{legNumber} Race #{raceId}",
+                        CreatedAt = now
+                    };
+                    _context.WalletTransactions.Add(payoutTx);
+                    await _context.SaveChangesAsync(ct);
+                    payoutTxId = payoutTx.WalletTransactionId;
+                }
+            }
+
+            _context.PredictionSettlements.Add(new PredictionSettlement
+            {
+                SettlementRunId = run.SettlementRunId,
+                PredictionId = prediction.PredictionId,
+                RaceId = raceId,
+                SpectatorId = prediction.SpectatorId,
+                MatchedCount = won ? 1 : 0,
+                Outcome = won ? "Won" : "Lost",
+                BetAmount = prediction.BetAmount,
+                OddsAverage = prediction.OddsLocked1,
+                PayoutAmount = payout,
+                NetAmount = payout - prediction.BetAmount,
+                PayoutTransactionId = payoutTxId,
+                SettledAt = now
+            });
+
+            prediction.Status = won ? PredictionStatus.Won : PredictionStatus.Lost;
+        }
+
+        run.TotalPredictions = predictions.Count;
+        run.TotalBetAmount = totalBet;
+        run.TotalPayoutAmount = totalPayout;
+    }
 
     public SubmitLegResultCommandHandler(
         IApplicationDbContext context,
@@ -45,9 +133,9 @@ public sealed class SubmitLegResultCommandHandler
         var legNumber = request.LegIndex + 1;
 
         var race = await _context.Races
-            .Include(r => r.Legs)
-            .FirstOrDefaultAsync(r => r.RaceId == request.RaceId, cancellationToken)
-            ?? throw new KeyNotFoundException("Race not found.");
+                       .Include(r => r.Legs)
+                       .FirstOrDefaultAsync(r => r.RaceId == request.RaceId, cancellationToken)
+                   ?? throw new KeyNotFoundException("Race not found.");
 
         if (race.Status != RaceExecutionConstants.RaceInProgress)
             throw new InvalidOperationException(
@@ -60,11 +148,11 @@ public sealed class SubmitLegResultCommandHandler
             throw new UnauthorizedAccessException("Only an assigned referee can submit.");
 
         var leg = race.Legs.FirstOrDefault(l => l.LegNumber == legNumber)
-            ?? throw new KeyNotFoundException("Leg not found.");
+                  ?? throw new KeyNotFoundException("Leg not found.");
 
         if (leg.Status is RaceExecutionConstants.LegConfirmed
-                       or RaceExecutionConstants.LegConflicted
-                       or RaceExecutionConstants.LegResolved)
+            or RaceExecutionConstants.LegConflicted
+            or RaceExecutionConstants.LegResolved)
             throw new InvalidOperationException($"Leg {legNumber} is already locked ({leg.Status}).");
 
         // ── Validate payload so với entry đã duyệt ──
@@ -169,6 +257,7 @@ public sealed class SubmitLegResultCommandHandler
             leg.ConfirmationType = RaceExecutionConstants.AutoMatched;
             leg.ConfirmedAt = now;
             leg.FinishedAt = now;
+            leg.ExecutionStatus = "Completed";
 
             foreach (var item in submitted)
             {
@@ -187,6 +276,8 @@ public sealed class SubmitLegResultCommandHandler
                     ConfirmedAt = now
                 });
             }
+
+            await SettleLegPredictionsAsync(request.RaceId, legNumber, now, cancellationToken);
 
             var (isComplete, nextLegIndex) = AdvanceRaceIfComplete(race, legNumber);
             await _context.SaveChangesAsync(cancellationToken);

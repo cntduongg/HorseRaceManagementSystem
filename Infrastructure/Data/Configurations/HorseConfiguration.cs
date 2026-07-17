@@ -22,7 +22,9 @@ public class HorseConfiguration : IEntityTypeConfiguration<Horse>
             .WithMany(u => u.OwnedHorses)
             .HasForeignKey(h => h.OwnerId)
             .OnDelete(DeleteBehavior.Restrict);
-
+        builder.Property(h => h.Stamina)
+            .HasDefaultValue(3)
+            .IsRequired();
         builder.HasOne<User>()
             .WithMany()
             .HasForeignKey(h => h.ApprovedBy)

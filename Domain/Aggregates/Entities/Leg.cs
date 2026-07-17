@@ -1,3 +1,5 @@
+using Domain.Aggregates.Constants;
+
 namespace Domain.Aggregates.Entities;
 public class Leg
 {
@@ -15,4 +17,10 @@ public class Leg
     public ICollection<LegRefereeEntry> RefereeEntries { get; set; } = new List<LegRefereeEntry>();
     public ICollection<LegOfficialResult> OfficialResults { get; set; } = new List<LegOfficialResult>();
     public ICollection<Violation> Violations { get; set; } = new List<Violation>();
+    public string ExecutionStatus { get; set; }
+        = LegExecutionStatuses.Pending;
+    public DateTime? PredictionOpenedAt { get; set; }
+    public DateTime? PredictionClosedAt { get; set; }
+    public ICollection<Prediction> Predictions { get; set; }
+        = new List<Prediction>();
 }

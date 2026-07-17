@@ -287,6 +287,10 @@ public sealed class AdminController : ControllerBase
     [HttpPost("points/weekly-topup")]
     public async Task<IActionResult> RunWeeklyTopUp(CancellationToken ct)
         => Ok(await _sender.Send(new RunWeeklyTopUpCommand(), ct));
+    [HttpPost("points/daily-topup")]
+    [Authorize(Roles = "ADMIN")]
+    public async Task<IActionResult> RunDailyTopUp(CancellationToken ct)
+        => Ok(await _sender.Send(new RunDailyTopUpCommand(), ct));
 
     // =========================
     // DISCREPANCIES

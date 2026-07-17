@@ -23,4 +23,8 @@ public sealed record RacePredictionOddsEntryResponse(
     decimal BaseOdds,
     decimal CurrentOdds,
     decimal EntryPool,
-    decimal TotalPool);
+    decimal TotalPool,
+    int HorseStamina,
+    string HorseHealthStatus);
+    
+    

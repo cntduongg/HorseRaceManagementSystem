@@ -274,6 +274,13 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
         DateTime now,
         CancellationToken cancellationToken)
     {
+        var legs = await _context.Legs.Where(l => l.RaceId == race.RaceId).ToListAsync(cancellationToken);
+        foreach (var leg in legs)
+        {
+            leg.ExecutionStatus = "PredictionOpen";
+            leg.PredictionOpenedAt = now;
+        }
+        
         var entries = race.Entries.Count > 0
             ? race.Entries.ToList()
             : await _context.Entries

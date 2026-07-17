@@ -25,41 +25,39 @@ public sealed class PredictionsController : ControllerBase
 
     // Flow 7.35
     // Spectator xem locked odds của từng Entry trong Race đang Scheduled.
-    [HttpGet("races/{raceId:int}/odds")]
+    [HttpGet("races/{raceId:int}/legs/{legNumber:int}/odds")]
     [Authorize(Roles = "SPECTATOR,ADMIN,REFEREE,HORSE_OWNER")]
-    public async Task<ActionResult<RacePredictionOddsResponse>> GetRaceOdds(
+    public async Task<ActionResult<RacePredictionOddsResponse>> GetLegOdds(
         [FromRoute] int raceId,
+        [FromRoute] int legNumber,
         CancellationToken cancellationToken)
     {
         var result = await _sender.Send(
-            new GetRacePredictionOddsQuery(raceId),
+            new GetLegPredictionOddsQuery(raceId, legNumber),
             cancellationToken);
-
         return Ok(result);
     }
 
     // Flow 7.36 - 7.38
     // Spectator đặt prediction: chọn 1 Entry + BetAmount.
     // RaceId lấy từ route, SpectatorId lấy từ JWT, không tin body.
-    [HttpPost("races/{raceId:int}")]
+    [HttpPost("races/{raceId:int}/legs/{legNumber:int}")]
     [Authorize(Roles = "SPECTATOR")]
     public async Task<ActionResult> Create(
         [FromRoute] int raceId,
+        [FromRoute] int legNumber,
         [FromBody] PredictionRequest request,
         CancellationToken cancellationToken)
     {
         var predictionId = await _sender.Send(
             new CreatePredictionCommand(
                 RaceId: raceId,
+                LegNumber: legNumber,
                 SpectatorId: GetUserId(),
                 FirstEntryId: request.EntryId,
                 BetAmount: request.BetAmount),
             cancellationToken);
-
-        return CreatedAtAction(
-            nameof(GetById),
-            new { predictionId },
-            new { predictionId });
+        return CreatedAtAction(nameof(GetById), new { predictionId }, new { predictionId });
     }
 
     [HttpGet("{predictionId:int}")]

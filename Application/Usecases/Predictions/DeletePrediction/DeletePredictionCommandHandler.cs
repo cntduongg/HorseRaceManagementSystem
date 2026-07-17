@@ -22,6 +22,7 @@ public sealed class DeletePredictionCommandHandler
         DeletePredictionCommand request,
         CancellationToken cancellationToken)
     {
+        
         if (request.PredictionId <= 0)
             throw new InvalidOperationException("PredictionId is required.");
 
@@ -35,7 +36,15 @@ public sealed class DeletePredictionCommandHandler
                      x.SpectatorId == request.SpectatorId,
                 cancellationToken)
             ?? throw new InvalidOperationException("Prediction not found.");
+// Spectator có thể hủy cược miễn là Leg đó chưa Bắt đầu (tức chưa InProgress/Completed/Cancelled)
+        var leg = await _context.Legs.AsNoTracking()
+            .FirstOrDefaultAsync(l => l.RaceId == prediction.RaceId && l.LegNumber == prediction.LegNumber, cancellationToken);
 
+        if (leg is null || leg.ExecutionStatus == "InProgress" || leg.ExecutionStatus == "Completed" || leg.ExecutionStatus == "Cancelled")
+        {
+            throw new InvalidOperationException("You cannot cancel predictions once the leg is in progress or completed.");
+        }
+        
         if (prediction.Status == PredictionStatus.Cancelled)
             throw new InvalidOperationException("Prediction already cancelled.");
 
@@ -98,5 +107,6 @@ public sealed class DeletePredictionCommandHandler
             await tx.RollbackAsync(cancellationToken);
             throw;
         }
+        
     }
 }

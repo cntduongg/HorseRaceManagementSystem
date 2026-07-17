@@ -8,6 +8,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using Application.Usecases.Horses.GetHorseStatistics;
 
 namespace Api.Controllers;
 
@@ -34,6 +35,19 @@ public sealed class HorsesController : ControllerBase
             nameof(GetById),
             new { horseId },
             new { horseId });
+    }
+    [HttpGet("{horseId:int}/statistics")]
+    [Authorize] // Yêu cầu đăng nhập, mọi role đều truy cập được
+    public async Task<ActionResult<HorseStatisticsResponse>> GetStatistics(
+        [FromRoute] int horseId, 
+        CancellationToken ct)
+    {
+        var stats = await _sender.Send(new GetHorseStatisticsQuery(horseId), ct);
+        if (stats == null) 
+        {
+            return NotFound(new { message = "Horse not found" });
+        }
+        return Ok(stats);
     }
 
     [HttpGet]

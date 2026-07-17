@@ -197,6 +197,11 @@ namespace Infrastructure.Migrations
                     b.Property<string>("RejectionReason")
                         .HasColumnType("text");
 
+                    b.Property<int>("Stamina")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(3);
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -341,7 +346,17 @@ namespace Infrastructure.Migrations
                     b.Property<DateTime?>("ConflictReportedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("ExecutionStatus")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<DateTime?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("PredictionClosedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("PredictionOpenedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("StartedAt")
@@ -585,6 +600,9 @@ namespace Infrastructure.Migrations
                     b.Property<int>("FirstEntryId")
                         .HasColumnType("integer");
 
+                    b.Property<int>("LegNumber")
+                        .HasColumnType("integer");
+
                     b.Property<decimal>("OddsLocked1")
                         .HasPrecision(10, 4)
                         .HasColumnType("numeric(10,4)");
@@ -627,6 +645,8 @@ namespace Infrastructure.Migrations
                     b.HasIndex("Status");
 
                     b.HasIndex("ThirdEntryId");
+
+                    b.HasIndex("RaceId", "LegNumber");
 
                     b.HasIndex("RaceId", "SpectatorId", "Status");
 
@@ -1649,7 +1669,15 @@ namespace Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("FK_Predictions_ThirdEntry");
 
+                    b.HasOne("Domain.Aggregates.Entities.Leg", "Leg")
+                        .WithMany("Predictions")
+                        .HasForeignKey("RaceId", "LegNumber")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("FirstEntry");
+
+                    b.Navigation("Leg");
 
                     b.Navigation("Race");
 
@@ -1967,6 +1995,8 @@ namespace Infrastructure.Migrations
             modelBuilder.Entity("Domain.Aggregates.Entities.Leg", b =>
                 {
                     b.Navigation("OfficialResults");
+
+                    b.Navigation("Predictions");
 
                     b.Navigation("RefereeEntries");
 
