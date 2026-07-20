@@ -1,5 +1,6 @@
 using Application.Common.Interfaces;
 using Application.Usecases.Predictions.Common;
+using Domain.Aggregates.Constants;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -25,6 +26,10 @@ public sealed class GetLegPredictionOddsQueryHandler : IRequestHandler<GetLegPre
         if (leg.ExecutionStatus == "Completed" || leg.ExecutionStatus == "Cancelled")
             throw new InvalidOperationException("Leg is already finished.");
 
+        // Cửa cược mở khi Leg chưa bắt đầu chạy (Pending/PredictionOpen/AwaitingResult).
+        // Leg đang InProgress vẫn xem được Odds nhưng không được đặt cược → FE dùng cờ này để khóa form.
+        var isBettingOpen = LegExecutionStatuses.IsBettingOpen(leg.ExecutionStatus);
+
         var dynamicOdds = await PredictionOddsCalculator.CalculateLegOddsAsync(_context, request.RaceId, request.LegNumber, cancellationToken);
         var oddsByEntryId = dynamicOdds.ToDictionary(x => x.EntryId);
 
@@ -42,6 +47,6 @@ public sealed class GetLegPredictionOddsQueryHandler : IRequestHandler<GetLegPre
                     odds.BaseOdds, odds.CurrentOdds, odds.EntryPool, odds.TotalPool, e.HorseStamina, e.HorseHealthStatus);
             }).ToList();
 
-        return new RacePredictionOddsResponse(race.RaceId, race.Name, race.Status, race.ScheduledStartTime, race.OddsComputedAt, true, resultEntries);
+        return new RacePredictionOddsResponse(race.RaceId, race.Name, race.Status, race.ScheduledStartTime, race.OddsComputedAt, isBettingOpen, resultEntries);
     }
 }

@@ -170,13 +170,14 @@ public sealed class SubmitLegResultCommandHandler
         if (!submittedIds.SetEquals(approvedEntryIds))
             throw new InvalidOperationException("The entry list does not match the race's approved entries.");
 
-        // Không trùng thứ hạng dương.
-        var positiveRanks = submitted
-            .Where(x => x.Position > 0)
-            .Select(x => x.Position)
-            .ToList();
-        if (positiveRanks.Count != positiveRanks.Distinct().Count())
-            throw new InvalidOperationException("Duplicate ranking — each position can be assigned to only one entry.");
+        // Số ngựa thực đua của race — vừa là biên trên của thứ hạng, vừa là cơ sở tính Leg Points.
+        var fieldSize = approvedEntryIds.Count;
+
+        // Vị trí phải nằm trong 1..fieldSize, không trùng, và liên tục từ 1 (bỏ DNF/DQ).
+        var positionError = RaceExecutionConstants.ValidatePositions(
+            submitted.Select(x => x.Position).ToList(), fieldSize);
+        if (positionError is not null)
+            throw new InvalidOperationException(positionError);
 
         // ── Chặn submit trùng (append-only, 1 referee/leg) ──
         var alreadyMine = await _context.LegRefereeEntries.AnyAsync(
@@ -271,7 +272,7 @@ public sealed class SubmitLegResultCommandHandler
                     EntryId = item.EntryId,
                     FinishPosition = finishPosition,
                     ResultStatus = resultStatus,
-                    LegPoints = RaceExecutionConstants.LegPointsFor(finishPosition, resultStatus),
+                    LegPoints = RaceExecutionConstants.LegPointsFor(finishPosition, resultStatus, fieldSize),
                     ConfirmationType = RaceExecutionConstants.AutoMatched,
                     ConfirmedAt = now
                 });

@@ -128,7 +128,7 @@ public sealed class PublishRaceResultCommandHandler
                 }
 
                 var finalPosition = r.FinalPosition;
-                var prize = RaceExecutionConstants.PrizePointsFor(finalPosition);
+                var prize = RaceExecutionConstants.PrizePointsFor(finalPosition, entries.Count);
 
                 if (prize <= 0)
                 {
@@ -169,7 +169,9 @@ public sealed class PublishRaceResultCommandHandler
                     profile.TotalRaces += 1;
                     if (!r.IsDq && r.FinalPosition == 1) profile.TotalWins += 1;
                     if (!r.IsDq && r.FinalPosition <= 3) profile.TotalTop3 += 1;
-                    profile.CareerPrizePoints += r.IsDq ? 0 : RaceExecutionConstants.PrizePointsFor(r.FinalPosition);
+                    profile.CareerPrizePoints += r.IsDq
+                        ? 0
+                        : RaceExecutionConstants.PrizePointsFor(r.FinalPosition, entries.Count);
                     profile.UpdatedAt = now;
                 }
             }

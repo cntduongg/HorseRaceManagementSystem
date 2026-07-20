@@ -1,5 +1,6 @@
 using Application.Common;
 using Application.Common.Interfaces;
+using Domain.Aggregates.Constants;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,11 +14,19 @@ namespace Application.Usecases.RaceExecution;
 // Results chỉ có ở leg đã Confirmed/Resolved (nguồn: LegOfficialResults).
 public sealed record GetRaceLiveQuery(int RaceId) : IQuery<RaceLiveResponse>;
 
+// Đủ dữ liệu trình bày để FE dựng đường đua (màu lông, số áo theo GateNumber, odds) mà không
+// phải gọi thêm GET /api/predictions/races/{id}/legs/{n}/odds.
 public sealed record RaceLiveEntryDto(
     int EntryId,
+    int HorseId,
     int? GateNumber,
     string HorseName,
-    string JockeyName);
+    string JockeyName,
+    string? Color,        // màu lông (free-text: Bay/Chestnut/…)
+    string? ImageUrl,
+    int Stamina,          // 0..3
+    string HealthStatus,  // Healthy|Fair|Weak|Exhausted (computed trên Horse)
+    decimal Odds);        // đã khóa lúc đóng đăng ký
 
 public sealed record RaceLiveLegResultDto(
     int EntryId,
@@ -27,11 +36,15 @@ public sealed record RaceLiveLegResultDto(
 public sealed record RaceLiveLegDto(
     int LegIndex,
     int LegNumber,
-    string Status,            // Pending|AwaitingSecondReferee|Confirmed|Conflicted|Resolved
+    string Status,            // Pending|AwaitingSecondReferee|Confirmed|Conflicted|Resolved (blind)
+    string ExecutionStatus,   // Pending|PredictionOpen|InProgress|AwaitingResult|Completed|Cancelled (vòng đời)
+    bool IsBettingOpen,       // cửa cược của leg đang mở? (ExecutionStatus ∈ {Pending,PredictionOpen,AwaitingResult})
     bool IsConfirmed,         // Confirmed || Resolved → FE hiện bảng vị trí
     bool IsConflicted,        // Conflicted → FE hiện "Đang xem xét"
     string? ConfirmationType, // AutoMatched | AdminOverride | null
-    DateTime? ConfirmedAt,
+    DateTime? StartedAt,      // mốc leg bắt đầu chạy — FE đếm giờ khi đang đua
+    DateTime? FinishedAt,
+    DateTime? ConfirmedAt,    // cùng StartedAt cho phép mọi client đồng bộ pha khi phát lại
     IReadOnlyList<RaceLiveLegResultDto> Results); // rỗng nếu leg chưa Confirmed/Resolved
 
 public sealed record RaceLiveStandingDto(
@@ -95,9 +108,15 @@ public sealed class GetRaceLiveQueryHandler
             .ThenBy(e => e.EntryId)
             .Select(e => new RaceLiveEntryDto(
                 e.EntryId,
+                e.HorseId,
                 e.GateNumber,
                 e.Horse?.Name ?? $"Horse #{e.HorseId}",
-                e.Jockey?.FullName ?? $"Jockey #{e.JockeyId}"))
+                e.Jockey?.FullName ?? $"Jockey #{e.JockeyId}",
+                e.Horse?.Color,
+                e.Horse?.ImageUrl,
+                e.Horse?.Stamina ?? 0,
+                e.Horse?.HealthStatus ?? "Unknown",
+                e.Odds))
             .ToList();
 
         var legs = race.Legs
@@ -124,9 +143,13 @@ public sealed class GetRaceLiveQueryHandler
                     LegIndex: l.LegNumber - 1,
                     LegNumber: l.LegNumber,
                     Status: l.Status,
+                    ExecutionStatus: l.ExecutionStatus,
+                    IsBettingOpen: LegExecutionStatuses.IsBettingOpen(l.ExecutionStatus),
                     IsConfirmed: isConfirmed,
                     IsConflicted: l.Status == RaceExecutionConstants.LegConflicted,
                     ConfirmationType: l.ConfirmationType,
+                    StartedAt: l.StartedAt,
+                    FinishedAt: l.FinishedAt,
                     ConfirmedAt: l.ConfirmedAt,
                     Results: results);
             })

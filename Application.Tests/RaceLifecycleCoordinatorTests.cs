@@ -248,6 +248,54 @@ public class RaceLifecycleCoordinatorTests
     }
 
     [Fact]
+    public void LegPoints_ScaleWithFieldSize()
+    {
+        // 8 ngựa → nhất 8 điểm, chót 1 điểm (không còn ai bị 0 oan như thang cứng cũ).
+        Assert.Equal(8, RaceExecutionConstants.LegPointsFor(1, RaceExecutionConstants.ResultFinished, 8));
+        Assert.Equal(1, RaceExecutionConstants.LegPointsFor(8, RaceExecutionConstants.ResultFinished, 8));
+
+        // 4 ngựa → nhất 4 điểm, chót 1 điểm.
+        Assert.Equal(4, RaceExecutionConstants.LegPointsFor(1, RaceExecutionConstants.ResultFinished, 4));
+        Assert.Equal(1, RaceExecutionConstants.LegPointsFor(4, RaceExecutionConstants.ResultFinished, 4));
+
+        // DNF/DQ luôn 0; hạng vượt sĩ số coi như dữ liệu hỏng → 0.
+        Assert.Equal(0, RaceExecutionConstants.LegPointsFor(null, RaceExecutionConstants.ResultDnf, 8));
+        Assert.Equal(0, RaceExecutionConstants.LegPointsFor(null, RaceExecutionConstants.ResultDq, 8));
+        Assert.Equal(0, RaceExecutionConstants.LegPointsFor(9, RaceExecutionConstants.ResultFinished, 8));
+    }
+
+    [Fact]
+    public void PrizePoints_ScaleWithFieldSize_AnchoredToLegacyTop()
+    {
+        // Neo với thang cũ: race 5 ngựa → nhất vẫn đúng 1000 điểm.
+        Assert.Equal(1000, RaceExecutionConstants.PrizePointsFor(1, 5));
+        Assert.Equal(200, RaceExecutionConstants.PrizePointsFor(5, 5));
+        Assert.Equal(1600, RaceExecutionConstants.PrizePointsFor(1, 8));
+        Assert.Equal(0, RaceExecutionConstants.PrizePointsFor(9, 8));
+        Assert.Equal(0, RaceExecutionConstants.PrizePointsFor(0, 8));
+    }
+
+    [Theory]
+    // hợp lệ: đủ 1..N
+    [InlineData(new[] { 1, 2, 3 }, 3, true)]
+    // hợp lệ: có DNF/DQ, phần xếp hạng vẫn liên tục từ 1
+    [InlineData(new[] { 1, 2, -1 }, 3, true)]
+    [InlineData(new[] { 1, -2, -2 }, 3, true)]
+    // vượt sĩ số
+    [InlineData(new[] { 1, 2, 99 }, 3, false)]
+    // trùng hạng
+    [InlineData(new[] { 1, 1, 2 }, 3, false)]
+    // đứt quãng (thiếu hạng 2)
+    [InlineData(new[] { 1, 3, -1 }, 3, false)]
+    // giá trị âm không hợp lệ
+    [InlineData(new[] { 1, 2, -5 }, 3, false)]
+    public void ValidatePositions_EnforcesRangeAndContiguity(int[] positions, int fieldSize, bool expectValid)
+    {
+        var error = RaceExecutionConstants.ValidatePositions(positions, fieldSize);
+        Assert.Equal(expectValid, error is null);
+    }
+
+    [Fact]
     public void OddsFor_ClampsToExpectedRange()
     {
         Assert.InRange(CloseRegistrationCommandHandler.OddsFor(10, 10, 8), 1.1m, 25m);

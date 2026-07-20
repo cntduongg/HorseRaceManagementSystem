@@ -61,6 +61,12 @@ public sealed class ApproveViolationCommandHandler
 
             var now = DateTime.UtcNow;
 
+            // Sĩ số race — Leg Points tuyến tính theo số ngựa nên phải tính lại đúng mốc này.
+            var fieldSize = await _context.Entries
+                .CountAsync(e => e.RaceId == violation.RaceId &&
+                                 e.Status == RaceExecutionConstants.EntryApproved,
+                    cancellationToken);
+
             List<LegOfficialResult> affectedOfficials;
             switch (penalty)
             {
@@ -98,7 +104,7 @@ public sealed class ApproveViolationCommandHandler
                     {
                         official.FinishPosition += 1;
                         official.LegPoints = RaceExecutionConstants.LegPointsFor(
-                            official.FinishPosition, official.ResultStatus);
+                            official.FinishPosition, official.ResultStatus, fieldSize);
                     }
                     break;
 

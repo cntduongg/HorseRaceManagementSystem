@@ -9,8 +9,6 @@ namespace Application.Usecases.Predictions.DeletePrediction;
 public sealed class DeletePredictionCommandHandler
     : IRequestHandler<DeletePredictionCommand, bool>
 {
-    private const string RaceScheduled = "Scheduled";
-
     private readonly IApplicationDbContext _context;
 
     public DeletePredictionCommandHandler(IApplicationDbContext context)
@@ -30,7 +28,6 @@ public sealed class DeletePredictionCommandHandler
             throw new InvalidOperationException("SpectatorId is required.");
 
         var prediction = await _context.Predictions
-            .Include(x => x.Race)
             .FirstOrDefaultAsync(
                 x => x.PredictionId == request.PredictionId &&
                      x.SpectatorId == request.SpectatorId,
@@ -51,18 +48,6 @@ public sealed class DeletePredictionCommandHandler
         if (prediction.Status != PredictionStatus.Pending)
             throw new InvalidOperationException(
                 $"Only pending prediction can be cancelled. Current status: {prediction.Status}");
-
-        if (prediction.Race is null)
-            throw new InvalidOperationException("Prediction race not found.");
-
-        if (!string.Equals(
-                prediction.Race.Status?.Trim(),
-                RaceScheduled,
-                StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                $"A prediction can only be cancelled while the race is Scheduled. Current race status: {prediction.Race.Status}");
-        }
 
         var wallet = await _context.PointWallets
             .FirstOrDefaultAsync(
