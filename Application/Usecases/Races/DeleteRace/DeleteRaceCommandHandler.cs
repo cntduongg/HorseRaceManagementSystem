@@ -1,7 +1,7 @@
 using Application.Common.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-
+using Domain.Aggregates.Constants;
 namespace Application.Usecases.Races.DeleteRace;
 
 public sealed class DeleteRaceCommandHandler
@@ -26,7 +26,13 @@ public sealed class DeleteRaceCommandHandler
         if (race is null)
             return false;
 
-        _context.Races.Remove(race);
+        if (race.Status != RaceStatus.Scheduled)
+        {
+            throw new InvalidOperationException(
+                "Only scheduled races can be cancelled.");
+        }
+        race.Status = RaceStatus.Cancelled;
+        race.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync(cancellationToken);
 

@@ -1,7 +1,7 @@
 using Application.Common.Interfaces;
 using Domain.Aggregates.Entities;
 using Microsoft.EntityFrameworkCore;
-
+using Domain.Aggregates.Constants;
 namespace Application.Usecases.RaceExecution;
 
 public enum RaceStartOutcome
@@ -73,7 +73,11 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
             var race = await _context.Races
                 .FirstOrDefaultAsync(r => r.RaceId == raceId, cancellationToken)
                 ?? throw new KeyNotFoundException("Race not found.");
-
+            if (race.Status == RaceStatus.Cancelled)
+            {
+                throw new InvalidOperationException(
+                    "Cancelled races cannot close registration.");
+            }
             if (race.Status != RaceExecutionConstants.RaceScheduled)
                 throw new InvalidOperationException(
                     $"Registration can only be closed while the race is Scheduled (current: {race.Status}).");

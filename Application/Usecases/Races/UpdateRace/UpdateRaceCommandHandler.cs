@@ -1,7 +1,7 @@
 using Application.Common.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-
+using Domain.Aggregates.Constants;
 namespace Application.Usecases.Races.UpdateRace;
 
 public sealed class UpdateRaceCommandHandler
@@ -34,7 +34,11 @@ public sealed class UpdateRaceCommandHandler
 
         if (race is null)
             return false;
-
+        if (race.Status == RaceStatus.Cancelled)
+        {
+            throw new InvalidOperationException(
+                "Cancelled races cannot be updated.");
+        }
         var tournament = await _context.Tournaments
             .FirstOrDefaultAsync(t => t.TournamentId == request.TournamentId, cancellationToken);
 
