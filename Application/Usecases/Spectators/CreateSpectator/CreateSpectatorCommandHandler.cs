@@ -40,6 +40,7 @@ public sealed class CreateSpectatorCommandHandler
             RegisteredAt = DateTime.UtcNow,
             IsActive = true
         };
+        
 
         _context.Spectators.Add(spectator);
         await _context.SaveChangesAsync(cancellationToken);

@@ -27,6 +27,18 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             .WithMany(r => r.Users)
             .HasForeignKey(u => u.RoleId)
             .OnDelete(DeleteBehavior.Restrict);
+        builder.Property(user => user.PhoneNumber)
+            .HasMaxLength(30);
+
+        builder.Property(user => user.NormalizedPhoneNumber)
+            .HasMaxLength(20);
+
+        builder.HasIndex(user => user.NormalizedPhoneNumber)
+            .HasDatabaseName(
+                "UX_Users_NormalizedPhoneNumber")
+            .IsUnique()
+            .HasFilter(
+                "\"NormalizedPhoneNumber\" IS NOT NULL");
 
         builder.HasData(new User
         {

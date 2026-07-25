@@ -49,6 +49,21 @@ public static class ServiceCollectionExtensions
         services.Configure<SmtpOptions>(configuration.GetSection(SmtpOptions.SectionName));
         services.AddScoped<IPasswordResetOtpProtector, HmacPasswordResetOtpProtector>();
         services.AddScoped<IPasswordResetEmailSender, SmtpPasswordResetEmailSender>();
+        services.AddSingleton<
+            NormalizeUserPhoneNumberInterceptor>();
+
+        services.AddDbContext<ApplicationDbContext>(
+            (serviceProvider, options) =>
+            {
+                options.UseNpgsql(
+                    configuration.GetConnectionString(
+                        "PostgreSQL"));
+
+                options.AddInterceptors(
+                    serviceProvider.GetRequiredService<
+                        NormalizeUserPhoneNumberInterceptor>());
+            });
+
         //services.AddScoped<ICurrentUser, CurrentUser>();
         return services;
     }

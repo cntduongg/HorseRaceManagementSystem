@@ -6,6 +6,8 @@ public class User
     public string PasswordHash { get; set; } = null!;
     public string FullName { get; set; } = null!;
     public string? PhoneNumber { get; set; }
+    public string? NormalizedPhoneNumber { get; set; }
+
     public string? AvatarUrl { get; set; }
     public int RoleId { get; set; }
     public bool IsActive { get; set; } = true;
