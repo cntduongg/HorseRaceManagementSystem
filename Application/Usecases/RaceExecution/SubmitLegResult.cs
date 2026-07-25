@@ -170,7 +170,6 @@ public sealed class SubmitLegResultCommandHandler
             leg.ConfirmationType = RaceExecutionConstants.AutoMatched;
             leg.ConfirmedAt = now;
             leg.FinishedAt = now;
-            leg.ExecutionStatus = "Completed";
 
             foreach (var item in submitted)
             {

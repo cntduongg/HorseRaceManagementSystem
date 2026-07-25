@@ -114,10 +114,6 @@ public sealed class OverrideLegResultCommandHandler
         leg.AdminOverrideReason = reason;
         leg.ConfirmedAt = now;
         leg.FinishedAt = now;
-        // Leg đã có kết quả chính thức → vòng đời phải đóng luôn, giống nhánh matched của
-        // SubmitLegResult. Thiếu dòng này thì leg resolved vẫn báo ExecutionStatus="InProgress"
-        // trong khi IsConfirmed=true → client nhận trạng thái mâu thuẫn.
-        leg.ExecutionStatus = LegExecutionStatuses.Completed;
 
         // Resume: nếu còn leg mở → InProgress; hết → PendingResult.
         var openLeg = race.Legs

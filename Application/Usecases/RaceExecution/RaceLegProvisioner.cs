@@ -6,15 +6,10 @@ using Microsoft.EntityFrameworkCore;
 namespace Application.Usecases.RaceExecution;
 
 /// <summary>
-/// Tạo bù Leg 1..NumberOfLegs và gán ExecutionStatus theo trạng thái đóng đăng ký.
+/// Tạo bù Leg 1..NumberOfLegs.
 /// </summary>
 public static class RaceLegProvisioner
 {
-    public static string ExecutionStatusForNewLeg(Race race) =>
-        race.OddsComputedAt is null
-            ? LegExecutionStatuses.Pending
-            : LegExecutionStatuses.PredictionOpen;
-
     /// <summary>
     /// Thêm Leg row cho mọi legNumber thiếu trong 1..race.NumberOfLegs.
     /// </summary>
@@ -23,8 +18,6 @@ public static class RaceLegProvisioner
         Race race,
         CancellationToken cancellationToken)
     {
-        var executionStatus = ExecutionStatusForNewLeg(race);
-
         for (var legNumber = 1; legNumber <= race.NumberOfLegs; legNumber++)
         {
             var inNavigation = race.Legs?.Any(l => l.LegNumber == legNumber) == true;
@@ -39,14 +32,13 @@ public static class RaceLegProvisioner
             {
                 RaceId = race.RaceId,
                 LegNumber = legNumber,
-                Status = RaceExecutionConstants.LegPending,
-                ExecutionStatus = executionStatus
+                Status = RaceExecutionConstants.LegPending
             });
         }
     }
 
     /// <summary>
-    /// Đồng bộ số leg khi race còn Scheduled: thêm thiếu, xóa thừa (có guard).
+    /// Đồng bộ số leg khi race còn Scheduled: thêm thiếu, xóa thừa.
     /// </summary>
     public static async Task SyncLegCountAsync(
         IApplicationDbContext context,
@@ -75,19 +67,13 @@ public static class RaceLegProvisioner
         var toRemove = legs.Where(l => l.LegNumber > newNumberOfLegs).ToList();
         foreach (var leg in toRemove)
         {
-            if (!string.Equals(leg.ExecutionStatus, LegExecutionStatuses.Pending, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException(
-                    $"Cannot remove Leg {leg.LegNumber}: execution status is {leg.ExecutionStatus} (only Pending legs can be removed).");
-            }
-
             var hasPredictions = await context.Predictions.AnyAsync(
-                p => p.RaceId == race.RaceId && p.LegNumber == leg.LegNumber,
+                p => p.RaceId == race.RaceId,
                 cancellationToken);
             if (hasPredictions)
             {
                 throw new InvalidOperationException(
-                    $"Cannot remove Leg {leg.LegNumber}: predictions exist for this leg.");
+                    $"Cannot remove Leg {leg.LegNumber}: predictions exist for this race.");
             }
 
             context.Legs.Remove(leg);

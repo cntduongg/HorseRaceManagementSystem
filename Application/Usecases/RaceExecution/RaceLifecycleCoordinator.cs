@@ -263,13 +263,6 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
     {
         await RaceLegProvisioner.EnsureLegsExistAsync(_context, race, cancellationToken);
 
-        var legs = await _context.Legs.Where(l => l.RaceId == race.RaceId).ToListAsync(cancellationToken);
-        foreach (var leg in legs)
-        {
-            leg.ExecutionStatus = LegExecutionStatuses.PredictionOpen;
-            leg.PredictionOpenedAt = now;
-        }
-        
         var entries = race.Entries.Count > 0
             ? race.Entries.ToList()
             : await _context.Entries

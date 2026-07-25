@@ -181,10 +181,6 @@ public sealed class UnpublishRaceResultCommandHandler
                 profile.UpdatedAt = now;
             }
 
-            await RestoreHorseStaminaFromPublishSnapshotAsync(
-                race.RaceId,
-                cancellationToken);
-
             _context.RaceResults.RemoveRange(results);
 
             // ── 5. Đưa race về PendingResult ──
@@ -225,93 +221,6 @@ public sealed class UnpublishRaceResultCommandHandler
         {
             await tx.RollbackAsync(cancellationToken);
             throw;
-        }
-    }
-
-    private async Task RestoreHorseStaminaFromPublishSnapshotAsync(
-        int raceId,
-        CancellationToken cancellationToken)
-    {
-        var publishHistory = await _context.ReviewHistories
-            .AsNoTracking()
-            .Where(h =>
-                h.EntityType == ReviewEntity.Race &&
-                h.EntityId == raceId &&
-                h.Action == ReviewAction.Published)
-            .OrderByDescending(h => h.CreatedAt)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (publishHistory?.BeforeData is null)
-        {
-            await FallbackParticipantStaminaBumpAsync(raceId, cancellationToken);
-            return;
-        }
-
-        try
-        {
-            using var doc = JsonDocument.Parse(publishHistory.BeforeData);
-            if (!doc.RootElement.TryGetProperty("horseStamina", out var arr) ||
-                arr.ValueKind != JsonValueKind.Array)
-            {
-                await FallbackParticipantStaminaBumpAsync(raceId, cancellationToken);
-                return;
-            }
-
-            var snapshots = new List<(int HorseId, int Stamina)>();
-            foreach (var el in arr.EnumerateArray())
-            {
-                if (!el.TryGetProperty("horseId", out var idEl) ||
-                    !el.TryGetProperty("stamina", out var stEl))
-                    continue;
-                snapshots.Add((idEl.GetInt32(), stEl.GetInt32()));
-            }
-
-            if (snapshots.Count == 0)
-            {
-                await FallbackParticipantStaminaBumpAsync(raceId, cancellationToken);
-                return;
-            }
-
-            var horseIds = snapshots.Select(s => s.HorseId).ToList();
-            var horses = await _context.Horses
-                .Where(h => horseIds.Contains(h.HorseId))
-                .ToListAsync(cancellationToken);
-            var now = DateTime.UtcNow;
-            foreach (var (horseId, stamina) in snapshots)
-            {
-                var horse = horses.FirstOrDefault(h => h.HorseId == horseId);
-                if (horse is null) continue;
-                horse.Stamina = stamina;
-                horse.UpdatedAt = now;
-            }
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogWarning(ex, "Failed to parse horse stamina snapshot for race {RaceId}", raceId);
-            await FallbackParticipantStaminaBumpAsync(raceId, cancellationToken);
-        }
-    }
-
-    private async Task FallbackParticipantStaminaBumpAsync(int raceId, CancellationToken cancellationToken)
-    {
-        _logger.LogWarning(
-            "No horse stamina snapshot for race {RaceId}; applying +1 fallback for participant horses only",
-            raceId);
-
-        var participantHorseIds = await _context.Entries
-            .Where(e => e.RaceId == raceId && e.Status == RaceExecutionConstants.EntryApproved)
-            .Select(e => e.HorseId)
-            .Distinct()
-            .ToListAsync(cancellationToken);
-
-        var horses = await _context.Horses
-            .Where(h => participantHorseIds.Contains(h.HorseId))
-            .ToListAsync(cancellationToken);
-        var now = DateTime.UtcNow;
-        foreach (var h in horses)
-        {
-            h.Stamina = Math.Min(3, h.Stamina + 1);
-            h.UpdatedAt = now;
         }
     }
 }

@@ -35,8 +35,6 @@ public sealed record RaceLiveLegDto(
     int LegIndex,
     int LegNumber,
     string Status,            // Pending|AwaitingSecondReferee|Confirmed|Conflicted|Resolved (blind)
-    string ExecutionStatus,   // Pending|PredictionOpen|InProgress|AwaitingResult|Completed|Cancelled (vòng đời)
-    bool IsBettingOpen,       // cửa cược mở khi ExecutionStatus = PredictionOpen
     bool IsConfirmed,         // Confirmed || Resolved → FE hiện bảng vị trí
     bool IsConflicted,        // Conflicted → FE hiện "Đang xem xét"
     string? ConfirmationType, // AutoMatched | AdminOverride | null
@@ -139,8 +137,6 @@ public sealed class GetRaceLiveQueryHandler
                     LegIndex: l.LegNumber - 1,
                     LegNumber: l.LegNumber,
                     Status: l.Status,
-                    ExecutionStatus: l.ExecutionStatus,
-                    IsBettingOpen: LegExecutionStatuses.IsBettingOpen(l.ExecutionStatus),
                     IsConfirmed: isConfirmed,
                     IsConflicted: l.Status == RaceExecutionConstants.LegConflicted,
                     ConfirmationType: l.ConfirmationType,
