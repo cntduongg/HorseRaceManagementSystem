@@ -49,20 +49,20 @@ Schema phủ đủ 8 flow. Các entity chính và trường trạng thái:
 |--------|----------------------------------------|
 | `User` | Tài khoản chung mọi role. `RoleId`, `Status` (Active/Pending...), `LockedUntil`. Trường riêng Jockey: `LicenseNumber`, `Weight`, `Bio`, `IsProfileComplete`. **`NormalizedPhoneNumber`** (max 20) + unique index `UX_Users_NormalizedPhoneNumber` — set bởi `NormalizeUserPhoneNumberInterceptor` + backfill startup (`UserPhoneNumberBackfill`). |
 | `Role` | `ADMIN/REFEREE/HORSE_OWNER/JOCKEY/SPECTATOR` (Code, Name). |
-| `Horse` | `Status`: Pending\|Approved\|Rejected, `RejectionReason`, `ApprovedBy/At`. **`Stamina`** int 0..3 (mặc định 3) + **`HealthStatus`** computed (`3=Healthy·2=Fair·1=Weak·0=Exhausted`) — migration `AddHorseStamina`; Publish trừ 1 cho ngựa có đua, reset 3 cho ngựa `Approved` nghỉ. (Flow 1) |
+| `Horse` | `Status`: Pending\|Approved\|Rejected\|Revoked (hằng số `HorseStatus.cs`), `RejectionReason`, `ApprovedBy/At`. (Flow 1) |
 | `JockeyProfile` | Hồ sơ nài để Owner tìm kiếm. (Flow 2) |
 | `JockeyInvitation` | Lời mời nài cho (Race+Horse). (Flow 2) |
 | `Tournament` | Giải đấu (tên, venue, logo, ngày). (Flow 3) |
 | `Race` | `NumberOfLegs` (1–10), `MaxHorses`, `Referee1Id`/`Referee2Id`, `Status` (Scheduled→InProgress→Paused→PendingResult→Finished→Cancelled), `ScheduledStartTime`/`ScheduledEndTime` (khung giờ để chống trùng lịch), `RegistrationOpen/CloseAt`, `OddsComputedAt`, `PublishedAt`. (Flow 3) |
 | `Entry` | Cặp Horse+Jockey nộp vào Race. `Status`: Pending\|Approved\|Rejected\|Withdrawn, `GateNumber`, `Odds` (khóa khi đóng ĐK). (Flow 2) |
-| `Leg` | PK ghép `(RaceId, LegNumber)`. `Status` (blind): Pending\|AwaitingSecondReferee\|Confirmed\|Conflicted\|Resolved; **`ExecutionStatus`** (vòng đời per-leg, hằng số ở `Domain/Aggregates/Constants/LegExecutionStatuses.cs`): Pending\|PredictionOpen\|InProgress\|AwaitingResult\|Completed\|Cancelled; `StartedAt`/`FinishedAt`/`ConfirmedAt`, `PredictionOpenedAt`/`PredictionClosedAt`; `ConfirmationType` (AutoMatched\|AdminOverride), `AdminOverrideReason`. (Flow 4-5) |
+| `Leg` | PK ghép `(RaceId, LegNumber)`. `Status` (blind): Pending\|AwaitingSecondReferee\|Confirmed\|Conflicted\|Resolved; `StartedAt`/`FinishedAt`/`ConfirmedAt`/`ConflictReportedAt`; `ConfirmationType` (AutoMatched\|AdminOverride), `AdminOverrideReason`. ⚠️ **`ExecutionStatus`/`PredictionOpenedAt`/`PredictionClosedAt` ĐÃ BỊ GỠ** trong đợt revert 2026-07-25; file `Constants/LegExecutionStatuses.cs` còn lại nhưng **0 usage** ([T-21](../.claude/TASKS.md)). (Flow 4-5) |
 | `LegRefereeEntry` | Bản ghi blind của từng Referee/Leg (append-only). (Flow 4) |
 | `LegRefereeDraft` | Nháp thứ hạng của referee (upsert, KHÔNG append-only) — để khôi phục khi quay lại (migration `AddLegRefereeDraft`). (Flow 4) |
 | `LegOfficialResult` | Kết quả Leg chính thức sau confirm. (Flow 4-5) |
 | `Violation` | `ViolationType`, `Penalty` (Warning\|Demote\|DQ\|None), `Status` Pending/Approved/Rejected, `AdminNote`. (Flow 6) |
 | `RaceResult` | Vị trí & điểm chung cuộc của Entry. (Flow 8) |
 | `PointWallet` / `WalletTransaction` | Ví điểm Spectator & lịch sử giao dịch. (Flow 7) |
-| `Prediction` | Cược **1 Entry về 1st của MỘT Leg** (per-leg): `RaceId` + **`LegNumber`** (NOT NULL, **FK ghép `(RaceId, LegNumber)` → `Legs`**, `OnDelete: Restrict` — migration `AddLegPredictionRelationship`), `FirstEntryId`, `BetAmount`, `OddsLocked1`, `Status` (Pending/Locked/Settled/Cancelled), `CancelledAt`. Các cột `SecondEntryId/ThirdEntryId/OddsLocked2/3` vẫn còn nhưng **không dùng** (nullable, di sản multi-entry). (Flow 7) |
+| `Prediction` | Cược **1 Entry về 1st của cả RACE** (race-level): `RaceId`, `SpectatorId`, `FirstEntryId`, `BetAmount`, `OddsLocked1`, `Status` (`Pending`/`Locked`/`Won`/`Lost`/`Cancelled` — hằng số `PredictionStatus.cs`), `CreatedAt`, `CancelledAt`. Các cột `SecondEntryId/ThirdEntryId/OddsLocked2/3` vẫn còn nhưng **không dùng** (nullable, di sản multi-entry). (Flow 7) |
 | `SettlementRun` / `PredictionSettlement` | Quá trình quyết toán cược. (Flow 8) |
 | `PrizePointTransaction` | Cộng/trừ Prize Points cho Owner/Jockey. (Flow 8) |
 | `Discrepancy` | Bản ghi tranh chấp Admin xử lý. (Flow 5) |
@@ -92,11 +92,11 @@ EF mapping: `Infrastructure/Data/Configurations/*Configuration.cs` (mỗi entity
   - `POST /api/horses` [HORSE_OWNER] — tạo ngựa, Owner lấy từ JWT, `Status=Pending`.
   - `GET /api/horses?status=` — Owner thấy ngựa của mình, Admin thấy tất cả (lọc theo status).
   - `GET /api/horses/{id}`, `PUT /api/horses/{id}` [HORSE_OWNER, kiểm ownership, **chỉ chặn khi `Approved`**], `DELETE /api/horses/{id}` [HORSE_OWNER, kiểm ownership].
-  - `GET /api/horses/{id}/statistics` — thống kê ngựa + `Stamina` hiện tại (✅ thêm 2026-07-25, `Horses/GetHorseStatistics`).
+  - ❌ `GET /api/horses/{id}/statistics` — **đã bị gỡ** trong đợt revert 2026-07-25 (`Horses/GetHorseStatistics` bị xóa). FE vẫn gọi ⇒ [T-19](../.claude/TASKS.md).
   - `POST /api/horses/{id}/resubmit` [HORSE_OWNER] — ngựa `Rejected` → `Pending`, xóa `RejectionReason`; check ownership (✅ thêm 2026-07-25, `Horses/ResubmitHorse`).
   - `POST /api/horses/{id}/approve` [ADMIN] → `Approved`; `POST /api/horses/{id}/reject` [ADMIN] (lý do bắt buộc) → `Rejected`; `POST /api/horses/{id}/revoke` [ADMIN] → `Revoked` + auto-cancel các Entry `Pending` dùng ngựa đó.
   - Status ngựa: `Pending → Approved | Rejected`, `Rejected → Pending` (resubmit), và revoke (`Approved →` hủy). Hằng số: `Domain/Aggregates/Constants/HorseStatus.cs`, `EntryStatus.cs`. Repo: `IHorseRepository`, `IEntryRepository`. `RevokeHorse` dùng transaction tường minh (`_context.Database.BeginTransactionAsync`).
-  - **Thể lực:** `Horse.Stamina` (0..3) do `PublishRaceResult` cập nhật, không phải Owner nhập.
+  - ❌ **Thể lực ngựa:** cơ chế `Horse.Stamina`/`HealthStatus` **không còn tồn tại** (revert 2026-07-25).
 - **Flow 2 — Mời nài & nộp Entry** ✅ **đã hoàn thiện orchestration** (2026-06-25).
   - **Mời nài** (`POST /api/jockey-invitations` [HORSE_OWNER]): validate horse `Approved` + thuộc owner, race `Scheduled`, nài role JOCKEY + có `LicenseNumber`+`Weight`, chống trùng invitation active `(jockey+horse+race)`. HorseOwnerId lấy từ JWT.
   - **Phản hồi/Xác nhận** (`PUT /api/jockey-invitations/{id}`, body `{status, responseReason}`): Accept/Decline chỉ chính nài; Confirm/Cancel chỉ owner; **Confirm → auto-cancel** mọi invitation active khác cùng `(horse+race)` + chặn 1 nài confirm cho 2 ngựa khác nhau trong cùng race. (Controller dựng command từ route id + claims — đã sửa bug "InvitationId mismatch".)
@@ -112,59 +112,75 @@ EF mapping: `Infrastructure/Data/Configurations/*Configuration.cs` (mỗi entity
 
 ## 6. Tình trạng Flow 3–8 — orchestration ĐÃ HOÀN THIỆN ✅
 
-> Cập nhật: **2026-07-25** (đọc lại toàn bộ code base + verify trực tiếp file nguồn). Build **0 lỗi / 10 warning**. Việc cần làm: [.claude/TASKS.md](../.claude/TASKS.md).
+> Cập nhật: **2026-07-25, SAU pull `26b8f6c`** (đọc lại toàn bộ code base + verify trực tiếp file nguồn). Build **0 lỗi / 11 warning**. Việc cần làm: [.claude/TASKS.md](../.claude/TASKS.md).
 > Lưu ý lịch sử: docs cũ (≤2026-06-25) mô tả Flow 3–8 "chỉ CRUD generic, chưa có orchestration". **Điều đó đã lỗi thời** — toàn bộ nghiệp vụ lõi Flow 3–8 nay nằm ở `Application/Usecases/RaceExecution/*` (use case đặc thù, không phải CRUD).
 >
-> ### 🆕 Thay đổi nghiệp vụ lớn — đợt 2026-07-20 → 07-25
+> ### 🔄 ĐỢT REVERT 2026-07-25 — per-leg → race-level (đọc trước tiên)
 >
-> **① Thang điểm TUYẾN TÍNH theo sĩ số** (`RaceExecutionConstants`) — **breaking change**
+> Commit `6601526 "revert all back to betRace"` + merge `3d332d7` (8 file conflict) + `26b8f6c "new"` đã **gỡ toàn bộ mô hình per-leg**. Danh sách chính xác những gì **không còn tồn tại** trong code:
+>
+> | Đã gỡ | Hệ quả |
+> |---|---|
+> | `Prediction.LegNumber` + FK `(RaceId, LegNumber)` → `Legs` | Cược lại theo **cả race**. ✅ Đã drop bằng `DropOrphanPerLegColumns` |
+> | `Leg.ExecutionStatus` / `PredictionOpenedAt` / `PredictionClosedAt` | Leg chỉ còn `Status` blind. `LegExecutionStatuses.cs` còn nhưng **0 usage** |
+> | `StartLeg.cs` + route `POST /api/races/{id}/legs/{n}/start` | Chỉ còn `POST /api/races/{id}/start` (cả race) + worker auto-start |
+> | `LegPredictionSettlement.cs` (settle khi Leg Confirmed) | Settlement **quay lại** trong `PublishRaceResult` |
+> | `Horse.Stamina` + `HealthStatus` computed | `HorseHealthStatus.cs` còn nhưng **0 usage** |
+> | `Horses/GetHorseStatistics/*` + route `GET /api/horses/{id}/statistics` | FE vẫn gọi ⇒ [T-19](../.claude/TASKS.md) |
+> | Gate "chặn Publish khi còn Violation `Pending`" | `publication-review` chỉ còn **báo** `PendingViolationCount` |
+> | `stamina`/`healthStatus` trên `RaceLiveEntryDto`; `executionStatus`/`isBettingOpen` trên `RaceLiveLegDto` | FE vẫn đọc ⇒ [T-19](../.claude/TASKS.md) |
+>
+> **✅ T-18…T-22 đã đóng (2026-07-25):** migration drop cột mồ côi, FE race-level, `Pending→Locked` on start, dọn code chết, bỏ `IsBettingOpen` khỏi odds response.
+>
+> ### ✅ Những thay đổi nghiệp vụ VẪN CÒN HIỆU LỰC
+>
+> **① Thang điểm TUYẾN TÍNH theo sĩ số** (`RaceExecutionConstants`) — **breaking change, sống sót qua revert**
 > ```csharp
 > // fieldSize (N) = số Entry Approved của race
 > LegPointsFor(pos, resultStatus, fieldSize)  => N - p + 1        // DNF/DQ = 0; p > N = 0
 > PrizePointsFor(finalPosition, fieldSize)    => (N - p + 1) * 200  // PrizePointUnit = 200
 > ```
 > Thay thang cứng cũ (Leg 6/5/4/3/2/1, Prize 1000/600/400/200/100). Neo: race 5 ngựa → 1st = 5×200 = 1000, bằng mức cũ. Lý do: race đông ngựa thì hạng chót không còn bị 0 điểm oan.
-> **6 caller đã cập nhật:** `SubmitLegResult`, `OverrideLegResult`, `PublishRaceResult`, `UnpublishRaceResult`, `ApproveViolation`, `UpdateViolation`. `UnpublishRaceResult` tính lại `fieldSize` = số Entry `Approved` để rollback **đúng bằng** lúc cộng.
+> **Caller:** `SubmitLegResult`, `OverrideLegResult`, `PublishRaceResult`, `UnpublishRaceResult`, `ApproveViolation`, `UpdateViolation`. `UnpublishRaceResult` tính lại `fieldSize` = số Entry `Approved` để rollback **đúng bằng** lúc cộng.
 >
 > **② `ValidatePositions(positions, fieldSize)`** — dùng chung `SubmitLegResult` + `OverrideLegResult`. Vị trí phải ∈ `1..N`, **không trùng**, và **liên tục từ 1** (bỏ `-1` DNF / `-2` DQ ra thì đúng `1..k`). Trả `string?` — `null` là hợp lệ, khác `null` là message lỗi tiếng Anh.
 >
-> **③ Chặn Publish khi còn Violation `Pending`** — `PublishRaceResult.cs:60-66` ném `InvalidOperationException("There are still {n} unresolved violation(s)…")`. Test: `PublishBlockedByViolationTests`.
-> ⚠️ `GET /api/admin/races/{id}/publication-review` **chưa** trả số vi phạm Pending → FE không khóa nút Publish trước được (T-04).
+> **③ Cửa cược RACE-LEVEL** — không còn khái niệm cửa cược theo leg. `CreatePredictionCommandHandler`:
+> - `race.Status` phải `== "Scheduled"` → *"You can only bet while the race is Scheduled."*
+> - `race.OddsComputedAt` phải `!= null` → *"Registration must be closed and odds computed first."*
+> ⇒ **khoảng cược thực tế = sau khi Admin đóng đăng ký, trước khi race start.** Tối đa **1 prediction active / (Race + Spectator)**.
+> `DeletePrediction` (hủy cược): yêu cầu race `Scheduled` **và** prediction `Pending`, hoàn 100% + ghi `WalletTransaction` `Type="BetRefund"`.
 >
-> **④ Thể lực ngựa (`Horse.Stamina`)** — `PublishRaceResult.cs:310-333`: ngựa **có đua** → `Stamina = max(0, Stamina-1)`; ngựa `Approved` **không đua race này** → reset `Stamina = 3`. Lộ ra ở `GetRaceLive`, response odds, `GET /api/horses/{id}/statistics`. Hiện chỉ là chỉ số hiển thị, chưa ảnh hưởng odds/kết quả.
-> ⚠️ **`UnpublishRaceResult` KHÔNG rollback Stamina** → publish/unpublish/publish lại trừ 2 lần (T-03).
+> **④ `DELETE /api/races/{id}` là SOFT-CANCEL** — `DeleteRaceCommandHandler` chỉ cho khi `Status == Scheduled`, set `Status = Cancelled` (không xóa row). **Không có** cột `IsDeleted` trong domain. Kèm theo, các handler chặn race `Cancelled`: `UpdateRace`, `RaceLifecycleCoordinator.CloseRegistration`.
 >
-> **⑤ `LegExecutionStatuses`** (`Domain/Aggregates/Constants/`) — nguồn chân lý duy nhất cho cửa cược:
-> `BettingOpen = {Pending, PredictionOpen, AwaitingResult}`; khóa khi ∈ `{InProgress, Completed, Cancelled}`. Dùng ở `GetRaceLive` (cờ `IsBettingOpen` mỗi leg) và `GetLegPredictionOdds`.
+> **⑤ Chuẩn hóa & chống trùng số điện thoại** — `Domain/Aggregates/Constants/PhoneNumberNormalizer.cs` (VN mobile: đưa về `84` + 9 số; chấp nhận `0xxxxxxxxx` / `84xxxxxxxxx` / `0084…` / 9 số; prefix hợp lệ `843/845/847/848/849`), `InvalidPhoneNumberException`, `Infrastructure/Services/NormalizeUserPhoneNumberInterceptor.cs` (SaveChanges interceptor), `User.NormalizedPhoneNumber` + unique index có filter, backfill startup `UserPhoneNumberBackfill`.
+> ✅ **Bug DI đã fix (T-01):** `AddInfrastructure` nay gọi `AddDbContext<ApplicationDbContext>` **đúng 1 lần** (`ServiceCollectionExtensions.cs:27`) và có `options.AddInterceptors(...)` ⇒ interceptor chạy thật.
 >
-> **⑥ `DELETE /api/races/{id}` nay là SOFT-CANCEL** — `DeleteRaceCommandHandler` chỉ cho khi `Status == Scheduled`, set `Status = Cancelled` (không xóa row). **Không có** cột `IsDeleted` trong domain. Kèm theo, các handler chặn race `Cancelled`: `UpdateRace`, `PublishRaceOdds`, `RaceLifecycleCoordinator.CloseRegistration`.
+> **⑥ `GlobalExceptionHandler`** — thêm `traceId` vào `ProblemDetails.Extensions`; map `InvalidPhoneNumberException` → 400; unique-violation trên `UX_Users_NormalizedPhoneNumber` → 409 riêng (**phải đặt trước** case `DbUpdateException` chung); map thêm PG error code `ForeignKeyViolation`/`NotNullViolation`/`CheckViolation`; 500 trả message chung, **không** lộ `exception.Message`. ✅ Toàn bộ message đã là **tiếng Anh** (T-05 đóng).
 >
-> **⑦ Chuẩn hóa & chống trùng số điện thoại** — `Domain/Aggregates/Constants/PhoneNumberNormalizer.cs` (VN mobile: đưa về `84` + 9 số; chấp nhận `0xxxxxxxxx` / `84xxxxxxxxx` / `0084…` / 9 số; prefix hợp lệ `843/845/847/848/849`), `InvalidPhoneNumberException`, `Infrastructure/Services/NormalizeUserPhoneNumberInterceptor.cs` (SaveChanges interceptor), `User.NormalizedPhoneNumber` + unique index có filter.
-> 🔴 **BUG: interceptor KHÔNG chạy.** `ServiceCollectionExtensions.AddInfrastructure` gọi `AddDbContext<ApplicationDbContext>` **2 lần** (dòng 25 và dòng 55). EF Core đăng ký `DbContextOptions<T>` bằng **`TryAdd`** → lần đầu (`DefaultConnection`, **không** interceptor) thắng. Lần 2 còn trỏ vào connection string `"PostgreSQL"` **không tồn tại** trong `appsettings.json`. Hậu quả: `NormalizedPhoneNumber` luôn null → unique index (filter `IS NOT NULL`) vô hiệu → nhánh 409 "phone đã tồn tại" là code chết. Xem [T-01](../.claude/TASKS.md).
->
-> **⑧ `GlobalExceptionHandler` viết lại** — thêm `traceId` vào `ProblemDetails.Extensions`; map `InvalidPhoneNumberException` → 400; unique-violation trên `UX_Users_NormalizedPhoneNumber` → 409 riêng (**phải đặt trước** case `DbUpdateException` chung); map thêm PG error code `ForeignKeyViolation`/`NotNullViolation`/`CheckViolation`; 500 nay trả message chung, **không** lộ `exception.Message`.
-> ⚠️ 3 message mới bằng **tiếng Việt** (`"Số điện thoại không hợp lệ."`, `"Số điện thoại đã tồn tại."`, `"Đã xảy ra lỗi trong hệ thống."`) — trái quy ước "BE dùng tiếng Anh" (T-05).
->
-> **⑨ Endpoint mới**
+> **⑦ Endpoint còn hiệu lực từ đợt trước**
 > | Route | Use case | Ghi chú |
 > |---|---|---|
-> | `GET /api/horses/{id}/statistics` | `Horses/GetHorseStatistics` | thống kê + `Stamina` hiện tại |
 > | `POST /api/horses/{id}/resubmit` | `Horses/ResubmitHorse` | `Rejected → Pending`, xóa `RejectionReason`; check ownership |
+> | `POST /api/races/{id}/start` | `RaceExecution/StartRace` | REFEREE/ADMIN; `enforceSchedule: false` (khớp FE), `allowAutoClose: true` |
 > | `POST /api/admin/points/daily-topup` | `Admin/PointsManagement/RunDailyTopUp` | nạp bù ví `Balance < 10` **lên đúng 10**; idempotent theo ngày (`Type="DailyTopUp"`, mốc `now.Date` UTC). ⚠️ **Không có background service** — chỉ chạy khi Admin bấm (T-06) |
 > | `GET /api/admin/violations?search=&sort=&sortDirection=` | `Admin/GetAdminViolations` | search khớp loại vi phạm/mô tả/tên race/nài/ngựa; sort `violationType\|status\|penalty\|legNumber\|racename\|createdAt`, tie-break `ViolationId` |
+> | `GET /api/admin/races/{id}/publication-review` | `Admin/ResultPublication` | có `PendingViolationCount` + `HasUnresolvedTie` — **chỉ thông tin**, BE không còn chặn Publish theo đó |
 >
-> **⑩ Khác**
-> - `OverrideLegResult` nay set `leg.ExecutionStatus = Completed` (trước đó leg admin-resolve báo `InProgress` trong khi `IsConfirmed = true`).
-> - `DeletePrediction` **bỏ** check race `Scheduled` — chỉ cần prediction `Pending`. Đúng với per-leg: `StartLeg` chuyển toàn bộ prediction `Pending` của leg → `Locked`, nên cửa hủy tự đóng theo từng leg.
-> - `UpdateHorse` nay chỉ chặn khi ngựa `Approved` (cho sửa ngựa `Rejected` để resubmit). Ownership vẫn được check ở cả Update/Delete/Resubmit.
+> **⑧ Khác**
+> - `OverrideLegResult` set `leg.Status = Resolved` + `ConfirmationType = AdminOverride` + lý do bắt buộc; race quay lại `InProgress` (hoặc `PendingResult` nếu hết leg).
+> - `UpdateHorse` chỉ chặn khi ngựa `Approved` (cho sửa ngựa `Rejected` để resubmit). Ownership vẫn được check ở cả Update/Delete/Resubmit.
+> - `RevokeHorse` → `Status = Revoked` + hủy Entry liên quan + **hoàn cược** `Pending`/`Locked` của Entry đó (nếu race đã đóng đăng ký) + **tính lại Odds & GateNumber** cho các Entry `Approved` còn lại.
+> - `RaceLegProvisioner.EnsureLegsExistAsync` tạo bù Leg `1..NumberOfLegs` khi close-registration & start; `SyncLegCountAsync` đồng bộ khi `UpdateRace` còn `Scheduled` (chặn xóa leg nếu race đã có prediction).
 >
-> **⚠️ Nợ kỹ thuật còn lại:** `ICurrentUser` **vẫn bị comment toàn bộ** (`Application/Common/Interfaces/ICurrentUser.cs`, `Infrastructure/Services/CurrentUser.cs`, DI dòng 67) → identity resolve thủ công; **endpoint trùng ở 2 controller** (đăng ký RaceExecution vs Races; publish RaceExecution vs Admin); gán referee chưa validate role; tie-break cuối thủ công; **migration rác** (`AddHorseStamina1`, `AddLegPredictionRelationship1`, `Persistence/Migrations/HorseStamina` — cả 3 rỗng) và `AddLegPredictionRelationship` **thiếu `Down()`**.
+> **⚠️ Nợ kỹ thuật còn lại:** `ICurrentUser` **vẫn bị comment toàn bộ** — T-07; tie-break cuối "quyết định Admin" chưa có endpoint (T-10); FluentValidation hoãn (T-12).
 
-**✅ Orchestration vận hành đua** — `Application/Usecases/RaceExecution/*` (~16 use case + `RaceLifecycleCoordinator`/`RaceRankingCalculator`/`RaceExecutionConstants`) + `Api/Controllers/RaceExecutionController.cs` (prefix `api/races`, role-locked). Build pass, MediatR tự đăng ký:
-- **Flow 3:** `POST {id}/open-registration`, `POST {id}/close-registration` (auto-reject Entry Pending + **khóa Odds per-Entry** từ win rate + gán **GateNumber** + set OddsComputedAt; transaction). `Entry.Odds` (cột mới + migration `AddEntryOdds`). UpdateRace khóa NumberOfLegs khi rời Scheduled; CreatePrediction ưu tiên `Entry.Odds` đã khóa.
-  - ⚠️ **TRÙNG LẶP:** ngoài bộ trên (ở `RaceExecutionController` + `Usecases/RaceExecution/*`), nay có thêm bộ song song ở `RacesController` + `Usecases/Races/*`: `POST {id}/registration/open` (`OpenRaceRegistrationCommand`), `POST {id}/registration/close` (`CloseRaceRegistrationCommand` + `IRegistrationService`), `POST {id}/odds/publish` (`PublishRaceOddsCommand` — tách bước khóa Odds riêng). Hai luồng đang cùng tồn tại, cần thống nhất chọn một.
-- **Flow 3-4 (per-leg + auto-start):** khởi động đua theo **từng Leg** — `POST {id}/legs/{n}/start` (`StartLegCommand`, dùng `Leg.ExecutionStatus`); **worker `RaceAutoStartBackgroundService`** (quét mỗi ~15s, gửi `ProcessDueRaceStartsCommand` → `RaceLifecycleCoordinator.StartRaceAsync`) tự khởi động Race khi qua `ScheduledStartTime`. `StartRaceCommand`/`StartRace.cs` (khởi động cả Race) vẫn còn nhưng **hiện không wire vào controller** — chỉ coordinator/worker dùng đường coordinator. `POST {id}/resume` (Paused→InProgress), `GET {id}/execution`, `GET {id}/standings` (tổng Leg Points), `GET {id}/pause` (**ADMIN-only**, so sánh 2 submission). `Leg.ExecutionStatus`: `Pending → PredictionOpen → InProgress → AwaitingResult → Completed | Cancelled`.
-- **Flow 4 blind:** `GET {id}/legs/{i}/referee-view` (ẩn input referee kia đến khi cả hai submit), `PUT {i}/draft` (**persist thật** — upsert vào `LegRefereeDraft`, có `MyDraftData` để khôi phục nháp), `POST {i}/submit` (append-only, **`ValidatePositions`** trước, so khớp → Confirmed/AutoMatched + tính **Leg Points tuyến tính `N−p+1`** & LegOfficialResult, hoặc Conflicted + Paused; hết leg → PendingResult). **Khi Leg Confirmed → quyết toán prediction của Leg đó ngay** (`SubmitLegResult.SettleLegPredictions`, payout bet×odds → ví, `Locked→Settled`).
+**✅ Orchestration vận hành đua** — `Application/Usecases/RaceExecution/*` (19 file: use case + `RaceLifecycleCoordinator`/`RaceLegProvisioner`/`RaceRankingCalculator`/`RaceExecutionConstants`) + `Api/Controllers/RaceExecutionController.cs` (prefix `api/races`, role-locked). Build pass, MediatR tự đăng ký:
+- **Flow 3:** `POST {id}/open-registration`, `POST {id}/close-registration` (auto-reject Entry Pending + **khóa Odds per-Entry** từ win rate + gán **GateNumber** + set OddsComputedAt; transaction). `Entry.Odds` (cột mới + migration `AddEntryOdds`). UpdateRace khóa NumberOfLegs khi rời Scheduled; CreatePrediction ưu tiên `Entry.Odds` đã khóa làm `BaseOdds`.
+  - ✅ **Đã hết trùng lặp (T-08):** bộ song song ở `RacesController` + `Usecases/Races/{OpenRegistration, CloseRaceRegistrationCommand, PublishOdds}` **đã bị xóa**. Chỉ còn 3 thư mục rỗng cần dọn ([T-21](../.claude/TASKS.md)).
+- **Flow 3-4 (start cả race + auto-start):** `POST {id}/start` (`StartRaceCommand`, **REFEREE/ADMIN**) → `IRaceLifecycleCoordinator.StartRaceAsync(enforceSchedule: false, allowAutoClose: true, throwOnFailure: true)`; **worker `RaceAutoStartBackgroundService`** (quét mỗi ~15s, gửi `ProcessDueRaceStartsCommand` → cùng coordinator với `enforceSchedule: true`, `throwOnFailure: false`) tự khởi động Race khi qua `ScheduledStartTime`. Coordinator dùng **pessimistic lock** (`SELECT … FOR UPDATE`) + bắt `DbUpdateException` để 2 worker không start trùng. `POST {id}/resume` (Paused→InProgress), `GET {id}/execution`, `GET {id}/standings` (tổng Leg Points), `GET {id}/pause` (**ADMIN-only**, so sánh 2 submission).
+  - ❌ **Không còn `POST {id}/legs/{n}/start`** (`StartLeg` đã bị revert xóa) và **không còn `Leg.ExecutionStatus`**.
+- **Flow 4 blind:** `GET {id}/legs/{i}/referee-view` (ẩn input referee kia đến khi cả hai submit), `PUT {i}/draft` (**persist thật** — upsert vào `LegRefereeDraft`, có `MyDraftData` để khôi phục nháp), `POST {i}/submit` (append-only, **`ValidatePositions`** trước, so khớp → Confirmed/AutoMatched + tính **Leg Points tuyến tính `N−p+1`** & LegOfficialResult, hoặc Conflicted + Paused; hết leg → PendingResult). Submit đầu tiên set `leg.Status = AwaitingSecondReferee` và `leg.StartedAt` nếu còn null. ❌ **Không còn settle prediction ở đây** — đã quay về Publish.
 - **Flow 4 — theo dõi trực tiếp (Spectator, ✅ thêm 2026-07-15):** `GET {id}/live` (`GetRaceLive`) trả snapshot gộp sẵn: tên ngựa/nài + GateNumber, trạng thái & vị trí từng leg (**chỉ leg Confirmed/Resolved mới có `Results`**), standings tạm tính, `CurrentLegIndex`, `SnapshotAt`. **Cố ý KHÔNG có `Referee1Submitted`/`Referee2Submitted`** (khác `GetRaceExecution`) và handler **không `Include(RefereeEntries)`** — giữ Blind Double-Entry.
   - **Push realtime qua SignalR:** hub `Api/Hubs/RaceLiveHub.cs` tại **`/api/hubs/race-live`** (đặt dưới `/api` để thừa hưởng proxy Vite → same-origin trong dev), group `race-{raceId}`, method `JoinRace`/`LeaveRace`, `[Authorize]` mọi role đăng nhập. Event đẩy về client: **`RaceLiveChanged`** mang đúng `RaceLiveResponse`.
   - **Kiến trúc đẩy:** handler gọi `IRaceLiveChangeTracker.MarkChanged(raceId)`; `RaceLiveBroadcastBehavior` (pipeline) drain sau `next()` rồi `Send(GetRaceLiveQuery)` → `IRaceLiveNotifier.PushAsync`. **⚠️ Behavior PHẢI đăng ký TRƯỚC `UnitOfWorkBehavior`** trong `AddApplication()` (đăng ký trước = nằm ngoài) để chỉ đẩy **sau commit**; đăng ký sau → client refetch trúng data cũ. `Drain()` phải chạy **trước** `Send` (chống đệ quy, vì query lồng đi lại chính behavior).
@@ -172,39 +188,57 @@ EF mapping: `Infrastructure/Data/Configurations/*Configuration.cs` (mỗi entity
   - **JWT cho WebSocket:** `Program.cs` thêm `OnMessageReceived` đọc `access_token` từ query string, **có guard `path.StartsWithSegments(RaceLiveHub.Path)`** — thiếu guard thì `?access_token=` thành auth hợp lệ trên mọi endpoint. Thêm **vào trong** khối `options.Events` sẵn có (đừng gán `new JwtBearerEvents`, sẽ mất `OnChallenge`/`OnForbidden`).
   - **CORS:** policy thêm `.AllowCredentials()` (SignalR negotiate gửi `withCredentials: true`) và `Cors:AllowedOrigins` nay có `http://localhost:5173` (trước là **rỗng** → chặn mọi cross-origin). ⚠️ Không đổi sang `AllowAnyOrigin()`: kèm `AllowCredentials()` sẽ ném `InvalidOperationException` lúc khởi động.
   - **Hạn chế:** group lưu trong RAM tiến trình → chỉ đúng với 1 instance; chạy ≥2 replica cần Redis backplane.
-- **Flow 5:** `POST {id}/legs/{i}/override` (AdminOverride + lý do bắt buộc, **`ValidatePositions`**, set `ExecutionStatus=Completed`, resume).
-- **Flow 8:** `POST {id}/publish` & `unpublish` — **atomic** (transaction tường minh): **chặn nếu còn Violation `Pending`**, rồi RaceResult + xếp hạng (tie-break tổng điểm→1st→2nd→leg cuối; Race DQ xuống đáy/0đ), **Prize Points `(N−p+1)×200`** cho Owner/Jockey, cập nhật Career stats Jockey (`JockeyProfile`), **cập nhật `Horse.Stamina`** (−1 cho ngựa đua, reset 3 cho ngựa `Approved` nghỉ). **Lưu ý: quyết toán prediction nay chạy PER-LEG** (khi mỗi Leg Confirmed, xem Flow 4) — khối settle prediction trong `PublishRaceResult` đã bị vô hiệu hóa; Publish chỉ tạo `SettlementRun` khung. Unpublish rollback đối xứng Prize Points/leaderboard/Career stats (migration `AddRollbackFieldsForFlow8`) — **nhưng KHÔNG rollback `Horse.Stamina`** (T-03). **Unpublish body `{ reason }` bắt buộc** — ghi `ReviewHistory` (`Race`/`Unpublished` + before/after snapshot); Publish ghi `Race`/`Published`. Publish/unpublish có ở **cả** `RaceExecutionController` (`/api/races/{id}/publish|unpublish`) **lẫn** `AdminController` (`/api/admin/races/{id}/publish|unpublish`) — **trùng lặp, cần thống nhất**. Màn review trước publish: `GET /api/admin/races/{id}/publication-review` (`Admin/ResultPublication`). **Leaderboard** `GET /api/leaderboards/career` & `/tournament/{id}` (`?role=`) tính on-read từ `PrizePointTransaction`.
+- **Flow 5:** `POST {id}/legs/{i}/override` (AdminOverride + lý do bắt buộc, **`ValidatePositions`**) → `leg.Status = Resolved`, `ConfirmationType = AdminOverride`, ghi `LegOfficialResult` + Leg Points, race về `InProgress` (hoặc `PendingResult` nếu đã hết leg).
+- **Flow 8:** `POST {id}/publish` & `unpublish` — **atomic** (transaction tường minh): RaceResult + xếp hạng (tie-break tổng điểm→nhiều 1st→nhiều 2nd→vị trí leg cuối→`EntryId`; Race DQ xuống đáy/0đ), **Prize Points `(N−p+1)×200`** cho Owner/Jockey, cập nhật Career stats Jockey (`JockeyProfile`), **và quyết toán cược tại đây**: tạo `SettlementRun` + `PredictionSettlement` cho mọi prediction `Pending`/`Locked`, payout `BetAmount × OddsLocked1` vào ví, prediction → `Won`/`Lost`. Unpublish rollback đối xứng Prize Points/leaderboard/Career stats + hoàn payout (`Won`/`Lost` → `Locked`) (migration `AddRollbackFieldsForFlow8`). **Unpublish body `{ reason }` bắt buộc** — ghi `ReviewHistory` (`Race`/`Unpublished` + before/after snapshot); Publish ghi `Race`/`Published`. ✅ Route trùng ở `AdminController` **đã bị xóa** (T-08) — chỉ còn `/api/races/{id}/publish|unpublish`. Màn review trước publish: `GET /api/admin/races/{id}/publication-review` (`Admin/ResultPublication`). **Leaderboard** `GET /api/leaderboards/career` & `/tournament/{id}` (`?role=`) tính on-read từ `PrizePointTransaction`.
+  - ❌ **Gate "chặn Publish nếu còn Violation `Pending`" đã bị revert gỡ.** Admin vẫn nên duyệt hết vi phạm trước, nhưng BE **không còn** chặn — `publication-review` chỉ *báo* `PendingViolationCount`.
+  - ❌ Không còn cập nhật `Horse.Stamina` (cơ chế đã bị gỡ).
 - **Flow 6:** referee report (`POST /api/violations`, ReportedByRefereeId từ JWT, Status Pending, LegNumber mặc định leg hiện hành); admin `POST /api/admin/violations/{id}/approve` (Warning / Demote tụt 1 hạng leg + recompute Leg Points / Race DQ zero điểm toàn bộ leg) & `/reject` (lý do bắt buộc, **set `Penalty="None"`**). `PUT /api/violations/{id}` **ADMIN-only**, ActorAdminId từ JWT, cho phép `Penalty="None"` + **rollback standings** khi sửa Approved→khác. `GET /api/admin/violations` trả `AdminNote` + `ViolatorRole` từ `Entry.Jockey.Role.Code`. Approve/Reject/Update đều ghi `ReviewHistory` (`Violation` + before/after jsonb). Publish loại entry Race DQ → xếp cuối, `IsRaceDQ`, 0 Prize.
-- **Flow 7 (cược PER-LEG):** mỗi prediction cược **1 Entry về 1st của MỘT Leg cụ thể** (`Prediction.LegNumber`, có FK thật tới `Legs`). Routes ở `PredictionsController` (prefix `api/predictions`): `GET races/{raceId}/legs/{n}/odds` (`GetLegPredictionOddsQuery`, mọi role trừ jockey-only), `POST races/{raceId}/legs/{n}` body `{EntryId, BetAmount}` (`CreatePrediction`, SPECTATOR), `DELETE {id}/cancel` (`DeletePrediction`, SPECTATOR). `CreatePrediction` hardened — **khóa odds server-side** per-(race,leg,entry) qua `PredictionOddsCalculator.CalculateEntryLegOddsAsync`, trừ ví (transaction), validate min10/50%/**1-active-per-(race+leg)**/leg chưa `InProgress`, **SpectatorId từ JWT**; `DeletePrediction` → hủy + hoàn 100% + **chống hủy hộ** (nay **không** còn check race `Scheduled` — cửa hủy đóng theo leg vì `StartLeg` chuyển `Pending→Locked`). `PredictionStatus`: `Pending → Locked` (khi Leg start) `→ Settled | Cancelled`. Migrations: `UpdatePredictionSingleEntryBet`, `UpdatePredictionDelete`, `CompleteFlow7PredictionBetting`, `AddLegPredictionRelationship`.
-  - **Odds ĐỘNG theo pool** (`Application/Usecases/Predictions/Common/PredictionOddsCalculator.cs`) — đây **không phải** odds tĩnh:
-    - `BaseOdds` = `Entry.Odds` (khóa lúc đóng đăng ký, từ win rate ngựa).
+- **Flow 7 (cược RACE-LEVEL — sau revert 2026-07-25):** mỗi prediction cược **1 Entry về 1st của cả Race**. Routes ở `PredictionsController` (prefix `api/predictions`):
+  | Route | Use case | Role |
+  |---|---|---|
+  | `GET races/{raceId}/odds` | `GetRacePredictionOdds` | SPECTATOR, ADMIN, REFEREE, HORSE_OWNER |
+  | `POST races/{raceId}` | `CreatePrediction` | SPECTATOR |
+  | `GET {predictionId}` · `GET /` | `GetPredictionDetail` · `GetPredictionList` | mọi role đăng nhập |
+  | `DELETE {predictionId}/cancel` | `DeletePrediction` | SPECTATOR |
+
+  `CreatePrediction` hardened — **khóa odds server-side** per-(race, entry) qua `PredictionOddsCalculator.CalculateEntryOddsAsync`, trừ ví trong transaction, **SpectatorId từ JWT**. Validate: `race.Status == "Scheduled"` · `race.OddsComputedAt != null` · spectator `IsActive` · `BetAmount >= 10` · `BetAmount <= 50%` số dư · **tối đa 1 prediction chưa `Cancelled` / (Race + Spectator)**.
+  `DeletePrediction` → hủy + hoàn 100% + **chống hủy hộ** (lọc theo `SpectatorId`); yêu cầu race `Scheduled`, prediction `Pending`, ví không `IsFrozen`.
+  `PredictionStatus` (`Domain/Aggregates/Entities/PredictionStatus.cs`): `Pending` · `Locked` · `Won` · `Lost` · `Cancelled` · `Settled`.
+  ⚠️ **Thực tế chỉ dùng:** `Pending` (khi đặt) → `Won`/`Lost` (khi Publish) hoặc `Cancelled` (hủy/revoke ngựa/lock account). **`Locked` chỉ được ghi khi Unpublish rollback**, và **`Settled` không còn ai gán** ⇒ [T-20](../.claude/TASKS.md).
+  Migrations liên quan: `UpdatePredictionSingleEntryBet`, `UpdatePredictionDelete`, `CompleteFlow7PredictionBetting`, `DropOrphanPerLegColumns` (drop cột mồ côi per-leg).
+  - **Odds ĐỘNG theo pool** (`Application/Usecases/Predictions/common/PredictionOddsCalculator.cs`) — đây **không phải** odds tĩnh:
+    - `BaseOdds` = `Entry.Odds`, khóa lúc đóng đăng ký bằng `CloseRegistrationCommandHandler.OddsFor(firsts, total, fieldSize)` — **Laplace smoothing**: `winRate = (firsts + 1) / (total + max(fieldSize, 2))`, `odds = 1 / max(winRate, 0.04)`, clamp `[1.10, 25.00]`.
     - `pressure = entryPool / max(avgPool, 1)` (`0.5` nếu entry chưa ai cược); `CurrentOdds = BaseOdds / √pressure`.
-    - Pool tính **chỉ trong Leg đó**, bỏ prediction `Cancelled`. **Clamp `[1.10, 25.00]`**, làm tròn 2 chữ số (`AwayFromZero`).
-    - Lúc đặt cược, `CalculateEntryLegOddsAsync` cộng **cả số tiền đang đặt** vào pool trước khi tính → odds khóa vào prediction đã phản ánh chính lệnh cược đó.
-    - Response odds trả cả `baseOdds`, `currentOdds`, `entryPool`, `totalPool`, `horseStamina`, `horseHealthStatus`, và cờ **`isBettingOpen`** (theo `LegExecutionStatuses.IsBettingOpen` — leg `InProgress` vẫn **xem** được odds nhưng không đặt được).
+    - Pool tính **trên cả race**, bỏ prediction `Cancelled`. **Clamp `[1.10, 25.00]`**, làm tròn 2 chữ số (`AwayFromZero`).
+    - Lúc đặt cược, `CalculateEntryOddsAsync` cộng **cả số tiền đang đặt** vào pool trước khi tính → odds khóa vào prediction đã phản ánh chính lệnh cược đó.
+    - Response odds (`RacePredictionOddsResponse`) trả `baseOdds`, `currentOdds`, `entryPool`, `totalPool` + thông tin ngựa/nài/gate. ⚠️ Cờ **`isBettingOpen` hardcode `true`** — handler đã throw nếu race ≠ `Scheduled` hoặc odds chưa tính, nên cờ không bao giờ `false` ⇒ [T-22](../.claude/TASKS.md). ❌ Không còn `horseStamina`/`horseHealthStatus`.
   - **Nạp điểm:** **`RunWeeklyTopUp`** (+100, idempotent) chạy qua **`WeeklyTopUpBackgroundService`** (mỗi giờ, catch-up) + trigger admin `POST /api/admin/points/weekly-topup`. **`RunDailyTopUp`** (nạp bù ví `< 10` lên đúng 10, idempotent theo ngày UTC) chỉ có trigger admin `POST /api/admin/points/daily-topup` — **không có worker**.
   - **`LockUser`/`UnlockUser`** (`POST /api/admin/users/{id}/lock|unlock`) → khóa account, Spectator thì **hoàn cược Pending + đóng băng ví**. Admin points thêm `GET`+`PUT /api/admin/points/{userId}`.
 - **Lấy danh tính từ JWT claims** (`userId`/NameIdentifier) trong controller — không tin body cho RefereeUserId/AdminUserId.
 - **✅ Leaderboard đã có:** `LeaderboardsController` — `GET /api/leaderboards/career` & `GET /api/leaderboards/tournament/{id}` (`?role=`), tính on-read từ `PrizePointTransaction`.
-- **Còn lại (xem [.claude/TASKS.md](../.claude/TASKS.md) để có cách sửa):** 🔴 **bug DI khiến interceptor chuẩn hóa SĐT không chạy** (T-01); abstraction `ICurrentUser` (file có nhưng **bị comment**, identity vẫn resolve thủ công — T-07); tie-break cuối "quyết định Admin" thủ công (T-10); **trùng lặp endpoint đăng ký/khóa Odds (RaceExecution vs Races) và publish (RaceExecution vs Admin)** — cần thống nhất (T-08); gán referee chưa validate đúng role (T-09); `StartRaceCommand` (khởi động cả Race) tồn tại nhưng không wire vào controller (T-11); Unpublish không rollback Stamina (T-03); migration rác + thiếu `Down()` (T-02); message tiếng Việt trong `GlobalExceptionHandler` (T-05).
+- **Còn lại (xem [.claude/TASKS.md](../.claude/TASKS.md) để có cách sửa):**
+  - ✅ **Đợt revert T-18…T-22 đã đóng (2026-07-25).**
+  - ⚪ **Nợ cũ:** `ICurrentUser` vẫn bị comment, identity resolve thủ công (T-07); tie-break cuối "quyết định Admin" chưa có endpoint (T-10); FluentValidation hoãn (T-12).
+  - ✅ **Đã đóng:** DI interceptor SĐT (T-01), migration rỗng (T-02), message EN (T-05), endpoint trùng (T-08), validate role referee (T-09), wire `StartRaceCommand` (T-11).
 
 **Map use case ↔ route (Flow 3–8, đều là nghiệp vụ thật, không phải CRUD generic):**
 
 | Use case (`Usecases/RaceExecution/`) | Route | Flow |
 |---|---|---|
 | `OpenRegistration` / `CloseRegistration` | `POST /api/races/{id}/open-registration` · `close-registration` (auto-reject Entry Pending + khóa Odds + gán GateNumber) | 3 |
-| `StartLeg` | `POST /api/races/{id}/legs/{n}/start` (khởi động **từng Leg**; `Leg.ExecutionStatus`) | 3-4 |
-| `StartRace` / `ProcessDueRaceStarts` / `RaceLifecycleCoordinator` | (không route trực tiếp) — **worker auto-start** `RaceAutoStartBackgroundService` khi qua `ScheduledStartTime` | 3-4 |
+| `StartRace` | `POST /api/races/{id}/start` (**REFEREE/ADMIN** — khởi động **cả Race**) | 3-4 |
+| `ProcessDueRaceStarts` / `RaceLifecycleCoordinator` / `RaceLegProvisioner` | (không route trực tiếp) — **worker auto-start** `RaceAutoStartBackgroundService` khi qua `ScheduledStartTime`; coordinator dùng chung cho cả 2 đường | 3-4 |
 | `ResumeRace` | `POST /api/races/{id}/resume` | 5 |
 | `GetRaceExecution` / `GetRaceStandings` / `GetRacePause` | `GET /api/races/{id}/execution` · `standings` · `pause` (**pause ADMIN-only**) | 4 |
 | `GetRaceLive` | `GET /api/races/{id}/live` (snapshot cho Spectator theo dõi trực tiếp; **cũng là payload push SignalR**) | 4 |
 | `GetRefereeLegView` | `GET .../legs/{i}/referee-view` (ẩn input referee kia đến khi cả hai submit) | 4 |
 | `SaveLegDraft` | `PUT .../legs/{i}/draft` (**persist thật** → `LegRefereeDraft`) | 4 |
-| `SubmitLegResult` | `POST .../legs/{i}/submit` (append-only, so khớp → AutoMatched/Conflicted + Leg Points; **settle prediction của Leg**) | 4 |
-| `OverrideLegResult` | `POST .../legs/{i}/override` (AdminOverride + lý do bắt buộc) | 5 |
-| `PublishRaceResult` / `UnpublishRaceResult` | `POST /api/races/{id}/publish` · `unpublish` (atomic) | 8 |
+| `SubmitLegResult` | `POST .../legs/{i}/submit` (append-only, so khớp → AutoMatched/Conflicted + Leg Points) | 4 |
+| `OverrideLegResult` | `POST .../legs/{i}/override` (AdminOverride + lý do bắt buộc → leg `Resolved`) | 5 |
+| `PublishRaceResult` / `UnpublishRaceResult` | `POST /api/races/{id}/publish` · `unpublish` (atomic, **kèm quyết toán cược**) | 8 |
+| ~~`StartLeg`~~ | ~~`POST /api/races/{id}/legs/{n}/start`~~ — **đã bị xóa** trong đợt revert 2026-07-25 | — |
 
-Ngoài ra: Flow 6 (Violations approve/reject → áp standings) ở `AdminController`; Flow 7 (`CreatePrediction` khóa odds server-side + trừ ví, **cược per-leg**, weekly top-up, lock/unlock) ở `Predictions`/`Admin`. Tất cả lấy danh tính từ JWT claims, **không tin body**.
+Ngoài ra: Flow 6 (Violations approve/reject → áp standings) ở `AdminController`; Flow 7 (`CreatePrediction` khóa odds server-side + trừ ví, **cược race-level**, weekly/daily top-up, lock/unlock) ở `Predictions`/`Admin`. Tất cả lấy danh tính từ JWT claims, **không tin body**.
 
 **Khi thêm use case Flow mới:** theo pattern này — **use case đặc thù** trong `Usecases/<Feature>/<Action>/` (không nhét vào CRUD generic); repository interface ở `Application/Common/`, impl ở `Infrastructure/Repositories/`, đăng ký DI; Command dựa `UnitOfWorkBehavior` để tự commit (hoặc `IUnitOfWork.SaveChangesAsync` tường minh khi cần ID vừa sinh / thao tác atomic nhiều bước như Flow 8). Nợ kỹ thuật: danh tính nên gom về `ICurrentUser` (hiện resolve thủ công trong controller).
 
@@ -224,6 +258,7 @@ dotnet ef database update --project Infrastructure --startup-project Api
 
 - Cổng/Swagger: chạy lên là redirect `/` → `/swagger`.
 - Migration tự apply khi khởi động (`db.Database.MigrateAsync()` trong Program.cs); seed test data khi `Development` hoặc cấu hình `SeedTestData=true`.
+- **18 migration**, tất cả ở `Infrastructure/Migrations/` (namespace `Infrastructure.Migrations`). Migration `DropOrphanPerLegColumns` drop cột mồ côi `Predictions.LegNumber`/`LegRaceId`, `Legs.ExecutionStatus`/prediction window, `Horses.Stamina`.
 - **Background services** (đăng ký ở `Program.cs`): `WeeklyTopUpBackgroundService` (top-up ví thứ Hai) + `RaceAutoStartBackgroundService` (auto-start Race khi qua `ScheduledStartTime`, quét mỗi ~15s). **SignalR** hub `/api/hubs/race-live` (push diễn biến đua).
 
 ### ⛔ Quy ước kiểm thử: dự án KHÔNG có test tự động

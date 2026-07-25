@@ -213,8 +213,11 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
             race.Status = RaceExecutionConstants.RaceInProgress;
             race.UpdatedAt = now;
 
-            // Per-leg betting lock: StartLegCommand locks Pending predictions for that leg only.
-            // Do not lock all race predictions here — legs not yet started must stay Pending (T-17).
+            var pendingPredictions = await _context.Predictions
+                .Where(p => p.RaceId == raceId && p.Status == PredictionStatus.Pending)
+                .ToListAsync(cancellationToken);
+            foreach (var prediction in pendingPredictions)
+                prediction.Status = PredictionStatus.Locked;
 
             await _context.SaveChangesAsync(cancellationToken);
             await tx.CommitAsync(cancellationToken);
