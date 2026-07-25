@@ -34,13 +34,10 @@ public sealed class RaceExecutionController : ControllerBase
 
     // ── Race lifecycle ───────────────────────────────────────────────
 
-    [HttpPost("{raceId:int}/legs/{legNumber:int}/start")]
+    [HttpPost("{raceId:int}/start")]
     [Authorize(Roles = "REFEREE,ADMIN")]
-    public async Task<IActionResult> StartLeg(int raceId, int legNumber, CancellationToken ct)
-    {
-        var result = await _sender.Send(new StartLegCommand(raceId, legNumber, GetUserId()), ct);
-        return Ok(new { success = result });
-    }
+    public async Task<IActionResult> Start(int raceId, CancellationToken ct)
+        => Ok(await _sender.Send(new StartRaceCommand(raceId, GetUserId()), ct));
 
     [HttpPost("{raceId:int}/resume")]
     [Authorize(Roles = "ADMIN")]

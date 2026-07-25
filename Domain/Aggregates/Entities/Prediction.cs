@@ -6,8 +6,6 @@ public class Prediction
 
     public int RaceId { get; set; }
 
-    public int LegNumber { get; set; }
-
     public int SpectatorId { get; set; }
 
     public int FirstEntryId { get; set; }
@@ -24,16 +22,15 @@ public class Prediction
 
     public decimal? OddsLocked3 { get; set; }
 
-    public string Status { get; set; } = PredictionStatus.Pending;
+    public string Status { get; set; } = "Pending";
 
     public DateTime CreatedAt { get; set; }
 
     public DateTime? CancelledAt { get; set; }
 
+    // Navigation Properties
     public Race? Race { get; set; }
 
-    public Leg? Leg { get; set; }
-    
     public Spectator? Spectator { get; set; }
 
     public Entry? FirstEntry { get; set; }

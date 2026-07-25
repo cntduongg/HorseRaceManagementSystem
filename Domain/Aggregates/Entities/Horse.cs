@@ -1,6 +1,5 @@
-using Domain.Aggregates.Constants;
-
 namespace Domain.Aggregates.Entities;
+
 public class Horse
 {
     public int HorseId { get; set; }
@@ -16,14 +15,7 @@ public class Horse
     public DateTime? ApprovedAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
-    public int Stamina { get; set; } = 3; // Giá trị từ 0 đến 3 (Mặc định khi tạo ngựa là 3)
-    public string HealthStatus => Stamina switch
-    {
-        3 => HorseHealthStatus.Healthy,
-        2 => HorseHealthStatus.Fair,
-        1 => HorseHealthStatus.Weak,
-        _ => HorseHealthStatus.Exhausted
-    };
+
     public User Owner { get; set; } = null!;
     public ICollection<Entry> Entries { get; set; } = new List<Entry>();
     public ICollection<JockeyInvitation> Invitations { get; set; } = new List<JockeyInvitation>();

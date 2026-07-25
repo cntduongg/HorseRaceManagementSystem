@@ -24,8 +24,6 @@ public sealed record RaceLiveEntryDto(
     string JockeyName,
     string? Color,        // màu lông (free-text: Bay/Chestnut/…)
     string? ImageUrl,
-    int Stamina,          // 0..3
-    string HealthStatus,  // Healthy|Fair|Weak|Exhausted (computed trên Horse)
     decimal Odds);        // đã khóa lúc đóng đăng ký
 
 public sealed record RaceLiveLegResultDto(
@@ -114,8 +112,6 @@ public sealed class GetRaceLiveQueryHandler
                 e.Jockey?.FullName ?? $"Jockey #{e.JockeyId}",
                 e.Horse?.Color,
                 e.Horse?.ImageUrl,
-                e.Horse?.Stamina ?? 0,
-                e.Horse?.HealthStatus ?? "Unknown",
                 e.Odds))
             .ToList();
 

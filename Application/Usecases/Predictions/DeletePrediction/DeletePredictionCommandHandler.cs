@@ -28,18 +28,16 @@ public sealed class DeletePredictionCommandHandler
             throw new InvalidOperationException("SpectatorId is required.");
 
         var prediction = await _context.Predictions
+            .Include(x => x.Race)
             .FirstOrDefaultAsync(
                 x => x.PredictionId == request.PredictionId &&
                      x.SpectatorId == request.SpectatorId,
                 cancellationToken)
             ?? throw new InvalidOperationException("Prediction not found.");
-// Spectator có thể hủy cược miễn là Leg đó chưa Bắt đầu (tức chưa InProgress/Completed/Cancelled)
-        var leg = await _context.Legs.AsNoTracking()
-            .FirstOrDefaultAsync(l => l.RaceId == prediction.RaceId && l.LegNumber == prediction.LegNumber, cancellationToken);
 
-        if (leg is null || leg.ExecutionStatus == "InProgress" || leg.ExecutionStatus == "Completed" || leg.ExecutionStatus == "Cancelled")
+        if (prediction.Race is null || prediction.Race.Status != "Scheduled")
         {
-            throw new InvalidOperationException("You cannot cancel predictions once the leg is in progress or completed.");
+            throw new InvalidOperationException("You can only cancel predictions while the race is Scheduled.");
         }
         
         if (prediction.Status == PredictionStatus.Cancelled)

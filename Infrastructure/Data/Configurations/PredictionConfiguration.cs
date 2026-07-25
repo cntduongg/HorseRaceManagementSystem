@@ -38,12 +38,6 @@ public class PredictionConfiguration : IEntityTypeConfiguration<Prediction>
             .WithMany(r => r.Predictions)
             .HasForeignKey(p => p.RaceId)
             .OnDelete(DeleteBehavior.Restrict);
-        
-        builder.HasOne(p => p.Leg)
-            .WithMany(l => l.Predictions)
-            .HasForeignKey(p => new { p.RaceId, p.LegNumber })
-            .OnDelete(DeleteBehavior.Restrict);
-
 
         builder.HasOne(p => p.Spectator)
             .WithMany(s => s.Predictions)
