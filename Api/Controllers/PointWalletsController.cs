@@ -6,6 +6,7 @@ using Application.Usecases.PointWallets.UpdatePointWallet;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace Api.Controllers;
 
@@ -43,7 +44,7 @@ public sealed class PointWalletsController : ControllerBase
         CancellationToken cancellationToken)
     {
         var wallet = await _sender.Send(
-            new GetPointWalletDetailQuery(walletId),
+            new GetPointWalletDetailQuery(walletId, GetViewerScope()),
             cancellationToken);
 
         if (wallet is null)
@@ -57,12 +58,13 @@ public sealed class PointWalletsController : ControllerBase
         return Ok(wallet);
     }
 
+    // Ví **của chính mình** (ADMIN thấy tất cả) — xem GetViewerScope().
     [HttpGet]
     public async Task<ActionResult<List<PointWalletListItemResponse>>> GetAll(
         CancellationToken cancellationToken)
     {
         var wallets = await _sender.Send(
-            new GetPointWalletListQuery(),
+            new GetPointWalletListQuery(GetViewerScope()),
             cancellationToken);
 
         return Ok(wallets);
@@ -107,5 +109,26 @@ public sealed class PointWalletsController : ControllerBase
         {
             success = result
         });
+    }
+
+    // Phạm vi dữ liệu được đọc: ADMIN → null (không lọc); role khác → chỉ ví của chính mình.
+    // (`ICurrentUser` vẫn đang bị comment — T-07 — nên resolve thủ công như các controller khác.)
+    private int? GetViewerScope()
+    {
+        if (User.IsInRole("ADMIN"))
+        {
+            return null;
+        }
+
+        var claim =
+            User.FindFirst("userId")?.Value ??
+            User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (!int.TryParse(claim, out var userId))
+        {
+            throw new UnauthorizedAccessException("Invalid or missing userId claim");
+        }
+
+        return userId;
     }
 }

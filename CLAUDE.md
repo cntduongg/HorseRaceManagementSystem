@@ -198,7 +198,7 @@ EF mapping: `Infrastructure/Data/Configurations/*Configuration.cs` (mỗi entity
   |---|---|---|
   | `GET races/{raceId}/odds` | `GetRacePredictionOdds` | SPECTATOR, ADMIN, REFEREE, HORSE_OWNER |
   | `POST races/{raceId}` | `CreatePrediction` | SPECTATOR |
-  | `GET {predictionId}` · `GET /` | `GetPredictionDetail` · `GetPredictionList` | mọi role đăng nhập |
+  | `GET {predictionId}` · `GET /` | `GetPredictionDetail` · `GetPredictionList` | mọi role đăng nhập — **nhưng chỉ thấy cược của CHÍNH MÌNH** (ADMIN thấy tất cả), xem T-25 |
   | `DELETE {predictionId}/cancel` | `DeletePrediction` | SPECTATOR |
 
   `CreatePrediction` hardened — **khóa odds server-side** per-(race, entry) qua `PredictionOddsCalculator.CalculateEntryOddsAsync`, trừ ví trong transaction, **SpectatorId từ JWT**. Validate: `race.Status == "Scheduled"` · `race.OddsComputedAt != null` · spectator `IsActive` · `BetAmount >= 10` · `BetAmount <= 50%` số dư · **tối đa 1 prediction chưa `Cancelled` / (Race + Spectator)**.
@@ -215,7 +215,8 @@ EF mapping: `Infrastructure/Data/Configurations/*Configuration.cs` (mỗi entity
   - **Nạp điểm:** **`RunWeeklyTopUp`** (+100, idempotent) chạy qua **`WeeklyTopUpBackgroundService`** (mỗi giờ, catch-up) + trigger admin `POST /api/admin/points/weekly-topup`. **`RunDailyTopUp`** (nạp bù ví `< 10` lên đúng 10, idempotent theo ngày UTC) chỉ có trigger admin `POST /api/admin/points/daily-topup` — **không có worker**.
   - **`LockUser`/`UnlockUser`** (`POST /api/admin/users/{id}/lock|unlock`) → khóa account, Spectator thì **hoàn cược Pending + đóng băng ví**. Admin points thêm `GET`+`PUT /api/admin/points/{userId}`.
 - **Lấy danh tính từ JWT claims** (`userId`/NameIdentifier) trong controller — không tin body cho RefereeUserId/AdminUserId.
-- **✅ Leaderboard đã có:** `LeaderboardsController` — `GET /api/leaderboards/career` & `GET /api/leaderboards/tournament/{id}` (`?role=`), tính on-read từ `PrizePointTransaction`.
+- **✅ Leaderboard đã có:** `LeaderboardsController` — `GET /api/leaderboards/career` & `GET /api/leaderboards/tournament/{id}` (`?role=`), tính on-read từ `PrizePointTransaction`; **`GET /api/leaderboards/spectators`** (✅ thêm 2026-07-26, `Leaderboards/GetSpectatorBettingLeaderboard`) — xếp hạng cược của Spectator, tính on-read từ `Prediction`, **chỉ trả số liệu tổng hợp** (rank/tên/số lệnh/thắng/win rate/tổng đặt/tổng thắng). Cố ý không trả lệnh cược lẻ: đây là nguồn thay thế cho việc FE trước đây tải cả `/api/predictions` về để tự gom (T-25).
+- **🔒 Scope dữ liệu cá nhân (✅ 2026-07-26, T-25):** `GET /api/point-wallets`, `/api/wallet-transactions`, `/api/predictions` (cả list lẫn `/{id}`) trước đây trả **toàn bộ bảng** cho mọi user đã đăng nhập — lọc chỉ nằm ở FE. Nay 4 query nhận `int? ViewerSpectatorId` (`null` = ADMIN, khác null = lọc `SpectatorId`), controller cấp qua `GetViewerScope()` = `User.IsInRole("ADMIN") ? null : userId`. Detail trả `null` → **404** (không phải 403) để không lộ id có tồn tại hay không. ⚠️ Khi thêm endpoint đọc mới trên các bảng `PointWallet`/`WalletTransaction`/`Prediction`/`PredictionSettlement`, **phải** đi kèm scope tương tự.
 - **Còn lại (xem [.claude/TASKS.md](../.claude/TASKS.md) để có cách sửa):**
   - ✅ **Đợt revert T-18…T-22 đã đóng (2026-07-25).**
   - ⚪ **Nợ cũ:** `ICurrentUser` vẫn bị comment, identity resolve thủ công (T-07); tie-break cuối "quyết định Admin" chưa có endpoint (T-10); FluentValidation hoãn (T-12).
@@ -265,7 +266,7 @@ dotnet ef database update --project Infrastructure --startup-project Api
 
 Solution chỉ có **5 project sản phẩm** (`Api`, `Application`, `Domain`, `Infrastructure`, `Sharekernel`) — **không có test project**. `Application.Tests` đã bị **gỡ khỏi solution và xóa hẳn** (2026-07-25) theo quyết định của nhóm.
 
-Nhóm **test thủ công** theo [.claude/TEST_PLAN_2026-07-22.md](../.claude/TEST_PLAN_2026-07-22.md). Khi làm việc trên repo này:
+Nhóm **test thủ công** theo [.claude/TEST_PLAN_2026-07-26.md](../.claude/TEST_PLAN_2026-07-26.md). Khi làm việc trên repo này:
 
 - **Không tạo file test**, không dựng lại test project, không thêm package test (xUnit / NUnit / Moq / InMemory provider…).
 - **Không đề xuất "nên bổ sung test"** như một hạng mục cần làm, và **không coi việc thiếu test là điểm chặn** khi review code hay review plan.

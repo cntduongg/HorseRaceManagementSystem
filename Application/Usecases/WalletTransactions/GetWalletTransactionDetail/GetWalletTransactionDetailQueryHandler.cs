@@ -18,9 +18,17 @@ public sealed class GetWalletTransactionDetailQueryHandler
         GetWalletTransactionDetailQuery request,
         CancellationToken cancellationToken)
     {
-        return await _context.WalletTransactions
+        var query = _context.WalletTransactions
             .AsNoTracking()
-            .Where(x => x.WalletTransactionId == request.WalletTransactionId)
+            .Where(x => x.WalletTransactionId == request.WalletTransactionId);
+
+        // Không phải ADMIN → chỉ giao dịch của chính mình (trả null → 404, không lộ tồn tại).
+        if (request.ViewerSpectatorId is int spectatorId)
+        {
+            query = query.Where(x => x.SpectatorId == spectatorId);
+        }
+
+        return await query
             .Select(x => new WalletTransactionDetailResponse(
                 x.WalletTransactionId,
                 x.WalletId,

@@ -63,7 +63,7 @@ public sealed class PredictionsController : ControllerBase
         CancellationToken cancellationToken)
     {
         var prediction = await _sender.Send(
-            new GetPredictionDetailQuery(predictionId),
+            new GetPredictionDetailQuery(predictionId, GetViewerScope()),
             cancellationToken);
 
         if (prediction is null)
@@ -77,12 +77,13 @@ public sealed class PredictionsController : ControllerBase
         return Ok(prediction);
     }
 
+    // Danh sách cược **của chính mình** (ADMIN thấy tất cả) — xem GetViewerScope().
     [HttpGet]
     public async Task<ActionResult<List<PredictionListItemResponse>>> GetAll(
         CancellationToken cancellationToken)
     {
         var predictions = await _sender.Send(
-            new GetPredictionListQuery(),
+            new GetPredictionListQuery(GetViewerScope()),
             cancellationToken);
 
         return Ok(predictions);
@@ -104,6 +105,11 @@ public sealed class PredictionsController : ControllerBase
             success = result
         });
     }
+
+    // Phạm vi dữ liệu được đọc: ADMIN → null (không lọc); role khác → chỉ chính mình.
+    // (`ICurrentUser` vẫn đang bị comment — T-07 — nên resolve thủ công như các controller khác.)
+    private int? GetViewerScope()
+        => User.IsInRole("ADMIN") ? null : GetUserId();
 
     private int GetUserId()
     {
