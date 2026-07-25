@@ -64,6 +64,9 @@ public static class RaceRankingCalculator
             .ThenByDescending(x => x.LegWins)
             .ThenByDescending(x => x.Leg2nds)
             .ThenBy(x => x.LastLegPos)
+            // Deterministic final tie-break so preview (publication-review) matches publish
+            // and prize points are not decided by undefined DB row order.
+            .ThenBy(x => x.Entry.EntryId)
             .Select((x, i) => new RankedEntry(
                 x.Entry,
                 x.IsDq,

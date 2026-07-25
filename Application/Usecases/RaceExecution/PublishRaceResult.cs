@@ -65,14 +65,6 @@ public sealed class PublishRaceResultCommandHandler
                 throw new InvalidOperationException(
                     $"There are still {pendingViolations} unresolved violation(s). Please review them before publishing.");
 
-            var beforeSnapshot = ReviewHistoryJson.Serialize(new
-            {
-                raceId = race.RaceId,
-                name = race.Name,
-                status = race.Status,
-                publishedAt = race.PublishedAt
-            });
-
             var entries = await _context.Entries
                 .Where(e => e.RaceId == race.RaceId &&
                             e.Status == RaceExecutionConstants.EntryApproved)
@@ -83,6 +75,14 @@ public sealed class PublishRaceResultCommandHandler
                 .ToListAsync(cancellationToken);
 
             var now = DateTime.UtcNow;
+
+            // Safety net: quyết toán leg đã confirmed nhưng còn cược Pending/Locked (FE quên StartLeg).
+            foreach (var leg in race.Legs.Where(l =>
+                         l.Status is RaceExecutionConstants.LegConfirmed or RaceExecutionConstants.LegResolved))
+            {
+                await LegPredictionSettlement.SettleAsync(
+                    _context, race.RaceId, leg.LegNumber, now, cancellationToken);
+            }
 
             // Entry bị Race DQ (vi phạm đã duyệt) — xếp cuối, 0 điểm, 0 Prize (Flow 6).
             var dqSet = (await _context.Violations
@@ -307,8 +307,32 @@ public sealed class PublishRaceResultCommandHandler
             // run.TotalBetAmount = totalBet;
             // run.TotalPayoutAmount = totalPayout;
             
-// 1. Lấy danh sách ID các ngựa đã thực tế tham gia cuộc đua
             var participantHorseIds = entries.Select(e => e.HorseId).Distinct().ToList();
+            var staminaHorseIds = participantHorseIds.ToList();
+            var restingHorseIds = await _context.Horses
+                .AsNoTracking()
+                .Where(h => h.Status == "Approved" && !participantHorseIds.Contains(h.HorseId))
+                .Select(h => h.HorseId)
+                .ToListAsync(cancellationToken);
+            staminaHorseIds.AddRange(restingHorseIds);
+
+            var staminaBeforeMutate = await _context.Horses
+                .Where(h => staminaHorseIds.Contains(h.HorseId))
+                .Select(h => new { h.HorseId, h.Stamina })
+                .ToListAsync(cancellationToken);
+
+            var beforeSnapshot = ReviewHistoryJson.Serialize(new
+            {
+                raceId = race.RaceId,
+                name = race.Name,
+                status = race.Status,
+                publishedAt = race.PublishedAt,
+                horseStamina = staminaBeforeMutate
+                    .Select(x => new { horseId = x.HorseId, stamina = x.Stamina })
+                    .ToList()
+            });
+
+// 1. Lấy danh sách ID các ngựa đã thực tế tham gia cuộc đua
 // 2. Trừ 1 điểm thể lực của tất cả ngựa tham gia đua (Tối thiểu về 0)
             var participantHorses = await _context.Horses
                 .Where(h => participantHorseIds.Contains(h.HorseId))

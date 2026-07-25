@@ -208,30 +208,13 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
                 }
             }
 
-            if (race.Legs.Count == 0)
-            {
-                for (var legNumber = 1; legNumber <= race.NumberOfLegs; legNumber++)
-                {
-                    _context.Legs.Add(new Leg
-                    {
-                        RaceId = race.RaceId,
-                        LegNumber = legNumber,
-                        Status = RaceExecutionConstants.LegPending
-                    });
-                }
-            }
+            await RaceLegProvisioner.EnsureLegsExistAsync(_context, race, cancellationToken);
 
             race.Status = RaceExecutionConstants.RaceInProgress;
             race.UpdatedAt = now;
 
-            var pendingPredictions = await _context.Predictions
-                .Where(p =>
-                    p.RaceId == race.RaceId &&
-                    p.Status == PredictionStatus.Pending)
-                .ToListAsync(cancellationToken);
-
-            foreach (var prediction in pendingPredictions)
-                prediction.Status = PredictionStatus.Locked;
+            // Per-leg betting lock: StartLegCommand locks Pending predictions for that leg only.
+            // Do not lock all race predictions here — legs not yet started must stay Pending (T-17).
 
             await _context.SaveChangesAsync(cancellationToken);
             await tx.CommitAsync(cancellationToken);
@@ -278,10 +261,12 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
         DateTime now,
         CancellationToken cancellationToken)
     {
+        await RaceLegProvisioner.EnsureLegsExistAsync(_context, race, cancellationToken);
+
         var legs = await _context.Legs.Where(l => l.RaceId == race.RaceId).ToListAsync(cancellationToken);
         foreach (var leg in legs)
         {
-            leg.ExecutionStatus = "PredictionOpen";
+            leg.ExecutionStatus = LegExecutionStatuses.PredictionOpen;
             leg.PredictionOpenedAt = now;
         }
         

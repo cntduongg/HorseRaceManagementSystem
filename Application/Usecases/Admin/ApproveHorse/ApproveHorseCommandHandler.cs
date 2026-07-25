@@ -37,6 +37,7 @@ public class ApproveHorseCommandHandler
         horse.Status = HorseStatus.Approved;
         horse.ApprovedAt = DateTime.UtcNow;
         horse.ApprovedBy = request.AdminId;
+        horse.RejectionReason = null;
         horse.UpdatedAt = DateTime.UtcNow;
 
         await _reviewHistoryRepository.AddAsync(

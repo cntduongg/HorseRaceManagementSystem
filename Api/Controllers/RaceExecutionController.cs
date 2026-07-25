@@ -34,6 +34,12 @@ public sealed class RaceExecutionController : ControllerBase
 
     // ── Race lifecycle ───────────────────────────────────────────────
 
+    // Manual race start (FE admin.js/referee.js). Same REFEREE gate as StartLeg: role only, not assignment check.
+    [HttpPost("{raceId:int}/start")]
+    [Authorize(Roles = "REFEREE,ADMIN")]
+    public async Task<IActionResult> Start(int raceId, CancellationToken ct)
+        => Ok(await _sender.Send(new StartRaceCommand(raceId, GetUserId()), ct));
+
     [HttpPost("{raceId:int}/legs/{legNumber:int}/start")]
     [Authorize(Roles = "REFEREE,ADMIN")]
     public async Task<IActionResult> StartLeg(int raceId, int legNumber, CancellationToken ct)

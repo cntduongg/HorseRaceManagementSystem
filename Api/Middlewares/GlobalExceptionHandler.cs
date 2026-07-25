@@ -44,7 +44,7 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
                 (
                     StatusCodes.Status400BadRequest,
                     "Invalid Phone Number",
-                    "Số điện thoại không hợp lệ."
+                    "The phone number is not valid."
                 ),
 
             /*
@@ -56,7 +56,7 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
                 (
                     StatusCodes.Status409Conflict,
                     "Phone Number Already Exists",
-                    "Số điện thoại đã tồn tại."
+                    "This phone number is already registered."
                 ),
 
             DbUpdateException dbException =>
@@ -84,7 +84,7 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
                 (
                     StatusCodes.Status500InternalServerError,
                     "Internal Server Error",
-                    "Đã xảy ra lỗi trong hệ thống."
+                    "An unexpected error occurred."
                 )
         };
 

@@ -194,6 +194,11 @@ using (var scope = app.Services.CreateScope())
 
     await db.Database.MigrateAsync();
 
+    await UserPhoneNumberBackfill.RunAsync(
+        db,
+        scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("UserPhoneNumberBackfill"));
+
     var seedTestDataEnabled =
         builder.Configuration.GetValue<bool>("SeedTestData");
 

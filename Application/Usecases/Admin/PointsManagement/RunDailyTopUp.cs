@@ -6,6 +6,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.Admin.PointsManagement;
 
+/// <summary>
+/// Nạp bù ví spectator có số dư dưới 10 điểm lên đúng 10 điểm (idempotent theo ngày UTC, giao dịch Type = DailyTopUp).
+/// Không có background worker — chỉ chạy khi Admin gọi <c>POST /api/admin/points/daily-topup</c> (cứu trợ thủ công).
+/// Khác với <see cref="RunWeeklyTopUpCommand"/>, được <c>WeeklyTopUpBackgroundService</c> chạy tự động mỗi thứ Hai.
+/// </summary>
 public sealed record RunDailyTopUpCommand() : ICommand<RunDailyTopUpResponse>;
 public sealed record RunDailyTopUpResponse(int WalletsToppedUp, DateTime DayStart);
 

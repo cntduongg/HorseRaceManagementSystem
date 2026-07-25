@@ -39,7 +39,10 @@ public sealed class CreatePredictionCommandHandler : IRequestHandler<CreatePredi
         if (wallet.Balance < request.BetAmount) throw new InvalidOperationException("Insufficient balance.");
         if (request.BetAmount > wallet.Balance * 0.5m) throw new InvalidOperationException("Cannot bet more than 50% of your balance.");
 
-        var odds = await PredictionOddsCalculator.CalculateEntryLegOddsAsync(_context, request.RaceId, request.LegNumber, request.FirstEntryId, request.BetAmount, cancellationToken);
+        // Khóa ĐÚNG odds thị trường mà bảng odds đang hiển thị — không cộng tiền của chính lệnh
+        // cược này vào pool trước khi tính (xem PredictionOddsCalculator).
+        var odds = await PredictionOddsCalculator.CalculateEntryLegOddsAsync(
+            _context, request.RaceId, request.LegNumber, request.FirstEntryId, cancellationToken);
         var now = DateTime.UtcNow;
 
         await using var tx = await _context.Database.BeginTransactionAsync(cancellationToken);

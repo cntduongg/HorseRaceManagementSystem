@@ -1,4 +1,5 @@
 using Application.Common.Interfaces;
+using Application.Usecases.RaceExecution;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Domain.Aggregates.Constants;
@@ -28,6 +29,9 @@ public sealed class UpdateRaceCommandHandler
             throw new InvalidOperationException("Referee2Id is required.");
         if (request.Referee1Id == request.Referee2Id)
             throw new InvalidOperationException("Referees must be different.");
+
+        await RaceRefereeValidator.EnsureRefereesAsync(
+            _context, request.Referee1Id, request.Referee2Id, cancellationToken);
 
         var race = await _context.Races
             .FirstOrDefaultAsync(x => x.RaceId == request.RaceId, cancellationToken);
@@ -71,6 +75,13 @@ public sealed class UpdateRaceCommandHandler
         if (race.Status != "Scheduled" && request.NumberOfLegs != race.NumberOfLegs)
             throw new InvalidOperationException(
                 "Cannot change the number of Legs after the race has started.");
+
+        if (race.Status == RaceExecutionConstants.RaceScheduled
+            && request.NumberOfLegs != race.NumberOfLegs)
+        {
+            await RaceLegProvisioner.SyncLegCountAsync(
+                _context, race, request.NumberOfLegs, cancellationToken);
+        }
 
         race.TournamentId = request.TournamentId;
         race.Name = request.Name.Trim();

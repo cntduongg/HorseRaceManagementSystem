@@ -101,5 +101,38 @@ namespace Infrastructure.Migrations
                 principalColumns: new[] { "RaceId", "LegNumber" },
                 onDelete: ReferentialAction.Restrict);
         }
+
+        /// <inheritdoc />
+        /// <remarks>
+        /// Best-effort rollback for dev only. Up() backfilled Predictions.LegNumber (legacy → 1);
+        /// dropping the column destroys per-leg assignment for all predictions and cannot be reconstructed.
+        /// Do not run Down() on a database with real prediction data.
+        /// </remarks>
+        protected override void Down(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.DropForeignKey(
+                name: "FK_Predictions_Legs_RaceId_LegNumber",
+                table: "Predictions");
+
+            migrationBuilder.DropIndex(
+                name: "IX_Predictions_RaceId_LegNumber",
+                table: "Predictions");
+
+            migrationBuilder.DropColumn(
+                name: "LegNumber",
+                table: "Predictions");
+
+            migrationBuilder.DropColumn(
+                name: "ExecutionStatus",
+                table: "Legs");
+
+            migrationBuilder.DropColumn(
+                name: "PredictionClosedAt",
+                table: "Legs");
+
+            migrationBuilder.DropColumn(
+                name: "PredictionOpenedAt",
+                table: "Legs");
+        }
     }
 }

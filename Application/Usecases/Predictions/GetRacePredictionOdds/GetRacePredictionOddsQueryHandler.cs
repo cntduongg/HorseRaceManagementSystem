@@ -30,22 +30,28 @@ public sealed class GetLegPredictionOddsQueryHandler : IRequestHandler<GetLegPre
         // Leg đang InProgress vẫn xem được Odds nhưng không được đặt cược → FE dùng cờ này để khóa form.
         var isBettingOpen = LegExecutionStatuses.IsBettingOpen(leg.ExecutionStatus);
 
-        var dynamicOdds = await PredictionOddsCalculator.CalculateLegOddsAsync(_context, request.RaceId, request.LegNumber, cancellationToken);
+        // Cùng một phép tính với CreatePrediction → currentOdds hiển thị ở đây CHÍNH LÀ odds
+        // sẽ được khóa vào phiếu, không phụ thuộc spectator cược bao nhiêu.
+        var dynamicOdds = await PredictionOddsCalculator.CalculateLegOddsAsync(
+            _context, request.RaceId, request.LegNumber, cancellationToken);
         var oddsByEntryId = dynamicOdds.ToDictionary(x => x.EntryId);
 
         var entries = await _context.Entries.AsNoTracking()
             .Where(e => e.RaceId == request.RaceId && e.Status == "Approved" && e.Odds > 0)
             .OrderBy(e => e.GateNumber ?? int.MaxValue).ThenBy(e => e.EntryId)
-            .Select(e => new { e.EntryId, e.HorseId, HorseName = e.Horse.Name,HorseStamina = e.Horse.Stamina, HorseHealthStatus = e.Horse.HealthStatus,  e.JockeyId, JockeyName = e.Jockey.FullName, e.GateNumber })
+            .Select(e => new { e.EntryId, e.HorseId, HorseName = e.Horse.Name,HorseStamina = e.Horse.Stamina, HorseHealthStatus = e.Horse.HealthStatus,  e.JockeyId, JockeyName = e.Jockey.FullName, e.GateNumber, e.Odds })
             .ToListAsync(cancellationToken);
 
-        var resultEntries = entries.Where(e => oddsByEntryId.ContainsKey(e.EntryId))
-            .Select(e => {
-                var odds = oddsByEntryId[e.EntryId];
+        var resultEntries = entries
+            .Where(e => oddsByEntryId.ContainsKey(e.EntryId))
+            .Select(e =>
+            {
+                var row = oddsByEntryId[e.EntryId];
                 return new RacePredictionOddsEntryResponse(
                     e.EntryId, e.HorseId, e.HorseName, null, e.JockeyId, e.JockeyName, null, 0, "", e.GateNumber,
-                    odds.BaseOdds, odds.CurrentOdds, odds.EntryPool, odds.TotalPool, e.HorseStamina, e.HorseHealthStatus);
-            }).ToList();
+                    row.BaseOdds, row.CurrentOdds, row.EntryPool, row.TotalPool, e.HorseStamina, e.HorseHealthStatus);
+            })
+            .ToList();
 
         return new RacePredictionOddsResponse(race.RaceId, race.Name, race.Status, race.ScheduledStartTime, race.OddsComputedAt, isBettingOpen, resultEntries);
     }
