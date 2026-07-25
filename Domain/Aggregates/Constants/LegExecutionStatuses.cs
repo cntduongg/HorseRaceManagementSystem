@@ -25,15 +25,13 @@ public static class LegExecutionStatuses
             Cancelled
         };
 
-    // Cửa cược của một Leg đang MỞ khi Leg chưa bắt đầu chạy — tức ∈ {Pending, PredictionOpen,
-    // AwaitingResult}. Khóa khi ∈ {InProgress, Completed, Cancelled}. Đây là nguồn chân lý duy
-    // nhất cho cả GetRaceLive (bộ chọn leg của Spectator) lẫn odds/place/cancel prediction.
+    // Cửa cược mở chỉ khi ExecutionStatus = PredictionOpen (sau close-registration).
+    // Khóa khi ∈ {Pending, InProgress, AwaitingResult, Completed, Cancelled}.
+    // Commit 1b: bỏ AwaitingResult khỏi tập mở (chỉ còn PredictionOpen).
     public static readonly IReadOnlySet<string> BettingOpen =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            Pending,
-            PredictionOpen,
-            AwaitingResult
+            PredictionOpen
         };
 
     public static bool IsValid(string status)

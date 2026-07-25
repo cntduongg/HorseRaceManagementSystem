@@ -1,4 +1,3 @@
-using Application.Usecases.Races.PublishOdds;
 using Application.Usecases.Races.CreateRace;
 using Application.Usecases.Races.GetRaceDetail;
 using Application.Usecases.Races.DeleteRace;
@@ -7,8 +6,6 @@ using Application.Usecases.Races.UpdateRace;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
-using Application.Usecases.Races.OpenRegistration;
-using Application.Usecases.Races.CloseRegistration;
 namespace Api.Controllers;
 
 
@@ -111,75 +108,6 @@ public sealed class RacesController : ControllerBase
     {
         var result = await _sender.Send(
             new DeleteRaceCommand(raceId),
-            cancellationToken);
-
-        if (!result)
-        {
-            return NotFound(new
-            {
-                message = "Race not found"
-            });
-        }
-
-        return Ok(new
-        {
-            success = true
-        });
-    }
-    [HttpPost("{raceId:int}/registration/open")]
-    [Authorize(Roles = "ADMIN")]
-    public async Task<ActionResult> OpenRegistration(
-    [FromRoute] int raceId,
-    CancellationToken cancellationToken)
-    {
-        var result = await _sender.Send(
-            new OpenRaceRegistrationCommand(raceId),
-            cancellationToken);
-
-        if (!result)
-        {
-            return NotFound(new
-            {
-                message = "Race not found"
-            });
-        }
-
-        return Ok(new
-        {
-            success = true
-        });
-    }
-    [HttpPost("{raceId:int}/registration/close")]
-    [Authorize(Roles = "ADMIN")]
-    public async Task<ActionResult> CloseRegistration(
-    [FromRoute] int raceId,
-    CancellationToken cancellationToken)
-    {
-        var result = await _sender.Send(
-            new CloseRaceRegistrationCommand(raceId),
-            cancellationToken);
-
-        if (!result)
-        {
-            return NotFound(new
-            {
-                message = "Race not found"
-            });
-        }
-
-        return Ok(new
-        {
-            success = true
-        });
-    }
-    [HttpPost("{raceId:int}/odds/publish")]
-    [Authorize(Roles = "ADMIN")]
-    public async Task<ActionResult> PublishOdds(
-    [FromRoute] int raceId,
-    CancellationToken cancellationToken)
-    {
-        var result = await _sender.Send(
-            new PublishRaceOddsCommand(raceId),
             cancellationToken);
 
         if (!result)

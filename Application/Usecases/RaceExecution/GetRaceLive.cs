@@ -36,7 +36,7 @@ public sealed record RaceLiveLegDto(
     int LegNumber,
     string Status,            // Pending|AwaitingSecondReferee|Confirmed|Conflicted|Resolved (blind)
     string ExecutionStatus,   // Pending|PredictionOpen|InProgress|AwaitingResult|Completed|Cancelled (vòng đời)
-    bool IsBettingOpen,       // cửa cược của leg đang mở? (ExecutionStatus ∈ {Pending,PredictionOpen,AwaitingResult})
+    bool IsBettingOpen,       // cửa cược mở khi ExecutionStatus = PredictionOpen
     bool IsConfirmed,         // Confirmed || Resolved → FE hiện bảng vị trí
     bool IsConflicted,        // Conflicted → FE hiện "Đang xem xét"
     string? ConfirmationType, // AutoMatched | AdminOverride | null

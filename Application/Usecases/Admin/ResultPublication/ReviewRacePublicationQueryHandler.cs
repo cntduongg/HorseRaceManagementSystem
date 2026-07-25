@@ -88,6 +88,30 @@ public sealed class ReviewRacePublicationQueryHandler
         // Xếp hạng bằng đúng công thức của publish thật (helper dùng chung).
         var ranked = RaceRankingCalculator.Rank(entries, officials, dqSet);
 
+        var hasUnresolvedTie = false;
+        for (var i = 1; i < ranked.Count; i++)
+        {
+            var prev = ranked[i - 1];
+            var curr = ranked[i];
+            if (prev.IsDq != curr.IsDq)
+                continue;
+
+            if (prev.TotalPoints == curr.TotalPoints &&
+                prev.LegWins == curr.LegWins &&
+                prev.Leg2nds == curr.Leg2nds &&
+                prev.LastLegPos == curr.LastLegPos)
+            {
+                hasUnresolvedTie = true;
+                break;
+            }
+        }
+
+        if (hasUnresolvedTie)
+        {
+            warnings.Add(
+                "Some entries are tied on all ranking criteria; final order uses EntryId as a deterministic tie-break.");
+        }
+
         var finalStandings = ranked
             .Select(r => new FinalStandingReviewItem(
                 r.Entry.EntryId,
@@ -168,6 +192,8 @@ public sealed class ReviewRacePublicationQueryHandler
             race.RaceId,
             race.Name,
             race.Status,
+            pendingViolations,
+            hasUnresolvedTie,
             canPublish,
             warnings,
             finalStandings,

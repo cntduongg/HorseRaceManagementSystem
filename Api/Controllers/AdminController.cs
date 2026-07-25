@@ -29,7 +29,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using Application.Usecases.Admin.ResultPublication;
-using Application.Usecases.RaceExecution;
 
 namespace Api.Controllers;
 
@@ -53,28 +52,6 @@ public sealed class AdminController : ControllerBase
     {
         return Ok(await _sender.Send(
             new ReviewRacePublicationQuery(raceId),
-            ct));
-    }
-
-// Flow 8.43–47 — Publish race result + prize points + leaderboards/career + settle bets + payouts.
-    [HttpPost("races/{raceId:int}/publish")]
-    public async Task<IActionResult> PublishRaceResult(
-        [FromRoute] int raceId,
-        CancellationToken ct)
-    {
-        return Ok(await _sender.Send(
-            new PublishRaceResultCommand(raceId, GetUserId()),
-            ct));
-    }
-    
-    [HttpPost("races/{raceId:int}/unpublish")]
-    public async Task<IActionResult> UnpublishRaceResult(
-        [FromRoute] int raceId,
-        [FromBody] UnpublishRaceRequest req,
-        CancellationToken ct)
-    {
-        return Ok(await _sender.Send(
-            new UnpublishRaceResultCommand(raceId, GetUserId(), req?.Reason ?? ""),
             ct));
     }
 
