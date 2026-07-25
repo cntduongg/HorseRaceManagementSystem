@@ -209,8 +209,14 @@ public sealed class UpdateViolationCommandHandler
                 violation,
                 ViolationAuditSnapshot.Standings(affectedResults));
 
+            // Sĩ số race — Leg Points tuyến tính theo số ngựa nên apply/reverse phải cùng mốc này.
+            var fieldSize = await _context.Entries
+                .CountAsync(e => e.RaceId == request.RaceId &&
+                                 e.Status == RaceExecutionConstants.EntryApproved,
+                    cancellationToken);
+
             if (mustReverseOldPenalty)
-                ReverseAppliedPenalty(oldPenalty, oldAffectedResults);
+                ReverseAppliedPenalty(oldPenalty, oldAffectedResults, fieldSize);
 
             violation.RaceId = request.RaceId;
             violation.LegNumber = request.LegNumber;
@@ -228,7 +234,7 @@ public sealed class UpdateViolationCommandHandler
             violation.ReviewedAt = newStatus is "Approved" or "Rejected" ? DateTime.UtcNow : null;
 
             if (mustApplyNewPenalty)
-                ApplyPenalty(newPenalty, newAffectedResults);
+                ApplyPenalty(newPenalty, newAffectedResults, fieldSize);
 
             var action = penaltyChanged
                 ? ReviewAction.PenaltyChanged
@@ -289,7 +295,8 @@ public sealed class UpdateViolationCommandHandler
 
     private static void ApplyPenalty(
         string penalty,
-        IReadOnlyList<LegOfficialResult> affectedResults)
+        IReadOnlyList<LegOfficialResult> affectedResults,
+        int fieldSize)
     {
         switch (penalty)
         {
@@ -304,7 +311,8 @@ public sealed class UpdateViolationCommandHandler
                     official.FinishPosition += 1;
                     official.LegPoints = RaceExecutionConstants.LegPointsFor(
                         official.FinishPosition,
-                        official.ResultStatus);
+                        official.ResultStatus,
+                        fieldSize);
                 }
                 break;
 
@@ -322,7 +330,8 @@ public sealed class UpdateViolationCommandHandler
     // DQ cannot be reversed because the legacy model overwrote original positions.
     private static void ReverseAppliedPenalty(
         string penalty,
-        IReadOnlyList<LegOfficialResult> affectedResults)
+        IReadOnlyList<LegOfficialResult> affectedResults,
+        int fieldSize)
     {
         switch (penalty)
         {
@@ -337,7 +346,8 @@ public sealed class UpdateViolationCommandHandler
                     official.FinishPosition -= 1;
                     official.LegPoints = RaceExecutionConstants.LegPointsFor(
                         official.FinishPosition,
-                        official.ResultStatus);
+                        official.ResultStatus,
+                        fieldSize);
                 }
                 break;
 

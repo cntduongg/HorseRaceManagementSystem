@@ -146,8 +146,12 @@ public sealed class UnpublishRaceResultCommandHandler
             // ── 4b. Hoàn lại thống kê Career của Jockey (đối xứng với Publish) ──
             var entries = await _context.Entries
                 .Where(e => e.RaceId == race.RaceId)
-                .Select(e => new { e.EntryId, e.JockeyId })
+                .Select(e => new { e.EntryId, e.JockeyId, e.Status })
                 .ToListAsync(cancellationToken);
+
+            // Phải dùng ĐÚNG sĩ số mà Publish đã dùng (số Entry Approved), nếu không
+            // rollback Prize Points sẽ lệch so với lúc cộng.
+            var fieldSize = entries.Count(e => e.Status == RaceExecutionConstants.EntryApproved);
             var jockeyByEntry = entries.ToDictionary(e => e.EntryId, e => e.JockeyId);
             var jockeyIds = entries.Select(e => e.JockeyId).Distinct().ToList();
             var profiles = await _context.JockeyProfiles
@@ -165,7 +169,9 @@ public sealed class UnpublishRaceResultCommandHandler
                     profile.TotalWins = Math.Max(0, profile.TotalWins - 1);
                 if (!res.IsRaceDQ && res.FinalPosition is >= 1 and <= 3)
                     profile.TotalTop3 = Math.Max(0, profile.TotalTop3 - 1);
-                var prize = res.IsRaceDQ ? 0 : RaceExecutionConstants.PrizePointsFor(res.FinalPosition ?? 0);
+                var prize = res.IsRaceDQ
+                    ? 0
+                    : RaceExecutionConstants.PrizePointsFor(res.FinalPosition ?? 0, fieldSize);
                 profile.CareerPrizePoints = Math.Max(0, profile.CareerPrizePoints - prize);
                 profile.UpdatedAt = now;
             }

@@ -22,6 +22,7 @@ public sealed class GetPredictionListQueryHandler
             .Select(x => new PredictionListItemResponse(
                 x.PredictionId,
                 x.RaceId,
+                x.LegNumber,
                 x.SpectatorId,
                 x.BetAmount,
                 x.Status

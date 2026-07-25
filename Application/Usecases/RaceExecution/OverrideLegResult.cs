@@ -1,5 +1,6 @@
 using Application.Common;
 using Application.Common.Interfaces;
+using Domain.Aggregates.Constants;
 using Domain.Aggregates.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -158,10 +159,13 @@ public sealed class OverrideLegResultCommandHandler
         if (!decisionIds.SetEquals(approvedEntryIds))
             throw new InvalidOperationException("The decision does not match the approved entries.");
 
-        var positiveRanks = decisions.Where(d => d.OfficialPosition > 0)
-            .Select(d => d.OfficialPosition).ToList();
-        if (positiveRanks.Count != positiveRanks.Distinct().Count())
-            throw new InvalidOperationException("Duplicate ranking.");
+        // Số ngựa thực đua — biên trên của thứ hạng và cơ sở tính Leg Points.
+        var fieldSize = approvedEntryIds.Count;
+
+        var positionError = RaceExecutionConstants.ValidatePositions(
+            decisions.Select(d => d.OfficialPosition).ToList(), fieldSize);
+        if (positionError is not null)
+            throw new InvalidOperationException(positionError);
 
         var now = DateTime.UtcNow;
         var reason = request.OverrideReason!.Trim();
@@ -185,7 +189,7 @@ public sealed class OverrideLegResultCommandHandler
                 EntryId = d.EntryId,
                 FinishPosition = finishPosition,
                 ResultStatus = resultStatus,
-                LegPoints = RaceExecutionConstants.LegPointsFor(finishPosition, resultStatus),
+                LegPoints = RaceExecutionConstants.LegPointsFor(finishPosition, resultStatus, fieldSize),
                 ConfirmationType = RaceExecutionConstants.AdminOverride,
                 ConfirmedAt = now,
                 ConfirmedByAdminId = request.AdminUserId,
@@ -198,6 +202,10 @@ public sealed class OverrideLegResultCommandHandler
         leg.AdminOverrideReason = reason;
         leg.ConfirmedAt = now;
         leg.FinishedAt = now;
+        // Leg đã có kết quả chính thức → vòng đời phải đóng luôn, giống nhánh matched của
+        // SubmitLegResult. Thiếu dòng này thì leg resolved vẫn báo ExecutionStatus="InProgress"
+        // trong khi IsConfirmed=true → client nhận trạng thái mâu thuẫn.
+        leg.ExecutionStatus = LegExecutionStatuses.Completed;
 
         // Resume: nếu còn leg mở → InProgress; hết → PendingResult.
         var openLeg = race.Legs

@@ -1,7 +1,7 @@
 using Application.Common.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-
+using Domain.Aggregates.Constants;
 namespace Application.Usecases.Races.PublishOdds;
 
 public sealed class PublishRaceOddsCommandHandler
@@ -26,7 +26,11 @@ public sealed class PublishRaceOddsCommandHandler
 
         if (race is null)
             return false;
-
+        if (race.Status == RaceStatus.Cancelled)
+        {
+            throw new InvalidOperationException(
+                "Cannot publish odds for a cancelled race.");
+        }
         if (race.OddsComputedAt == null)
             throw new InvalidOperationException(
                 "Odds have not been calculated.");
@@ -34,6 +38,7 @@ public sealed class PublishRaceOddsCommandHandler
         if (race.PublishedAt != null)
             throw new InvalidOperationException(
                 "Odds have already been published.");
+     
 
         race.PublishedAt = DateTime.UtcNow;
         race.UpdatedAt = DateTime.UtcNow;

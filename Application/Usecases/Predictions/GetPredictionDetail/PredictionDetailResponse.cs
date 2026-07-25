@@ -3,6 +3,7 @@ namespace Application.Usecases.Predictions.GetPredictionDetail;
 public sealed record PredictionDetailResponse(
     int PredictionId,
     int RaceId,
+    int LegNumber,
     int SpectatorId,
     int FirstEntryId,
     int? SecondEntryId,

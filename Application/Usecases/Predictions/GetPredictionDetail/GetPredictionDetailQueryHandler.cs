@@ -23,6 +23,7 @@ public sealed class GetPredictionDetailQueryHandler
             .Select(x => new PredictionDetailResponse(
                 x.PredictionId,
                 x.RaceId,
+                x.LegNumber,
                 x.SpectatorId,
                 x.FirstEntryId,
                 x.SecondEntryId,

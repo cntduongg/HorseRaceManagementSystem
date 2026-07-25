@@ -1,7 +1,7 @@
 using Application.Common.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-
+using Domain.Aggregates.Constants;
 namespace Application.Usecases.Races.OpenRegistration;
 
 public sealed class OpenRaceRegistrationCommandHandler
@@ -27,7 +27,7 @@ public sealed class OpenRaceRegistrationCommandHandler
         if (race is null)
             return false;
 
-        if (race.Status != "Scheduled")
+        if (race.Status != RaceStatus.Scheduled)
             throw new InvalidOperationException(
                 "Only scheduled races can open registration.");
 

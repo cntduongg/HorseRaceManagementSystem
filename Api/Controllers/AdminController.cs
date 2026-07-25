@@ -230,8 +230,11 @@ public sealed class AdminController : ControllerBase
     [HttpGet("violations")]
     public async Task<IActionResult> GetViolations(
         [FromQuery] string? status, [FromQuery] int page = 1, [FromQuery] int pageSize = 15,
+        [FromQuery] string? search = null, [FromQuery] string? sort = null,
+        [FromQuery] string? sortDirection = null,
         CancellationToken ct = default)
-        => Ok(await _sender.Send(new GetAdminViolationsQuery(status, page, pageSize), ct));
+        => Ok(await _sender.Send(
+            new GetAdminViolationsQuery(status, page, pageSize, search, sort, sortDirection), ct));
 
     [HttpPost("violations/{id:int}/approve")]
     public async Task<IActionResult> ApproveViolation(

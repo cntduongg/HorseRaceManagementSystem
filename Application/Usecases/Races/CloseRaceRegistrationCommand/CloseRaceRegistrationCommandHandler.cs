@@ -19,6 +19,7 @@ public sealed class CloseRaceRegistrationCommandHandler
         CancellationToken cancellationToken)
     {
         // Cùng logic canonical với POST .../close-registration (odds + GateNumber).
+     
         try
         {
             await _lifecycle.CloseRegistrationAsync(request.RaceId, cancellationToken);
