@@ -34,6 +34,7 @@ public sealed class GetWalletTransactionListQueryHandler
                 x.Type,
                 x.Amount,
                 x.BalanceAfter,
+                x.Reason,
                 x.CreatedAt
             ))
             .ToListAsync(cancellationToken);

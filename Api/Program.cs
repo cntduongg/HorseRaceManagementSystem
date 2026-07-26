@@ -126,6 +126,11 @@ builder.Services.Configure<Api.Services.RaceAutoStartOptions>(
     builder.Configuration.GetSection(Api.Services.RaceAutoStartOptions.SectionName));
 builder.Services.AddHostedService<Api.Services.RaceAutoStartBackgroundService>();
 
+// Tournament — tự chuyển Draft/Open → Ongoing → Finished theo ngày (quét thưa, mặc định 1 giờ).
+builder.Services.Configure<Api.Services.TournamentStatusSyncOptions>(
+    builder.Configuration.GetSection(Api.Services.TournamentStatusSyncOptions.SectionName));
+builder.Services.AddHostedService<Api.Services.TournamentStatusSyncBackgroundService>();
+
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"]
                 ?? throw new InvalidOperationException("JwtSettings:SecretKey is not configured.");

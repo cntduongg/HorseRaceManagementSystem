@@ -1,4 +1,5 @@
 using Application.Common.Interfaces;
+using Domain.Aggregates.Constants;
 using Domain.Aggregates.Entities;
 using MediatR;
 
@@ -24,6 +25,18 @@ public sealed class CreateTournamentCommandHandler
         if (request.StartDate > request.EndDate)
             throw new InvalidOperationException("StartDate cannot be later than EndDate.");
 
+        var now = DateTime.UtcNow;
+        var today = DateOnly.FromDateTime(now);
+
+        // Mặc định Draft, nhưng nếu tạo giải mà ngày bắt đầu đã tới/qua rồi thì set đúng ngay từ đầu —
+        // đợi worker quét lần sau sẽ hiển thị sai (giải đang diễn ra mà nằm ở tab "Upcoming").
+        var status = TournamentStatus.ResolveByDate(
+                         TournamentStatus.Draft,
+                         request.StartDate,
+                         request.EndDate,
+                         today)
+                     ?? TournamentStatus.Draft;
+
         var tournament = new Tournament
         {
             Name = request.Name.Trim(),
@@ -32,8 +45,8 @@ public sealed class CreateTournamentCommandHandler
             StartDate = request.StartDate,
             EndDate = request.EndDate,
             LogoUrl = request.LogoUrl,
-            Status = "Draft",
-            CreatedAt = DateTime.UtcNow
+            Status = status,
+            CreatedAt = now
         };
 
         _context.Tournaments.Add(tournament);

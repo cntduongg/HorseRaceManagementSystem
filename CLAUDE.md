@@ -52,7 +52,7 @@ Schema phủ đủ 8 flow. Các entity chính và trường trạng thái:
 | `Horse` | `Status`: Pending\|Approved\|Rejected\|Revoked (hằng số `HorseStatus.cs`), `RejectionReason`, `ApprovedBy/At`. (Flow 1) |
 | `JockeyProfile` | Hồ sơ nài để Owner tìm kiếm. (Flow 2) |
 | `JockeyInvitation` | Lời mời nài cho (Race+Horse). (Flow 2) |
-| `Tournament` | Giải đấu (tên, venue, logo, ngày). (Flow 3) |
+| `Tournament` | Giải đấu (tên, venue, logo, ngày). `StartDate`/`EndDate` là **`DateOnly`**; `Status` (Draft\|Open\|Ongoing\|Finished\|Cancelled) nay có hằng số `Domain/Aggregates/Constants/TournamentStatus.cs` + **tự chuyển theo ngày** qua `TournamentStatusSyncBackgroundService`. (Flow 3) |
 | `Race` | `NumberOfLegs` (1–10), `MaxHorses`, `Referee1Id`/`Referee2Id`, `Status` (Scheduled→InProgress→Paused→PendingResult→Finished→Cancelled), `ScheduledStartTime`/`ScheduledEndTime` (khung giờ để chống trùng lịch), `RegistrationOpen/CloseAt`, `OddsComputedAt`, `PublishedAt`. (Flow 3) |
 | `Entry` | Cặp Horse+Jockey nộp vào Race. `Status`: Pending\|Approved\|Rejected\|Withdrawn, `GateNumber`, `Odds` (khóa khi đóng ĐK). (Flow 2) |
 | `Leg` | PK ghép `(RaceId, LegNumber)`. `Status` (blind): Pending\|AwaitingSecondReferee\|Confirmed\|Conflicted\|Resolved; `StartedAt`/`FinishedAt`/`ConfirmedAt`/`ConflictReportedAt`; `ConfirmationType` (AutoMatched\|AdminOverride), `AdminOverrideReason`. ⚠️ **`ExecutionStatus`/`PredictionOpenedAt`/`PredictionClosedAt` ĐÃ BỊ GỠ** trong đợt revert 2026-07-25; file `Constants/LegExecutionStatuses.cs` **đã xóa** (T-21). (Flow 4-5) |
@@ -205,6 +205,14 @@ EF mapping: `Infrastructure/Data/Configurations/*Configuration.cs` (mỗi entity
 >
 > **⚠️ Nợ kỹ thuật còn lại:** 2 migration drop trùng (T-27); hủy race không hoàn cược (T-28); `ICurrentUser` **vẫn bị comment toàn bộ** (T-07); tie-break cuối "quyết định Admin" chưa có endpoint (T-10); FluentValidation hoãn (T-12).
 
+**⑩ Tournament tự chuyển Status theo ngày** *(thêm 2026-07-27)* — trước đây `Tournament.Status` **chỉ đổi khi Admin sửa tay** qua `PUT /api/tournaments/{id}`, nên giải đã bắt đầu (thậm chí kết thúc từ lâu) vẫn nằm ở `Draft` và hiện "Upcoming" trên FE. Race thì đã có worker từ lâu, Tournament thì không có gì.
+- **Hằng số**: `Domain/Aggregates/Constants/TournamentStatus.cs` (`Draft`/`Open`/`Ongoing`/`Finished`/`Cancelled`) + `IsValid` + `IsTerminal` + **`ResolveByDate(current, start, end, today)`** — một nguồn sự thật duy nhất cho quy tắc chuyển.
+- **Quy tắc (chỉ đi TIẾN, không bao giờ lùi):** `today > EndDate` → `Finished`; `today >= StartDate` → `Ongoing`; chưa tới StartDate → giữ nguyên. `Open` xử lý **y hệt** `Draft` (cả hai đều là trạng thái "chưa chạy"). Giải `Draft`/`Open` mà cả 2 mốc đều đã qua thì nhảy thẳng `Finished` (dọn dữ liệu cũ).
+- 🔴 **`Cancelled` và `Finished` là terminal — worker KHÔNG BAO GIỜ đụng tới.** Giải đã hủy không được sống lại chỉ vì hôm nay nằm giữa Start/End; giải Admin kết thúc sớm không bị đẩy ngược về `Ongoing`. Ràng buộc này nằm ở **cả 2 tầng**: `WHERE` của query SQL và `ResolveByDate`.
+- **Worker**: `Application/Usecases/Tournaments/ProcessDueTournamentStatuses/` + `Api/Services/TournamentStatusSyncBackgroundService.cs`, **60 phút/lần** (Tournament so theo NGÀY nên không cần quét dày như Race), batch 200, idempotent. **Không có route riêng** `/start`, `/finish` — cố ý, Tournament không có hành động phụ nào cần trigger (khác Race: mở/đóng đăng ký, khóa odds…).
+- **`CreateTournament`** nay set status ngay theo ngày (tạo giải có `StartDate` đã qua → `Ongoing`/`Finished` luôn, không chờ tick sau). **`UpdateTournament`** nay **validate** status ∈ `TournamentStatus.All` → 400 nếu sai (trước gán thẳng string tùy ý vào DB).
+- ⚠️ **Múi giờ:** `today` tính theo **UTC**, khớp phần còn lại của codebase và hàm `derivedStatus()` FE đang dùng (`new Date().toISOString()` cũng UTC) ⇒ ở VN (UTC+7) giải đổi trạng thái lúc **07:00 giờ địa phương**. Muốn đúng nửa đêm giờ VN thì phải thêm cấu hình timezone (chưa làm).
+
 **✅ Orchestration vận hành đua** — `Application/Usecases/RaceExecution/*` (19 file: use case + `RaceLifecycleCoordinator`/`RaceLegProvisioner`/`RaceRankingCalculator`/`RaceExecutionConstants`) + `Api/Controllers/RaceExecutionController.cs` (prefix `api/races`, role-locked). Build pass, MediatR tự đăng ký:
 - **Flow 3:** `POST {id}/open-registration`, `POST {id}/close-registration` (auto-reject Entry Pending + **khóa Odds per-Entry** từ win rate + gán **GateNumber** + set OddsComputedAt; transaction). `Entry.Odds` (cột mới + migration `AddEntryOdds`). UpdateRace khóa NumberOfLegs khi rời Scheduled; CreatePrediction ưu tiên `Entry.Odds` đã khóa làm `BaseOdds`.
   - ✅ **Đã hết trùng lặp (T-08):** bộ song song ở `RacesController` + `Usecases/Races/{OpenRegistration, CloseRaceRegistrationCommand, PublishOdds}` **đã bị xóa**. Chỉ còn 3 thư mục rỗng cần dọn ([T-21](../.claude/TASKS.md)).
@@ -304,7 +312,7 @@ dotnet ef database update --project Infrastructure --startup-project Api
   - `20260725113128_RevertAllToOriginalState` — dùng `DropForeignKey`/`DropIndex`/`DropColumn` **không** có `IF EXISTS`.
   - `20260725162506_DropOrphanPerLegColumns` — raw SQL, **có** `IF EXISTS` (an toàn, idempotent).
   🔴 **Bẫy:** DB nào đã apply `DropOrphanPerLegColumns` mà **chưa** apply `RevertAllToOriginalState` (tức đã chạy app ở khoảng commit `e490dc8`…`eec39fb`) sẽ **crash lúc khởi động** — EF thấy `RevertAllToOriginalState` còn pending, chạy nó, và `DROP CONSTRAINT` trên constraint đã biến mất → lỗi. Xem [T-27](../.claude/TASKS.md) để biết cách xử lý.
-- **Background services** (đăng ký ở `Program.cs`): `WeeklyTopUpBackgroundService` (top-up ví thứ Hai) + `RaceAutoStartBackgroundService` (**auto-start + auto-cancel** Race, quét mỗi ~15s theo `RaceAutoStart:IntervalSeconds`, sàn 5s). **SignalR** hub `/api/hubs/race-live` (push diễn biến đua).
+- **Background services** (đăng ký ở `Program.cs`): `WeeklyTopUpBackgroundService` (top-up ví thứ Hai) + `RaceAutoStartBackgroundService` (**auto-start + auto-cancel** Race, quét mỗi ~15s theo `RaceAutoStart:IntervalSeconds`, sàn 5s) + **`TournamentStatusSyncBackgroundService`** (auto-status Tournament, mặc định 60 phút theo `TournamentStatusSync:IntervalMinutes`, sàn 1 phút, quét ngay 1 lần lúc khởi động). **SignalR** hub `/api/hubs/race-live` (push diễn biến đua).
 
 ### ⛔ Quy ước kiểm thử: dự án KHÔNG có test tự động
 
