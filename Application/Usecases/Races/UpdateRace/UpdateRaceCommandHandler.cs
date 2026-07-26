@@ -38,10 +38,10 @@ public sealed class UpdateRaceCommandHandler
 
         if (race is null)
             return false;
-        if (race.Status == RaceStatus.Cancelled)
+        if (race.Status != RaceStatus.Scheduled)
         {
             throw new InvalidOperationException(
-                "Cancelled races cannot be updated.");
+                "Only scheduled races can be updated.");
         }
         var tournament = await _context.Tournaments
             .FirstOrDefaultAsync(t => t.TournamentId == request.TournamentId, cancellationToken);
@@ -72,9 +72,7 @@ public sealed class UpdateRaceCommandHandler
             startUtc, endUtc, request.Referee1Id, request.Referee2Id, cancellationToken);
 
         // Khóa số Legs khi đua đã rời Scheduled (đang/đã chạy) — Flow 3.
-        if (race.Status != "Scheduled" && request.NumberOfLegs != race.NumberOfLegs)
-            throw new InvalidOperationException(
-                "Cannot change the number of Legs after the race has started.");
+       
 
         if (race.Status == RaceExecutionConstants.RaceScheduled
             && request.NumberOfLegs != race.NumberOfLegs)

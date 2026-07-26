@@ -42,7 +42,12 @@ public sealed class CreateRaceCommandHandler
 
         var startUtc = request.ScheduledStartTime.ToUniversalTime();
         var endUtc = request.ScheduledEndTime.ToUniversalTime();
+        var nowUtc = DateTime.UtcNow;
 
+        if (startUtc < nowUtc)
+        {
+            throw new InvalidOperationException("Start Time cannot be in the past.");
+        }
         // Giờ kết thúc phải sau giờ bắt đầu.
         if (endUtc <= startUtc)
             throw new InvalidOperationException("ScheduledEndTime must be after ScheduledStartTime.");
