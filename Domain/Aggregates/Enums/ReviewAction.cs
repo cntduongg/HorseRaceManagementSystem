@@ -8,5 +8,6 @@ public enum ReviewAction
     Published = 4,
     Unpublished = 5,
     PenaltyChanged = 6,
-    Updated = 7
+    Updated = 7,
+    AdminOverride = 8
 }
