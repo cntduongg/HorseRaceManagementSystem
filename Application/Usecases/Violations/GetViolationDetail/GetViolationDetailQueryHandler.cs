@@ -20,6 +20,8 @@ public sealed class GetViolationDetailQueryHandler
     {
         return await _context.Violations
             .Where(x => x.ViolationId == request.ViolationId)
+            .Where(x => request.ViewerRefereeId == null ||
+                        x.ReportedByRefereeId == request.ViewerRefereeId)
             .Select(x => new ViolationDetailResponse(
                 x.ViolationId,
                 x.RaceId,

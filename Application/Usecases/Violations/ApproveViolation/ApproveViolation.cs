@@ -105,13 +105,15 @@ public sealed class ApproveViolationCommandHandler
             switch (penalty)
             {
                 case "Demote":
-                    var official = affectedOfficials.FirstOrDefault();
-                    if (official is { ResultStatus: RaceExecutionConstants.ResultFinished, FinishPosition: not null })
-                    {
-                        official.FinishPosition += 1;
-                        official.LegPoints = RaceExecutionConstants.LegPointsFor(
-                            official.FinishPosition, official.ResultStatus, fieldSize);
-                    }
+                    // Không áp được (leg chưa có kết quả, hoặc entry đã DQ/DNF) thì THROW,
+                    // đừng bỏ qua im lặng: violation sẽ hiện Approved/Demote trong khi standings
+                    // không đổi gì và Admin không hề hay biết. Xem ViolationPenaltyGuard.
+                    var official = ViolationPenaltyGuard.EnsureDemotable(
+                        affectedOfficials.FirstOrDefault(),
+                        violation.LegNumber);
+                    official.FinishPosition += 1;
+                    official.LegPoints = RaceExecutionConstants.LegPointsFor(
+                        official.FinishPosition, official.ResultStatus, fieldSize);
                     break;
 
                 case "DQ":

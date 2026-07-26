@@ -97,6 +97,7 @@ public sealed class UpdateViolationCommandHandler
         // Giữ lại trạng thái/án phạt hiện tại để rollback standings nếu cần (Task 4).
         var oldStatus = violation.Status;
         var oldPenalty = violation.Penalty;
+        var oldLegNumber = violation.LegNumber; // đọc trước khi ghi đè — dùng cho message khi rollback
         var newStatus = requestedStatus;
         var newPenalty = requestedPenalty;
         var newNote = ReviewHistoryReason.Normalize(
@@ -247,7 +248,7 @@ public sealed class UpdateViolationCommandHandler
                     cancellationToken);
 
             if (mustReverseOldPenalty)
-                ReverseAppliedPenalty(oldPenalty, oldAffectedResults, fieldSize);
+                ReverseAppliedPenalty(oldPenalty, oldLegNumber, oldAffectedResults, fieldSize);
 
             violation.RaceId = request.RaceId;
             violation.LegNumber = request.LegNumber;
@@ -265,7 +266,7 @@ public sealed class UpdateViolationCommandHandler
             violation.ReviewedAt = newStatus is "Approved" or "Rejected" ? DateTime.UtcNow : null;
 
             if (mustApplyNewPenalty)
-                ApplyPenalty(newPenalty, newAffectedResults, fieldSize);
+                ApplyPenalty(newPenalty, request.LegNumber, newAffectedResults, fieldSize);
 
             var action = penaltyChanged
                 ? ReviewAction.PenaltyChanged
@@ -326,25 +327,22 @@ public sealed class UpdateViolationCommandHandler
 
     private static void ApplyPenalty(
         string penalty,
+        int legNumber,
         IReadOnlyList<LegOfficialResult> affectedResults,
         int fieldSize)
     {
         switch (penalty)
         {
             case "Demote":
-                var official = affectedResults.FirstOrDefault();
-                if (official is
-                    {
-                        ResultStatus: RaceExecutionConstants.ResultFinished,
-                        FinishPosition: not null
-                    })
-                {
-                    official.FinishPosition += 1;
-                    official.LegPoints = RaceExecutionConstants.LegPointsFor(
-                        official.FinishPosition,
-                        official.ResultStatus,
-                        fieldSize);
-                }
+                // Giống ApproveViolation: không áp được thì báo lỗi, không im lặng bỏ qua.
+                var official = ViolationPenaltyGuard.EnsureDemotable(
+                    affectedResults.FirstOrDefault(),
+                    legNumber);
+                official.FinishPosition += 1;
+                official.LegPoints = RaceExecutionConstants.LegPointsFor(
+                    official.FinishPosition,
+                    official.ResultStatus,
+                    fieldSize);
                 break;
 
             case "DQ":
@@ -361,25 +359,23 @@ public sealed class UpdateViolationCommandHandler
     // DQ cannot be reversed because the legacy model overwrote original positions.
     private static void ReverseAppliedPenalty(
         string penalty,
+        int legNumber,
         IReadOnlyList<LegOfficialResult> affectedResults,
         int fieldSize)
     {
         switch (penalty)
         {
             case "Demote":
-                var official = affectedResults.FirstOrDefault();
-                if (official is
-                    {
-                        ResultStatus: RaceExecutionConstants.ResultFinished,
-                        FinishPosition: > 1
-                    })
-                {
-                    official.FinishPosition -= 1;
-                    official.LegPoints = RaceExecutionConstants.LegPointsFor(
-                        official.FinishPosition,
-                        official.ResultStatus,
-                        fieldSize);
-                }
+                // Kết quả leg đã bị ghi đè (DQ/DNF/override) thì không gỡ ngược đúng được —
+                // báo lỗi thay vì im lặng để lại standings sai.
+                var official = ViolationPenaltyGuard.EnsureDemoteReversible(
+                    affectedResults.FirstOrDefault(),
+                    legNumber);
+                official.FinishPosition -= 1;
+                official.LegPoints = RaceExecutionConstants.LegPointsFor(
+                    official.FinishPosition,
+                    official.ResultStatus,
+                    fieldSize);
                 break;
 
             case "DQ":
