@@ -58,12 +58,15 @@ public sealed class RaceExecutionController : ControllerBase
     public async Task<IActionResult> Live(int raceId, CancellationToken ct)
         => Ok(await _sender.Send(new GetRaceLiveQuery(raceId), ct));
 
-    // ADMIN-only: màn so sánh 2 submission chỉ dành cho Admin resolve conflict.
-    // Referee KHÔNG được xem để giữ nguyên cơ chế Blind Double-Entry (Flow 4).
+    // ADMIN: xem leg đang Conflicted (mặc định) hoặc bất kỳ leg (legNumber cụ thể).
+    // REFEREE: chỉ xem được leg đã Resolved của race mình phụ trách (legNumber bắt buộc) —
+    // giữ Blind Double-Entry trong lúc đang xử lý conflict (Flow 4).
     [HttpGet("{raceId:int}/pause")]
-    [Authorize(Roles = "ADMIN")]
-    public async Task<IActionResult> Pause(int raceId, CancellationToken ct)
-        => Ok(await _sender.Send(new GetRacePauseQuery(raceId), ct));
+    [Authorize(Roles = "ADMIN,REFEREE")]
+    public async Task<IActionResult> Pause(
+        int raceId, [FromQuery] int? legNumber, CancellationToken ct)
+        => Ok(await _sender.Send(
+            new GetRacePauseQuery(raceId, legNumber, GetUserId(), User.IsInRole("ADMIN")), ct));
 
     // ── Blind double-entry (Flow 4) ──────────────────────────────────
 

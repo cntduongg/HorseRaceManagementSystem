@@ -87,9 +87,9 @@ public sealed class UpdateViolationCommandHandler
                 "A rejected violation must use penalty None.");
 
         var violation = await _context.Violations
-            .FirstOrDefaultAsync(
-                x => x.ViolationId == request.ViolationId,
-                cancellationToken);
+         .FirstOrDefaultAsync(
+             x => x.ViolationId == request.ViolationId,
+             cancellationToken);
 
         if (violation is null)
             return false;
@@ -120,6 +120,37 @@ public sealed class UpdateViolationCommandHandler
 
         if (isNoOp)
             return true;
+
+        // Từ đây là thay đổi thực sự — nếu có ảnh hưởng standings (đổi status/penalty/leg/entry/race)
+        // thì race liên quan không được phép đang Finished (đã publish).
+        var willAffectStandings =
+            !string.Equals(oldStatus, newStatus, StringComparison.Ordinal) ||
+            !string.Equals(oldPenalty, newPenalty, StringComparison.Ordinal) ||
+            violation.RaceId != request.RaceId ||
+            violation.LegNumber != request.LegNumber ||
+            violation.EntryId != request.EntryId;
+
+        if (willAffectStandings)
+        {
+            var currentRace = await _context.Races
+                .FirstOrDefaultAsync(r => r.RaceId == violation.RaceId, cancellationToken)
+                ?? throw new KeyNotFoundException("Race not found.");
+            if (currentRace.Status == RaceExecutionConstants.RaceFinished)
+                throw new InvalidOperationException("Race already published — unpublish it first.");
+
+            // RaceId đổi sang race khác → check luôn cả race đích.
+            if (violation.RaceId != request.RaceId)
+            {
+                var targetRace = await _context.Races
+                    .FirstOrDefaultAsync(r => r.RaceId == request.RaceId, cancellationToken)
+                    ?? throw new KeyNotFoundException("Target race not found.");
+                if (targetRace.Status == RaceExecutionConstants.RaceFinished)
+                    throw new InvalidOperationException(
+                        "Target race already published — unpublish it first.");
+            }
+        }
+
+
 
         var legExists = await _context.Legs
             .AnyAsync(x =>

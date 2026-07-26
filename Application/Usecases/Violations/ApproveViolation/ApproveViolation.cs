@@ -50,6 +50,12 @@ public sealed class ApproveViolationCommandHandler
                 .FirstOrDefaultAsync(v => v.ViolationId == request.ViolationId, cancellationToken)
                 ?? throw new KeyNotFoundException("Violation not found.");
 
+            var race = await _context.Races
+                .FirstOrDefaultAsync(r => r.RaceId == violation.RaceId, cancellationToken)
+                ?? throw new KeyNotFoundException("Race not found.");
+            if (race.Status == RaceExecutionConstants.RaceFinished)
+                throw new InvalidOperationException("Race already published — unpublish it first.");
+
             if (violation.Status != "Pending")
                 throw new InvalidOperationException("This violation has already been processed.");
 
