@@ -1,4 +1,5 @@
 using Application.Common.Interfaces;
+using Application.Usecases.RaceExecution;
 using Domain.Aggregates.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -32,6 +33,15 @@ public sealed class CreateViolationCommandHandler
             throw new InvalidOperationException("Could not determine the reporting referee.");
         if (string.IsNullOrWhiteSpace(request.ViolationType))
             throw new InvalidOperationException("ViolationType is required.");
+
+        // Race không được Finished/Cancelled — tránh report muộn sau khi đã publish/hủy
+        // (approve sau đó không tự re-run publish nên sẽ làm sai kết quả đã công bố).
+        var race = await _context.Races
+            .FirstOrDefaultAsync(r => r.RaceId == request.RaceId, cancellationToken)
+            ?? throw new InvalidOperationException("Race does not exist.");
+        if (race.Status is RaceExecutionConstants.RaceFinished or RaceExecutionConstants.RaceCancelled)
+            throw new InvalidOperationException(
+                $"Violations cannot be reported for a race that is already {race.Status}.");
 
         // Entry phải thuộc race.
         var entry = await _context.Entries
