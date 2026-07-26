@@ -18,8 +18,15 @@ public sealed class GetWalletTransactionListQueryHandler
         GetWalletTransactionListQuery request,
         CancellationToken cancellationToken)
     {
-        return await _context.WalletTransactions
-            .AsNoTracking()
+        var query = _context.WalletTransactions.AsNoTracking();
+
+        // Không phải ADMIN → chỉ giao dịch của chính mình.
+        if (request.ViewerSpectatorId is int spectatorId)
+        {
+            query = query.Where(x => x.SpectatorId == spectatorId);
+        }
+
+        return await query
             .OrderByDescending(x => x.CreatedAt)
             .Select(x => new WalletTransactionListItemResponse(
                 x.WalletTransactionId,

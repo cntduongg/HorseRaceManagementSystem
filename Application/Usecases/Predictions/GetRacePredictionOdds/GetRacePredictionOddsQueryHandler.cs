@@ -113,7 +113,6 @@ public sealed class GetRacePredictionOddsQueryHandler
             race.Status,
             race.ScheduledStartTime,
             race.OddsComputedAt,
-            IsBettingOpen: true,
             resultEntries);
     }
 }

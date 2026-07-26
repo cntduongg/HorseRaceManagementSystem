@@ -6,7 +6,6 @@ public sealed record RacePredictionOddsResponse(
     string RaceStatus,
     DateTime ScheduledStartTime,
     DateTime? OddsComputedAt,
-    bool IsBettingOpen,
     List<RacePredictionOddsEntryResponse> Entries);
 
 public sealed record RacePredictionOddsEntryResponse(

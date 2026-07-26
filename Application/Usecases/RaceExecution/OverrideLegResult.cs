@@ -2,8 +2,10 @@ using Application.Common;
 using Application.Common.Interfaces;
 using Domain.Aggregates.Constants;
 using Domain.Aggregates.Entities;
+using Domain.Aggregates.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace Application.Usecases.RaceExecution;
 
@@ -30,13 +32,16 @@ public sealed class OverrideLegResultCommandHandler
 {
     private readonly IApplicationDbContext _context;
     private readonly IRaceLiveChangeTracker _liveTracker;
+    private readonly IReviewHistoryRepository _reviewHistoryRepository;
 
     public OverrideLegResultCommandHandler(
         IApplicationDbContext context,
-        IRaceLiveChangeTracker liveTracker)
+        IRaceLiveChangeTracker liveTracker,
+        IReviewHistoryRepository reviewHistoryRepository)
     {
         _context = context;
         _liveTracker = liveTracker;
+        _reviewHistoryRepository = reviewHistoryRepository;
     }
 
     public async Task<OverrideLegResultResponse> Handle(
@@ -59,6 +64,16 @@ public sealed class OverrideLegResultCommandHandler
         if (leg.Status != RaceExecutionConstants.LegConflicted)
             throw new InvalidOperationException(
                 $"Only a Conflicted leg can be resolved (current: {leg.Status}).");
+
+        // Snapshot trước khi đổi — cho audit trail.
+        var beforeSnapshot = new
+        {
+            leg.RaceId,
+            leg.LegNumber,
+            leg.Status,
+            leg.ConfirmationType,
+            leg.AdminOverrideReason
+        };
 
         var approvedEntryIds = await _context.Entries
             .Where(e => e.RaceId == request.RaceId &&
@@ -125,6 +140,30 @@ public sealed class OverrideLegResultCommandHandler
             ? RaceExecutionConstants.RaceInProgress
             : RaceExecutionConstants.RacePendingResult;
         race.UpdatedAt = now;
+
+        // Snapshot sau khi đổi — cho audit trail.
+        var afterSnapshot = new
+        {
+            leg.RaceId,
+            leg.LegNumber,
+            leg.Status,
+            leg.ConfirmationType,
+            leg.AdminOverrideReason,
+            Decisions = decisions
+        };
+
+        await _reviewHistoryRepository.AddAsync(
+            new ReviewHistory
+            {
+                EntityType = ReviewEntity.Leg,
+                EntityId = request.RaceId,
+                Action = ReviewAction.AdminOverride,
+                Reason = reason,
+                BeforeData = JsonSerializer.Serialize(beforeSnapshot),
+                AfterData = JsonSerializer.Serialize(afterSnapshot),
+                AdminId = request.AdminUserId
+            },
+            cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
 

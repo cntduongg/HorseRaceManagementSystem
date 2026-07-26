@@ -48,16 +48,19 @@ public sealed class RaceAutoStartBackgroundService : BackgroundService
             {
                 using var scope = _scopeFactory.CreateScope();
                 var sender = scope.ServiceProvider.GetRequiredService<ISender>();
-                var result = await sender.Send(new ProcessDueRaceStartsCommand(), stoppingToken);
 
-                if (result.Started > 0 || result.Skipped > 0)
+                // Pass 1: start trước — race vừa đủ điều kiện ở tick này thì được start,
+                // tránh bị pass 2 cancel nhầm.
+                var startResult = await sender.Send(new ProcessDueRaceStartsCommand(), stoppingToken);
+
+                if (startResult.Started > 0 || startResult.Skipped > 0)
                 {
                     _logger.LogInformation(
                         "Due race scan: examined={Examined}, started={Started}, already={Already}, skipped={Skipped}.",
-                        result.Examined, result.Started, result.AlreadyStarted, result.Skipped);
+                        startResult.Examined, startResult.Started, startResult.AlreadyStarted, startResult.Skipped);
                 }
 
-                foreach (var item in result.Items)
+                foreach (var item in startResult.Items)
                 {
                     if (item.Outcome == RaceStartOutcome.Skipped && item.SkipReason is not null)
                     {
@@ -74,6 +77,22 @@ public sealed class RaceAutoStartBackgroundService : BackgroundService
                         _lastSkipReasons.Remove(item.RaceId);
                     }
                 }
+
+                // Pass 2: cancel race quá hạn / thiếu entry.
+                var cancelResult = await sender.Send(new ProcessDueRaceCancellationsCommand(), stoppingToken);
+
+                if (cancelResult.Cancelled > 0 || cancelResult.Skipped > 0)
+                {
+                    _logger.LogInformation(
+                        "Due race cancellation scan: examined={Examined}, cancelled={Cancelled}, skipped={Skipped}.",
+                        cancelResult.Examined, cancelResult.Cancelled, cancelResult.Skipped);
+                }
+
+                foreach (var item in cancelResult.Items)
+                {
+                    if (item.Outcome == RaceCancelOutcome.Cancelled)
+                        _lastSkipReasons.Remove(item.RaceId);
+                }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -81,7 +100,7 @@ public sealed class RaceAutoStartBackgroundService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Race auto-start scan failed, will retry later.");
+                _logger.LogError(ex, "Race auto-start/cancel scan failed, will retry later.");
             }
 
             try

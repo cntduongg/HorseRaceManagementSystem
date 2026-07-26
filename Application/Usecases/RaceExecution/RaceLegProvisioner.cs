@@ -65,7 +65,7 @@ public static class RaceLegProvisioner
             .ToListAsync(cancellationToken);
 
         var toRemove = legs.Where(l => l.LegNumber > newNumberOfLegs).ToList();
-        foreach (var leg in toRemove)
+        if (toRemove.Count > 0)
         {
             var hasPredictions = await context.Predictions.AnyAsync(
                 p => p.RaceId == race.RaceId,
@@ -73,10 +73,11 @@ public static class RaceLegProvisioner
             if (hasPredictions)
             {
                 throw new InvalidOperationException(
-                    $"Cannot remove Leg {leg.LegNumber}: predictions exist for this race.");
+                    "Cannot reduce number of legs: predictions exist for this race.");
             }
 
-            context.Legs.Remove(leg);
+            foreach (var leg in toRemove)
+                context.Legs.Remove(leg);
         }
     }
 }

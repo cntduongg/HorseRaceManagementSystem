@@ -18,8 +18,18 @@ public sealed class GetPointWalletDetailQueryHandler
         GetPointWalletDetailQuery request,
         CancellationToken cancellationToken)
     {
-        return await _context.PointWallets
-            .Where(x => x.WalletId == request.WalletId)
+        var query = _context.PointWallets
+            .AsNoTracking()
+            .Where(x => x.WalletId == request.WalletId);
+
+        // Không phải ADMIN → chỉ ví của chính mình. Trả null (controller → 404) thay vì 403
+        // để không lộ việc walletId đó có tồn tại hay không.
+        if (request.ViewerSpectatorId is int spectatorId)
+        {
+            query = query.Where(x => x.SpectatorId == spectatorId);
+        }
+
+        return await query
             .Select(x => new PointWalletDetailResponse(
                 x.WalletId,
                 x.SpectatorId,

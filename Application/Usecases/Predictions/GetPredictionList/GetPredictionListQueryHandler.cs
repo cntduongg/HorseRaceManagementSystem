@@ -18,7 +18,15 @@ public sealed class GetPredictionListQueryHandler
         GetPredictionListQuery request,
         CancellationToken cancellationToken)
     {
-        return await _context.Predictions
+        var query = _context.Predictions.AsNoTracking();
+
+        // Không phải ADMIN → chỉ cược của chính mình.
+        if (request.ViewerSpectatorId is int spectatorId)
+        {
+            query = query.Where(x => x.SpectatorId == spectatorId);
+        }
+
+        return await query
             .Select(x => new PredictionListItemResponse(
                 x.PredictionId,
                 x.RaceId,

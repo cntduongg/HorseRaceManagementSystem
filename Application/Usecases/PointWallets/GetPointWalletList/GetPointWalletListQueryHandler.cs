@@ -18,7 +18,15 @@ public sealed class GetPointWalletListQueryHandler
         GetPointWalletListQuery request,
         CancellationToken cancellationToken)
     {
-        return await _context.PointWallets
+        var query = _context.PointWallets.AsNoTracking();
+
+        // Không phải ADMIN → chỉ ví của chính mình.
+        if (request.ViewerSpectatorId is int spectatorId)
+        {
+            query = query.Where(x => x.SpectatorId == spectatorId);
+        }
+
+        return await query
             .Select(x => new PointWalletListItemResponse(
                 x.WalletId,
                 x.SpectatorId,

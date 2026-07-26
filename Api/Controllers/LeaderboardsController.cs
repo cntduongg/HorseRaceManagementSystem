@@ -28,4 +28,11 @@ public sealed class LeaderboardsController : ControllerBase
     public async Task<IActionResult> Tournament(
         int tournamentId, [FromQuery] string? role, CancellationToken ct)
         => Ok(await _sender.Send(new GetLeaderboardQuery(tournamentId, role), ct));
+
+    // Bảng xếp hạng cược của Spectator (Flow 7) — chỉ **số liệu tổng hợp** mỗi người.
+    // Cố ý KHÔNG trả lệnh cược lẻ / cửa đã đặt / số dư ví: đó là lý do endpoint này thay thế
+    // việc FE tải cả `GET /api/predictions` về để tự gom.
+    [HttpGet("spectators")]
+    public async Task<IActionResult> Spectators(CancellationToken ct)
+        => Ok(await _sender.Send(new GetSpectatorBettingLeaderboardQuery(), ct));
 }
