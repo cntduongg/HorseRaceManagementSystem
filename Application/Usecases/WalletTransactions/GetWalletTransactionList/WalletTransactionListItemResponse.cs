@@ -6,5 +6,6 @@ public sealed record WalletTransactionListItemResponse(
     string Type,
     decimal Amount,
     decimal BalanceAfter,
+    string? Reason,
     DateTime CreatedAt
 );
