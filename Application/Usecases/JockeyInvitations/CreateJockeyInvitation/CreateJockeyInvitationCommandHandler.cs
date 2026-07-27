@@ -6,8 +6,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Application.Usecases.JockeyInvitations.CreateJockeyInvitation;
 
 // Flow 2 — Owner mời nài cho 1 cặp (Race + Horse).
-// Ràng buộc: horse Approved & thuộc owner; race Scheduled; nài hợp lệ (role JOCKEY + có License/Weight);
-// 1 invitation active / (Jockey+Horse+Race).
+// Ràng buộc: horse Approved & thuộc owner; race Scheduled + registration đang mở; nài hợp lệ
+// (role JOCKEY + có License/Weight); 1 invitation active / (Jockey+Horse+Race).
 public sealed class CreateJockeyInvitationCommandHandler
     : IRequestHandler<CreateJockeyInvitationCommand, int>
 {
@@ -52,6 +52,20 @@ public sealed class CreateJockeyInvitationCommandHandler
         if (race.Status != "Scheduled")
             throw new InvalidOperationException("You can only invite a jockey while the race is Scheduled.");
 
+        // Cửa đăng ký phải đang mở — cùng điều kiện & cùng message với CreateEntry.
+        // Trước đây chỗ này chỉ check Status: race Scheduled mà Admin CHƯA bấm Open Registration
+        // vẫn mời nài được, chỉ tới bước nộp Entry mới bị chặn ⇒ đẻ ra một đống invitation
+        // Pending/Accepted cho race chưa nên nhận thao tác gì, và lệch hẳn với CreateEntry.
+        var now = DateTime.UtcNow;
+
+        // Registration chưa mở
+        if (race.RegistrationOpenAt == null)
+            throw new InvalidOperationException("Registration has not been opened.");
+
+        // Registration đã đóng
+        if (race.RegistrationCloseAt != null && race.RegistrationCloseAt <= now)
+            throw new InvalidOperationException("Registration is closed.");
+
         // Nài: tồn tại, role JOCKEY, hồ sơ đủ License + Weight.
         var jockey = await _context.Users
             .FirstOrDefaultAsync(u => u.UserId == request.JockeyId, cancellationToken)
@@ -95,7 +109,7 @@ public sealed class CreateJockeyInvitationCommandHandler
             RaceId = request.RaceId,
             Message = request.Message?.Trim(),
             Status = "Pending",
-            SentAt = DateTime.UtcNow
+            SentAt = now
         };
 
         _context.JockeyInvitations.Add(invitation);
