@@ -7,7 +7,7 @@ public class RaceResult
     public int RaceId { get; set; }
     public int EntryId { get; set; }
 
-    public int TotalPoints { get; set; } = 0;
+    public decimal TotalPoints { get; set; } = 0;
     public int? FinalPosition { get; set; }
     public bool IsRaceDQ { get; set; } = false;
     public int LegWinCount { get; set; } = 0;

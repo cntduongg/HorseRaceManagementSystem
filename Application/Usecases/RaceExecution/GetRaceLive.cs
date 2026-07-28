@@ -29,7 +29,7 @@ public sealed record RaceLiveEntryDto(
 public sealed record RaceLiveLegResultDto(
     int EntryId,
     int Position, // >0 = thứ hạng; -1 = DNF; -2 = DQ (RaceExecutionConstants.EncodePosition)
-    int Points);
+    decimal Points);
 
 public sealed record RaceLiveLegDto(
     int LegIndex,
@@ -48,7 +48,7 @@ public sealed record RaceLiveStandingDto(
     int? GateNumber,
     string HorseName,
     string JockeyName,
-    int TotalPoints,
+    decimal TotalPoints,
     int LegWins,
     int LegTop3,
     int Position);

@@ -183,7 +183,8 @@ public sealed class SubmitLegResultCommandHandler
                     EntryId = item.EntryId,
                     FinishPosition = finishPosition,
                     ResultStatus = resultStatus,
-                    LegPoints = RaceExecutionConstants.LegPointsFor(finishPosition, resultStatus, fieldSize),
+                    LegPoints = RaceExecutionConstants.LegPointsFor(
+                        finishPosition, resultStatus, fieldSize, legNumber, race.NumberOfLegs),
                     ConfirmationType = RaceExecutionConstants.AutoMatched,
                     ConfirmedAt = now
                 });

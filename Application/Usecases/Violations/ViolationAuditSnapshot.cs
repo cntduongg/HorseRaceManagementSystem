@@ -32,7 +32,7 @@ internal static class ViolationAuditSnapshot
         int entryId,
         string? resultStatus,
         int? finishPosition,
-        int legPoints)
+        decimal legPoints)
         => new
         {
             raceId,

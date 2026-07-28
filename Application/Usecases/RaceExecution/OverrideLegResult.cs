@@ -116,7 +116,8 @@ public sealed class OverrideLegResultCommandHandler
                 EntryId = d.EntryId,
                 FinishPosition = finishPosition,
                 ResultStatus = resultStatus,
-                LegPoints = RaceExecutionConstants.LegPointsFor(finishPosition, resultStatus, fieldSize),
+                LegPoints = RaceExecutionConstants.LegPointsFor(
+                    finishPosition, resultStatus, fieldSize, legNumber, race.NumberOfLegs),
                 ConfirmationType = RaceExecutionConstants.AdminOverride,
                 ConfirmedAt = now,
                 ConfirmedByAdminId = request.AdminUserId,

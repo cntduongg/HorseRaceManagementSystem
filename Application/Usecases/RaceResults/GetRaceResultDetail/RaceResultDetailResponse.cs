@@ -6,7 +6,7 @@ public sealed record RaceResultDetailResponse(
     string? HorseName,
     string? OwnerName,
     string? JockeyName,
-    int TotalPoints,
+    decimal TotalPoints,
     int? FinalPosition,
     bool IsRaceDQ,
     int LegWinCount,

@@ -9,7 +9,7 @@ namespace Application.Usecases.RaceExecution;
 public sealed record GetRaceExecutionQuery(int RaceId, int CurrentUserId)
     : IQuery<RaceExecutionResponse>;
 
-public sealed record LegResultDto(int EntryId, int Position, int Points);
+public sealed record LegResultDto(int EntryId, int Position, decimal Points);
 
 public sealed record LegStatusDto(
     int LegIndex,

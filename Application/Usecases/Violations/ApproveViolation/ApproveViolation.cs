@@ -113,15 +113,20 @@ public sealed class ApproveViolationCommandHandler
                         violation.LegNumber);
                     official.FinishPosition += 1;
                     official.LegPoints = RaceExecutionConstants.LegPointsFor(
-                        official.FinishPosition, official.ResultStatus, fieldSize);
+                        official.FinishPosition,
+                        official.ResultStatus,
+                        fieldSize,
+                        official.LegNumber,
+                        race.NumberOfLegs);
                     break;
+
 
                 case "DQ":
                     foreach (var o in affectedOfficials)
                     {
                         o.ResultStatus = RaceExecutionConstants.ResultDq;
                         o.FinishPosition = null;
-                        o.LegPoints = 0;
+                        o.LegPoints = 0m;
                     }
                     break;
 
