@@ -15,7 +15,9 @@ public sealed record RaceStandingDto(
     string JockeyName,
     int TotalPoints,
     int LegWins,
+    int Leg2nds,
     int LegTop3,
+    bool IsDq,
     int? Position);
 
 public sealed class GetRaceStandingsQueryHandler
@@ -45,34 +47,33 @@ public sealed class GetRaceStandingsQueryHandler
             .Where(o => o.RaceId == request.RaceId)
             .ToListAsync(cancellationToken);
 
-        var standings = entries.Select(e =>
-        {
-            var rows = officials.Where(o => o.EntryId == e.EntryId).ToList();
-            var totalPoints = rows.Sum(r => r.LegPoints);
-            var legWins = rows.Count(r =>
-                r.ResultStatus == RaceExecutionConstants.ResultFinished && r.FinishPosition == 1);
-            var legTop3 = rows.Count(r =>
-                r.ResultStatus == RaceExecutionConstants.ResultFinished &&
-                r.FinishPosition is >= 1 and <= 3);
+        // Entry bị Race DQ (vi phạm đã duyệt, Penalty = DQ) — phải biết ở đây, nếu không bảng
+        // này xếp một kiểu còn kết quả publish lại xếp kiểu khác.
+        var dqSet = (await _context.Violations
+            .AsNoTracking()
+            .Where(v => v.RaceId == request.RaceId && v.Status == "Approved" && v.Penalty == "DQ")
+            .Select(v => v.EntryId)
+            .Distinct()
+            .ToListAsync(cancellationToken)).ToHashSet();
 
-            return new RaceStandingDto(
-                e.EntryId,
-                e.GateNumber,
-                e.Horse?.Name ?? $"Horse #{e.HorseId}",
-                e.Jockey?.FullName ?? $"Jockey #{e.JockeyId}",
-                totalPoints,
-                legWins,
-                legTop3,
-                Position: null);
-        })
-        .OrderByDescending(s => s.TotalPoints)
-        .ThenByDescending(s => s.LegWins)
-        .ThenByDescending(s => s.LegTop3)
-        .ToList();
+        // Dùng CHUNG RaceRankingCalculator với publish & publication-review.
+        // Trước đây chỗ này tự sắp lấy (TotalPoints → LegWins → LegTop3) trong khi publish dùng
+        // (TotalPoints → LegWins → Leg2nds → vị trí leg cuối → EntryId) và có xử lý DQ ⇒ hễ hòa
+        // điểm là Admin nhìn thấy một thứ tự, kết quả công bố ra một thứ tự khác.
+        var ranked = RaceRankingCalculator.Rank(entries, officials, dqSet);
 
-        // Gán vị trí tạm theo thứ tự đã sắp.
-        return standings
-            .Select((s, i) => s with { Position = i + 1 })
+        return ranked
+            .Select(r => new RaceStandingDto(
+                r.Entry.EntryId,
+                r.Entry.GateNumber,
+                r.Entry.Horse?.Name ?? $"Horse #{r.Entry.HorseId}",
+                r.Entry.Jockey?.FullName ?? $"Jockey #{r.Entry.JockeyId}",
+                r.TotalPoints,
+                r.LegWins,
+                r.Leg2nds,
+                r.LegTop3,
+                r.IsDq,
+                Position: r.FinalPosition))
             .ToList();
     }
 }

@@ -1,6 +1,7 @@
 using Application.Common;
 using Application.Common.Interfaces;
 using Domain.Aggregates.Constants;
+using Domain.Aggregates.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -50,7 +51,9 @@ public sealed record RaceLiveStandingDto(
     string JockeyName,
     int TotalPoints,
     int LegWins,
+    int Leg2nds,
     int LegTop3,
+    bool IsDq,
     int Position);
 
 public sealed record RaceLiveResponse(
@@ -153,7 +156,22 @@ public sealed class GetRaceLiveQueryHandler
             l.Status != RaceExecutionConstants.LegResolved);
         if (current < 0) current = Math.Max(0, legs.Count - 1);
 
-        var standings = BuildStandings(entries, legs);
+        // Chỉ lấy kết quả của leg ĐÃ chốt — cùng lớp phòng thủ với biến `results` ở trên, để vị
+        // trí chưa xác nhận không bao giờ rò ra qua đường bảng điểm.
+        var confirmedOfficials = race.Legs
+            .Where(l => l.Status is RaceExecutionConstants.LegConfirmed
+                                 or RaceExecutionConstants.LegResolved)
+            .SelectMany(l => l.OfficialResults)
+            .ToList();
+
+        var dqSet = (await _context.Violations
+            .AsNoTracking()
+            .Where(v => v.RaceId == request.RaceId && v.Status == "Approved" && v.Penalty == "DQ")
+            .Select(v => v.EntryId)
+            .Distinct()
+            .ToListAsync(cancellationToken)).ToHashSet();
+
+        var standings = BuildStandings(entries, confirmedOfficials, dqSet);
 
         return new RaceLiveResponse(
             race.RaceId,
@@ -171,41 +189,28 @@ public sealed class GetRaceLiveQueryHandler
             DateTime.UtcNow);
     }
 
-    // Cùng công thức & tie-break với GetRaceStandings (TotalPoints → LegWins → LegTop3) để
-    // bảng live của Spectator khớp bảng Referee/Admin đang xem.
-    // LƯU Ý: khác RaceRankingCalculator dùng lúc publish (có xử lý DQ + tie-break leg cuối) —
-    // đây là xếp hạng TẠM TÍNH, FE gắn nhãn đúng như vậy.
+    // Dùng CHUNG RaceRankingCalculator với publish / publication-review / GetRaceStandings.
+    // Trước đây hàm này tự sắp lấy (TotalPoints → LegWins → LegTop3) và KHÔNG biết tới Race DQ,
+    // nên khi hòa điểm, bảng Spectator đang xem xếp khác hẳn kết quả sắp được công bố — đúng
+    // triệu chứng "admin thấy Lucario #1 còn spectator thấy Groudon #1".
+    // Vẫn là bảng TẠM TÍNH (chỉ gồm leg đã chốt) — FE gắn nhãn đúng như vậy.
     private static List<RaceLiveStandingDto> BuildStandings(
-        List<Domain.Aggregates.Entities.Entry> entries,
-        List<RaceLiveLegDto> legs)
+        List<Entry> entries,
+        List<LegOfficialResult> confirmedOfficials,
+        ISet<int> dqEntryIds)
     {
-        var confirmedResults = legs
-            .Where(l => l.IsConfirmed)
-            .SelectMany(l => l.Results)
-            .ToList();
-
-        var standings = entries
-            .Select(e =>
-            {
-                var rows = confirmedResults.Where(r => r.EntryId == e.EntryId).ToList();
-
-                return new RaceLiveStandingDto(
-                    e.EntryId,
-                    e.GateNumber,
-                    e.Horse?.Name ?? $"Horse #{e.HorseId}",
-                    e.Jockey?.FullName ?? $"Jockey #{e.JockeyId}",
-                    TotalPoints: rows.Sum(r => r.Points),
-                    LegWins: rows.Count(r => r.Position == 1),
-                    LegTop3: rows.Count(r => r.Position is >= 1 and <= 3),
-                    Position: 0);
-            })
-            .OrderByDescending(s => s.TotalPoints)
-            .ThenByDescending(s => s.LegWins)
-            .ThenByDescending(s => s.LegTop3)
-            .ToList();
-
-        return standings
-            .Select((s, i) => s with { Position = i + 1 })
+        return RaceRankingCalculator.Rank(entries, confirmedOfficials, dqEntryIds)
+            .Select(r => new RaceLiveStandingDto(
+                r.Entry.EntryId,
+                r.Entry.GateNumber,
+                r.Entry.Horse?.Name ?? $"Horse #{r.Entry.HorseId}",
+                r.Entry.Jockey?.FullName ?? $"Jockey #{r.Entry.JockeyId}",
+                TotalPoints: r.TotalPoints,
+                LegWins: r.LegWins,
+                Leg2nds: r.Leg2nds,
+                LegTop3: r.LegTop3,
+                IsDq: r.IsDq,
+                Position: r.FinalPosition))
             .ToList();
     }
 }

@@ -69,6 +69,83 @@ internal static class ViolationPenaltyGuard
         return official;
     }
 
+    /// <summary>
+    /// Áp án <c>Demote</c>: <b>hoán đổi</b> vị trí với entry ngay dưới, rồi tính lại Leg Points
+    /// cho <b>cả hai</b>.
+    ///
+    /// Trước đây chỗ này chỉ làm <c>FinishPosition += 1</c> trên đúng một dòng. Ba hệ quả:
+    /// <list type="number">
+    ///   <item>Không ai được kéo lên ⇒ leg thủng một vị trí và có hai entry cùng hạng — vi phạm
+    ///   đúng cái invariant mà <c>ValidatePositions</c> bắt referee tuân thủ lúc nhập.</item>
+    ///   <item>Không có trần: race 2 ngựa, entry hạng 2 bị demote thành hạng 3 → vượt sĩ số →
+    ///   <c>LegPointsFor</c> trả 0. Án "tụt một hạng" hoá ra phạt nặng ngang DNF.</item>
+    ///   <item>Entry ngay dưới bị vi phạm làm hại nhưng không được bù gì.</item>
+    /// </list>
+    /// Hoán đổi thì tổng điểm của leg giữ nguyên, tập vị trí vẫn liên tục 1..k, và gỡ ngược
+    /// được đối xứng qua <see cref="ReverseDemote"/>.
+    /// </summary>
+    /// <param name="legResults">TOÀN BỘ kết quả chính thức của leg đó (không chỉ entry vi phạm).</param>
+    public static void ApplyDemote(
+        IReadOnlyCollection<LegOfficialResult> legResults,
+        int entryId,
+        int legNumber,
+        int fieldSize)
+    {
+        var demoted = EnsureDemotable(
+            legResults.FirstOrDefault(o => o.EntryId == entryId),
+            legNumber);
+
+        var targetPosition = demoted.FinishPosition!.Value + 1;
+
+        var promoted = legResults.FirstOrDefault(o =>
+            o.EntryId != entryId &&
+            o.ResultStatus == RaceExecutionConstants.ResultFinished &&
+            o.FinishPosition == targetPosition)
+            ?? throw new InvalidOperationException(
+                $"This entry finished last ({demoted.FinishPosition}) in leg {legNumber} — " +
+                "there is nobody below to swap with, so a Demote penalty cannot be applied. " +
+                "Use Warning or DQ instead.");
+
+        Swap(demoted, promoted, fieldSize);
+    }
+
+    /// <summary>
+    /// Gỡ án <c>Demote</c> đã áp: hoán đổi ngược với entry ngay <b>trên</b>. Đối xứng hoàn toàn
+    /// với <see cref="ApplyDemote"/> — nếu kết quả leg đã bị ghi đè thì báo lỗi thay vì để lại
+    /// standings sai âm thầm.
+    /// </summary>
+    public static void ReverseDemote(
+        IReadOnlyCollection<LegOfficialResult> legResults,
+        int entryId,
+        int legNumber,
+        int fieldSize)
+    {
+        var demoted = EnsureDemoteReversible(
+            legResults.FirstOrDefault(o => o.EntryId == entryId),
+            legNumber);
+
+        var targetPosition = demoted.FinishPosition!.Value - 1;
+
+        var demotedBack = legResults.FirstOrDefault(o =>
+            o.EntryId != entryId &&
+            o.ResultStatus == RaceExecutionConstants.ResultFinished &&
+            o.FinishPosition == targetPosition)
+            ?? throw new InvalidOperationException(
+                $"Leg {legNumber} no longer has an entry at position {targetPosition}, " +
+                "so the Demote applied earlier cannot be swapped back automatically. " +
+                "Adjust the leg result via the resolve/override flow instead of editing the violation.");
+
+        Swap(demoted, demotedBack, fieldSize);
+    }
+
+    private static void Swap(LegOfficialResult a, LegOfficialResult b, int fieldSize)
+    {
+        (a.FinishPosition, b.FinishPosition) = (b.FinishPosition, a.FinishPosition);
+
+        a.LegPoints = RaceExecutionConstants.LegPointsFor(a.FinishPosition, a.ResultStatus, fieldSize);
+        b.LegPoints = RaceExecutionConstants.LegPointsFor(b.FinishPosition, b.ResultStatus, fieldSize);
+    }
+
     private static string Describe(LegOfficialResult official)
         => official.ResultStatus == RaceExecutionConstants.ResultFinished
             ? $"position {official.FinishPosition?.ToString() ?? "unset"}"
