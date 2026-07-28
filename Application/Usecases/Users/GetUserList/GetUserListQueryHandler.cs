@@ -79,9 +79,24 @@ public sealed class GetUserListQueryHandler
                 u.IsActive,
                 u.Status,
                 u.LockedUntil,
-                u.LicenseNumber,
-                u.Weight,
-                u.Bio,
+                u.Role.Code == "JOCKEY"
+                    ? _context.JockeyProfiles
+                        .Where(p => p.UserId == u.UserId)
+                        .Select(p => p.LicenseNumber)
+                        .FirstOrDefault()
+                    : u.LicenseNumber,
+                u.Role.Code == "JOCKEY"
+                    ? _context.JockeyProfiles
+                        .Where(p => p.UserId == u.UserId)
+                        .Select(p => p.Weight)
+                        .FirstOrDefault()
+                    : u.Weight,
+                u.Role.Code == "JOCKEY"
+                    ? _context.JockeyProfiles
+                        .Where(p => p.UserId == u.UserId)
+                        .Select(p => p.Bio)
+                        .FirstOrDefault()
+                    : u.Bio,
                 u.IsProfileComplete,
                 u.CreatedAt))
             .ToListAsync(cancellationToken);
