@@ -21,17 +21,10 @@ public sealed class CreatePredictionCommandHandler : IRequestHandler<CreatePredi
         if (race.Status != "Scheduled")
             throw new InvalidOperationException("You can only bet while the race is Scheduled.");
 
+        // Cửa cược = [Admin đóng đăng ký → race xuất phát]. Không có bước công bố/khóa odds
+        // nào ở giữa: đóng đăng ký là sinh odds, và odds sinh ra thì đứng yên (Flow 7).
         if (race.OddsComputedAt == null)
-            throw new InvalidOperationException("Registration must be closed and odds computed first.");
-
-        // Cửa cược = [Admin publish odds → Admin khóa cược]. Trước khi publish, giá vẫn đang
-        // được Admin chỉnh; sau khi khóa, sổ đã đóng để chuẩn bị xuất phát (Flow 7).
-        if (race.OddsPublishedAt == null)
-            throw new InvalidOperationException(
-                "Odds have not been published yet. Betting opens once the Admin publishes the odds.");
-
-        if (race.BettingLockedAt != null)
-            throw new InvalidOperationException("Betting is locked for this race.");
+            throw new InvalidOperationException("Betting opens once the Admin closes registration.");
 
         var spectator = await _context.Spectators.FirstOrDefaultAsync(x => x.UserId == request.SpectatorId, cancellationToken)
             ?? throw new KeyNotFoundException("Spectator not found.");
@@ -59,12 +52,11 @@ public sealed class CreatePredictionCommandHandler : IRequestHandler<CreatePredi
         if (selectedEntry.Status != "Approved")
             throw new InvalidOperationException("You can only bet on approved entries.");
 
-        // Giá khóa = ĐÚNG con số spectator vừa nhìn thấy trên bảng (odds công bố của Admin).
-        // Không tính lại, không điều chỉnh theo pool — đó chính là chỗ trước đây sinh ra
-        // "bảng hiện 4.00x, lệnh khóa 2.00x".
-        var odds = selectedEntry.PublishedOdds;
+        // Giá khóa = ĐÚNG con số spectator vừa nhìn thấy trên bảng. Chỉ có một giá duy nhất
+        // trong hệ thống, tính lúc đóng đăng ký và không đổi — nên không có gì để tính lại.
+        var odds = selectedEntry.Odds;
         if (odds <= 0)
-            throw new InvalidOperationException("The selected entry does not have published odds.");
+            throw new InvalidOperationException("The selected entry does not have odds yet.");
 
         var now = DateTime.UtcNow;
 

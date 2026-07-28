@@ -31,9 +31,7 @@ public sealed class GetRacePredictionOddsQueryHandler
                 r.Name,
                 r.Status,
                 r.ScheduledStartTime,
-                r.OddsComputedAt,
-                r.OddsPublishedAt,
-                r.BettingLockedAt
+                r.OddsComputedAt
             })
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new InvalidOperationException("Race not found.");
@@ -50,20 +48,12 @@ public sealed class GetRacePredictionOddsQueryHandler
                 "Odds have not been generated. Admin must close registration first.");
         }
 
-        // Giá chỉ lộ ra sau khi Admin duyệt & bấm "Publish Odds" — trước đó nó vẫn đang được
-        // chỉnh trong modal, cho spectator xem là cho xem một con số sắp đổi.
-        if (race.OddsPublishedAt is null)
-        {
-            throw new InvalidOperationException(
-                "Odds have not been published yet. Betting opens once the Admin publishes the odds.");
-        }
-
         var entries = await _context.Entries
             .AsNoTracking()
             .Where(e =>
                 e.RaceId == request.RaceId &&
                 e.Status == EntryApproved &&
-                e.PublishedOdds > 0)
+                e.Odds > 0)
             .OrderBy(e => e.GateNumber ?? int.MaxValue)
             .ThenBy(e => e.EntryId)
             .Select(e => new
@@ -78,7 +68,7 @@ public sealed class GetRacePredictionOddsQueryHandler
                 e.HorseOwnerId,
                 HorseOwnerName = e.HorseOwner.FullName,
                 e.GateNumber,
-                e.PublishedOdds
+                e.Odds
             })
             .ToListAsync(cancellationToken);
 
@@ -113,7 +103,7 @@ public sealed class GetRacePredictionOddsQueryHandler
                     e.HorseOwnerId,
                     e.HorseOwnerName,
                     e.GateNumber,
-                    e.PublishedOdds,
+                    e.Odds,
                     entryPool,
                     totalPool);
             })
@@ -125,9 +115,6 @@ public sealed class GetRacePredictionOddsQueryHandler
             race.Status,
             race.ScheduledStartTime,
             race.OddsComputedAt,
-            race.OddsPublishedAt,
-            race.BettingLockedAt,
-            IsBettingOpen: race.BettingLockedAt is null,
             resultEntries);
     }
 }

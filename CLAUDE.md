@@ -53,8 +53,8 @@ Schema phủ đủ 8 flow. Các entity chính và trường trạng thái:
 | `JockeyProfile` | Hồ sơ nài để Owner tìm kiếm. (Flow 2) |
 | `JockeyInvitation` | Lời mời nài cho (Race+Horse). (Flow 2) |
 | `Tournament` | Giải đấu (tên, venue, logo, ngày). `StartDate`/`EndDate` là **`DateOnly`**; `Status` (Draft\|Open\|Ongoing\|Finished\|Cancelled) nay có hằng số `Domain/Aggregates/Constants/TournamentStatus.cs` + **tự chuyển theo ngày** qua `TournamentStatusSyncBackgroundService`. (Flow 3) |
-| `Race` | `NumberOfLegs` (1–10), `MaxHorses`, `Referee1Id`/`Referee2Id`, `Status` (Scheduled→InProgress→Paused→PendingResult→Finished→Cancelled), `ScheduledStartTime`/`ScheduledEndTime` (khung giờ để chống trùng lịch), `RegistrationOpen/CloseAt`, `OddsComputedAt`, **`OddsPublishedAt`** (Admin công bố odds → mở cược), **`BettingLockedAt`** (đóng sổ cược → bắt buộc trước Start Race), `PublishedAt`. (Flow 3, 7) |
-| `Entry` | Cặp Horse+Jockey nộp vào Race. `Status`: Pending\|Approved\|Rejected\|Withdrawn, `GateNumber`, **`Odds`** (odds **đề xuất** — máy tính lúc đóng ĐK, chỉ Admin thấy), **`PublishedOdds`** (odds **công bố** — giá spectator cược, = đề xuất − 10%, Admin sửa được). (Flow 2, 7) |
+| `Race` | `NumberOfLegs` (1–10), `MaxHorses`, `Referee1Id`/`Referee2Id`, `Status` (Scheduled→InProgress→Paused→PendingResult→Finished→Cancelled), `ScheduledStartTime`/`ScheduledEndTime` (khung giờ để chống trùng lịch), `RegistrationOpen/CloseAt`, **`OddsComputedAt`** (đóng đăng ký = sinh odds = **mở cược**; cờ duy nhất của cửa cược), `PublishedAt`. (Flow 3, 7) |
+| `Entry` | Cặp Horse+Jockey nộp vào Race. `Status`: Pending\|Approved\|Rejected\|Withdrawn, `GateNumber`, **`Odds`** (con số **duy nhất** — máy tính lúc đóng ĐK rồi đứng yên; mọi role thấy cùng một giá, cũng là giá khóa vào Prediction. Nơi duy nhất ghi: `RaceOddsAssigner`). (Flow 2, 7) |
 | `Leg` | PK ghép `(RaceId, LegNumber)`. `Status` (blind): Pending\|AwaitingSecondReferee\|Confirmed\|Conflicted\|Resolved; `StartedAt`/`FinishedAt`/`ConfirmedAt`/`ConflictReportedAt`; `ConfirmationType` (AutoMatched\|AdminOverride), `AdminOverrideReason`. ⚠️ **`ExecutionStatus`/`PredictionOpenedAt`/`PredictionClosedAt` ĐÃ BỊ GỠ** trong đợt revert 2026-07-25; file `Constants/LegExecutionStatuses.cs` **đã xóa** (T-21). (Flow 4-5) |
 | `LegRefereeEntry` | Bản ghi blind của từng Referee/Leg (append-only). (Flow 4) |
 | `LegRefereeDraft` | Nháp thứ hạng của referee (upsert, KHÔNG append-only) — để khôi phục khi quay lại (migration `AddLegRefereeDraft`). (Flow 4) |
@@ -119,39 +119,45 @@ EF mapping: `Infrastructure/Data/Configurations/*Configuration.cs` (mỗi entity
 > Cập nhật: **2026-07-26, HEAD `705c9b5`** (đọc lại toàn bộ code base + verify trực tiếp file nguồn). Build **0 lỗi / 0 warning**. Việc cần làm: [.claude/TASKS.md](../.claude/TASKS.md).
 > Lưu ý lịch sử: docs cũ (≤2026-06-25) mô tả Flow 3–8 "chỉ CRUD generic, chưa có orchestration". **Điều đó đã lỗi thời** — toàn bộ nghiệp vụ lõi Flow 3–8 nay nằm ở `Application/Usecases/RaceExecution/*` (use case đặc thù, không phải CRUD).
 >
-> ### 🆕 ĐỢT 2026-07-28 — ODDS HAI TẦNG + KHÓA CƯỢC — đọc trước tiên
+> ### 🆕 ĐỢT 2026-07-28 (đợt 2) — ODDS RÚT VỀ **MỘT CON SỐ TĨNH** — đọc trước tiên
 >
-> **Xóa sổ odds động theo pool.** `Application/Usecases/Predictions/common/PredictionOddsCalculator.cs` **đã bị xóa**; mọi thứ liên quan tới `BaseOdds`/`CurrentOdds`/`EffectiveOdds`/`?betAmount=` đều lỗi thời.
+> ⚠️ **Đợt này thay thế hoàn toàn mô hình "odds hai tầng" ban hành sáng cùng ngày.** Mọi mô tả về `PublishedOdds` / `OddsPublishedAt` / `BettingLockedAt` / `RaceOddsPolicy` / `HouseMarginRate` trong docs cũ đều **lỗi thời** — bốn thứ đó không còn tồn tại trong code.
 >
-> **Lý do:** cùng một khái niệm "odds" có **ba** hiện thực — Admin xem `Entry.Odds`, bảng cược của spectator hiện `CurrentOdds` (động theo pool), còn lệnh cược lại khóa `EffectiveOdds` (thấp hơn nữa, vì `CalculateEntryOddsAsync` cộng chính số tiền đang đặt vào pool **trước khi** chốt giá). Spectator thấy `4.00x` rồi đặt xong nhận `2.00x` ⇒ đọc thành gian lận.
+> **Lý do đơn giản hóa:** mô hình hai tầng đúng về mặt kỹ thuật nhưng bắt Admin bấm **ba nút theo đúng thứ tự** (`publish-odds` → `lock-betting` → `start`) thì spectator mới cược được; quên một bước là race kẹt hoặc bảng cược trống. Cái giá đó không đáng cho một khái niệm chỉ cần trả lời "1 điểm cược ăn mấy điểm".
 >
-> **Mô hình mới — 2 con số, 1 nguồn sự thật (`RaceExecution/RaceOddsPolicy.cs`):**
+> **Mô hình hiện tại — một con số, sinh một lần, không đổi:**
 >
-> | | Cột | Ai thấy | Cách tính |
-> |---|---|---|---|
-> | **Odds đề xuất** | `Entry.Odds` (cũ) | chỉ Admin | `CloseRegistrationCommandHandler.OddsFor` (Laplace, theo lịch sử thắng) — **không đổi** |
-> | **Odds công bố** | **`Entry.PublishedOdds`** (mới) | Spectator, Jockey | `PublishedFromSuggested` = đề xuất × (1 − `HouseMarginRate` 0.10), clamp `[1.01, 25.00]` |
+> | | |
+> |---|---|
+> | Cột | **`Entry.Odds`** — cột duy nhất. `Entry.PublishedOdds` **đã drop** |
+> | Sinh khi nào | Đúng lúc Admin bấm **Close Registration** (`Race.OddsComputedAt`) |
+> | Công thức | `RaceOddsAssigner.OddsFor(firsts, total, fieldSize)` — Laplace theo lịch sử về nhất: `winRate = (firsts+1)/(total+max(fieldSize,2))`, `odds = 1/max(winRate, 0.04)`, clamp `[1.10, 25.00]`. **Không đổi so với trước** |
+> | Biên nhà cái | **Không có.** Không nhân 0.9, không clamp lần hai |
+> | Ai sửa được | **Không ai** — không còn `PUT /odds`, không còn `publish-odds` |
+> | Ai thấy | Tất cả — Admin, Spectator, Jockey đều nhìn **cùng một con số** |
+> | Cửa cược | `race.Status == "Scheduled"` **và** `OddsComputedAt != null`. Hết |
+> | Khóa cược | Tự động khi Race start (`Pending → Locked` trong `StartRaceAsync`). **Không có nút bấm** |
+> | Trả thưởng | `payout = BetAmount × Prediction.OddsLocked1` — **không đổi** |
 >
-> Sàn **1.01** là bắt buộc chứ không phải phòng thủ thừa: đề xuất `1.10` trừ 10% còn `0.99` — đoán đúng vẫn mất tiền.
+> **`RaceExecution/RaceOddsAssigner.cs` (file mới) là nơi DUY NHẤT ghi `Entry.Odds` + `Entry.GateNumber`.** Trước đây logic này bị copy 2 bản (`RaceLifecycleCoordinator.ApplyCloseRegistrationAsync` + `RevokeHorseCommandHandler.RecalculateOddsAndGatesAsync`).
+> - `AssignAsync` ghi gate **hai pha** (xóa hết về `null` → `SaveChanges` → gán lại `1..N`). Bắt buộc, không phải phòng thủ thừa: index `(RaceId, GateNumber)` là unique index **có filter** nên PostgreSQL không defer được, mà `ApproveEntryCommandHandler` đã gán gate theo thứ tự **duyệt** còn ở đây đánh lại theo thứ tự **nộp** ⇒ Admin duyệt lệch thứ tự nộp là ra hoán vị `{1..N}` → **23505 ngay UPDATE đầu tiên**. Đây là bug có sẵn, nay được vá luôn.
+> - Caller **phải** đang ở trong transaction (hàm gọi `SaveChanges` giữa chừng). Cả 2 đường gọi hiện tại đều đã có `BeginTransactionAsync`.
 >
-> **Race có 2 mốc mới:** `Race.OddsPublishedAt` (Admin công bố → **mở cược**) và `Race.BettingLockedAt` (Admin đóng sổ → **bắt buộc trước Start Race**).
+> 🔴 **`RevokeHorse` KHÔNG còn tính lại odds** (`RecalculateOddsAndGatesAsync` đã xóa). Nó chỉ hủy Entry + hoàn cược của Entry đó + set `GateNumber = null` để trả slot index. Lý do bỏ: hàm đó **đổi giá sau khi cược đã đặt** — chỉ hoàn tiền cho entry bị revoke, còn cược vào entry khác giữ `OddsLocked1` cũ trong khi bảng hiện số mới (tái tạo đúng lỗi "bảng 4.00x, lệnh 2.00x"); `fieldSize` giảm thì `OddsFor` cho odds **thấp hơn** nên người cược sau bị giá tệ hơn vì lý do họ không nhìn thấy; và `AllowedRaceStatusesForRevoke` có cả `Finished` nên nó ghi đè được cả race **đã publish + quyết toán xong**.
 >
 > | Route | Use case | Role | Ghi chú |
 > |---|---|---|---|
-> | `GET /api/races/{id}/odds-board` | `RaceExecution/GetRaceOddsBoard` | ADMIN | 2 giá + `careerFirsts/careerRaces` (cơ sở tính) + `betPool/betCount` + `canEdit` |
-> | `PUT /api/races/{id}/odds` | `RaceExecution/UpdateRaceOdds` | ADMIN | body `{ entries: [{entryId, suggestedOdds?, publishedOdds?}] }`; `publishedOdds` bỏ trống = tính lại theo công thức. Chặn khi đã `BettingLockedAt` |
-> | `POST /api/races/{id}/publish-odds` | `RaceExecution/PublishRaceOdds` | ADMIN | idempotent; lấp `PublishedOdds` còn 0 bằng công thức thay vì chặn (giá 0 lọt ra bảng cược = cược chắc chắn không được trả) |
-> | `POST /api/races/{id}/lock-betting` | `RaceExecution/LockRaceBetting` | **ADMIN + REFEREE** | set `BettingLockedAt` + `Pending → Locked`. Referee được phép vì họ là người bấm Start Race |
+> | `GET /api/races/{id}/odds-board` | `RaceExecution/GetRaceOddsBoard` | ADMIN | **READ-ONLY.** Một cột `odds` + `careerFirsts`/`careerRaces` (cơ sở tính) + `betPool`/`betCount` (tham khảo) |
+> | ~~`PUT /api/races/{id}/odds`~~ | — | — | **đã xóa** (`UpdateRaceOdds.cs`) |
+> | ~~`POST /api/races/{id}/publish-odds`~~ | — | — | **đã xóa** (`PublishRaceOdds.cs`) |
+> | ~~`POST /api/races/{id}/lock-betting`~~ | — | — | **đã xóa** (`LockRaceBetting.cs` + helper `RaceBettingLock`) |
 >
-> **`StartRaceAsync` thêm tham số `requireBettingLocked`:**
-> - `POST /races/{id}/start` (bấm tay) → **`true`**: chưa khóa cược thì **400**. Check này đặt **trước** nhánh auto-close để race chưa đóng đăng ký nhận đúng câu *"Close registration, publish the odds, then lock betting…"* thay vì bị auto-close rồi mới báo lỗi ở bước cuối.
-> - Worker `ProcessDueRaceStarts` → **`false`**: **tự khóa** (`RaceBettingLock.LockAsync`). Chặn worker sẽ khiến race tới giờ mà Admin quên bấm kẹt `Scheduled` vĩnh viễn.
+> **`StartRaceAsync` bỏ tham số `requireBettingLocked`** — signature nay là `(raceId, enforceSchedule, allowAutoClose, throwOnFailure, ct)`. Cả `POST /start` bấm tay lẫn worker auto-start đi cùng một đường; khóa cược là **hệ quả** của việc start, không phải điều kiện tiên quyết.
 >
-> **Cửa cược (`CreatePrediction` + `DeletePrediction` + `GetRacePredictionOdds`):** `Scheduled` **và** `OddsPublishedAt != null` **và** `BettingLockedAt == null`. ⚠️ **Đóng đăng ký không còn tự mở cược.** `CreatePrediction` khóa thẳng `selectedEntry.PublishedOdds` — không tính lại gì.
+> **DTO đổi (breaking cho FE):** `RaceOddsBoardResponse`/`RaceOddsBoardEntryResponse` rút gọn (bỏ `oddsPublishedAt`, `bettingLockedAt`, `houseMarginPercent`, `minOdds`, `maxOdds`, `canEdit`, `suggestedOdds`, `recommendedPublishedOdds`) · `RacePredictionOddsResponse` bỏ `oddsPublishedAt`/`bettingLockedAt`/**`isBettingOpen`** (cờ chết T-22, nay xóa hẳn) · `EntryListItemResponse` bỏ `publishedOdds` và **đổi tên `currentOdds` → `odds`** · `RaceListItemResponse` bỏ 2 mốc, **giữ `oddsComputedAt`** làm cờ duy nhất · `GetRaceLive` trả `Entry.Odds`. Việc cần làm phía FE: [.claude/FE_TASKS_ODDS_2026-07-28.md](../.claude/FE_TASKS_ODDS_2026-07-28.md).
 >
-> **Khác:** `GetRaceLive` trả `PublishedOdds` (khán giả xem lại chính cuộc đua mình cược); `EntryListItemResponse` thêm `PublishedOdds`; `RaceListItemResponse` thêm `OddsPublishedAt` + `BettingLockedAt` (FE bật/tắt nút theo đó); `RevokeHorse` tính lại **cả hai** giá khi sĩ số đổi.
->
-> **Migration `AddPublishedOddsAndBettingLock`** — kèm 3 câu SQL backfill (`PublishedOdds` từ `Odds`, `OddsPublishedAt = OddsComputedAt`, `BettingLockedAt` cho race đã rời `Scheduled`). Thiếu backfill thì mọi race đã đóng đăng ký từ trước sẽ có bảng cược trống.
+> **Migration `SimplifyOddsToSingleNumber`** (`20260728165812`) — drop `Entries.PublishedOdds` + `Races.OddsPublishedAt` + `Races.BettingLockedAt`. `Up()` không cần backfill (cột `Odds` đã chứa đúng giá trị mô hình mới), chỉ có một câu cứu row lỡ mất `Odds`. `Down()` **có** dựng lại dữ liệu hai tầng — thiếu nó thì rollback để lại 3 cột rỗng và bảng cược trắng. Ba `DROP COLUMN` này không đụng index/constraint nào nên an toàn trên DB có dữ liệu.
+> ⚠️ Hệ quả dữ liệu: race đang `Scheduled` đã publish odds sẽ thấy giá **tăng ~11%** (bỏ biên 10%). Cược đã đặt không đổi vì `OddsLocked1` là snapshot.
 >
 > **Hồ sơ nài (Flow 2) — cùng đợt:** `Infrastructure/Data/JockeyProfileBackfill.cs` chạy lúc khởi động, tạo bù `JockeyProfile` cho user JOCKEY chưa có (chép License/Weight/Bio từ `Users`, bỏ qua License trùng); `CreateUserCommandHandler` role JOCKEY nay cũng tạo profile; `UpdateJockeyProfileCommandHandler` **ghi ngược về `Users`** để hai bảng không lệch. Lý do: đăng ký ghi vào `Users` nhưng **mọi** luồng Flow 2 đọc `JockeyProfiles` ⇒ không có row = nài tàng hình + form Professional Identity trống.
 >
@@ -290,19 +296,17 @@ EF mapping: `Infrastructure/Data/Configurations/*Configuration.cs` (mỗi entity
   | `GET {predictionId}` · `GET /` | `GetPredictionDetail` · `GetPredictionList` | mọi role đăng nhập — **nhưng chỉ thấy cược của CHÍNH MÌNH** (ADMIN thấy tất cả), xem T-25 |
   | `DELETE {predictionId}/cancel` | `DeletePrediction` | SPECTATOR |
 
-  `CreatePrediction` hardened — **khóa odds server-side** per-(race, entry) qua `PredictionOddsCalculator.CalculateEntryOddsAsync`, trừ ví trong transaction, **SpectatorId từ JWT**. Validate: `race.Status == "Scheduled"` · `race.OddsComputedAt != null` · spectator `IsActive` · `BetAmount >= 10` · `BetAmount <= 50%` số dư · **tối đa 1 prediction chưa `Cancelled` / (Race + Spectator)**.
+  `CreatePrediction` khóa thẳng `selectedEntry.Odds` vào `OddsLocked1` — **không tính lại gì**, vì chỉ có một giá trong hệ thống và nó tĩnh. Trừ ví trong transaction, **SpectatorId từ JWT**. Validate: `race.Status == "Scheduled"` · `race.OddsComputedAt != null` (đúng 2 điều kiện này là toàn bộ cửa cược) · spectator `IsActive` · `BetAmount >= 10` · `BetAmount <= 50%` số dư · **tối đa 1 prediction chưa `Cancelled` / (Race + Spectator)**.
   `DeletePrediction` → hủy + hoàn 100% + **chống hủy hộ** (lọc theo `SpectatorId`); yêu cầu race `Scheduled`, prediction `Pending`, ví không `IsFrozen`.
   `PredictionStatus` (`Domain/Aggregates/Entities/PredictionStatus.cs`): `Pending` · `Locked` · `Won` · `Lost` · `Cancelled` · `Settled`.
   **Vòng đời thực tế:** `Pending` (khi đặt) → `Locked` (khi `StartRaceAsync` chạy — T-20) → `Won`/`Lost` (khi Publish); hoặc `Cancelled` (hủy tay / revoke ngựa / lock account). Unpublish rollback đưa `Won`/`Lost` về `Locked`.
   ⚠️ **`Settled` là hằng số chết** — không handler nào gán. Chỉ để lại vì đổi enum string cần migration data; đừng viết code mới dựa vào nó.
   🔴 **Hủy race KHÔNG hoàn cược** — `CancelRaceAsync` không đụng tới `Prediction`/`PointWallet` ⇒ [T-28](../.claude/TASKS.md).
   Migrations liên quan: `UpdatePredictionSingleEntryBet`, `UpdatePredictionDelete`, `CompleteFlow7PredictionBetting`, `RevertAllToOriginalState` + `DropOrphanPerLegColumns` (cùng drop cột mồ côi per-leg — xem [T-27](../.claude/TASKS.md)).
-  - **Odds ĐỘNG theo pool** (`Application/Usecases/Predictions/common/PredictionOddsCalculator.cs`) — đây **không phải** odds tĩnh:
-    - `BaseOdds` = `Entry.Odds`, khóa lúc đóng đăng ký bằng `CloseRegistrationCommandHandler.OddsFor(firsts, total, fieldSize)` — **Laplace smoothing**: `winRate = (firsts + 1) / (total + max(fieldSize, 2))`, `odds = 1 / max(winRate, 0.04)`, clamp `[1.10, 25.00]`.
-    - `pressure = entryPool / max(avgPool, 1)` (`0.5` nếu entry chưa ai cược); `CurrentOdds = BaseOdds / √pressure`.
-    - Pool tính **trên cả race**, bỏ prediction `Cancelled`. **Clamp `[1.10, 25.00]`**, làm tròn 2 chữ số (`AwayFromZero`).
-    - Lúc đặt cược, `CalculateEntryOddsAsync` cộng **cả số tiền đang đặt** vào pool trước khi tính → odds khóa vào prediction đã phản ánh chính lệnh cược đó.
-    - Response odds (`RacePredictionOddsResponse`) trả `baseOdds`, `currentOdds`, `entryPool`, `totalPool` + thông tin ngựa/nài/gate. ⚠️ Cờ **`isBettingOpen` hardcode `true`** — handler đã throw nếu race ≠ `Scheduled` hoặc odds chưa tính, nên cờ không bao giờ `false` ⇒ [T-22](../.claude/TASKS.md). ❌ Không còn `horseStamina`/`horseHealthStatus`.
+  - **Odds TĨNH, một con số** (`RaceExecution/RaceOddsAssigner.cs` — nơi duy nhất ghi `Entry.Odds`):
+    - `OddsFor(firsts, total, fieldSize)` — **Laplace smoothing**: `winRate = (firsts + 1) / (total + max(fieldSize, 2))`, `odds = 1 / max(winRate, 0.04)`, clamp `[1.10, 25.00]`. Chạy đúng **một lần** lúc đóng đăng ký, sau đó không đổi.
+    - Không có biên nhà cái, không điều chỉnh theo pool, không ai sửa được. Con số spectator thấy = con số khóa vào `OddsLocked1` = hệ số trả thưởng.
+    - Response odds (`RacePredictionOddsResponse`) trả `odds`, `entryPool`, `totalPool` (pool chỉ để hiển thị "bao nhiêu người đang theo con này", **không** tham gia vào giá) + thông tin ngựa/nài/gate + `raceStatus`/`oddsComputedAt` để FE tự suy cửa cược. ✅ Cờ chết `isBettingOpen` **đã xóa hẳn** (T-22 đóng).
   - **Nạp điểm:** **`RunWeeklyTopUp`** (+100, idempotent) chạy qua **`WeeklyTopUpBackgroundService`** (mỗi giờ, catch-up) + trigger admin `POST /api/admin/points/weekly-topup`. **`RunDailyTopUp`** (nạp bù ví `< 10` lên đúng 10, idempotent theo ngày UTC) chỉ có trigger admin `POST /api/admin/points/daily-topup` — **không có worker**.
   - **`LockUser`/`UnlockUser`** (`POST /api/admin/users/{id}/lock|unlock`) → khóa account, Spectator thì **hoàn cược Pending + đóng băng ví**. Admin points thêm `GET`+`PUT /api/admin/points/{userId}`.
 - **Lấy danh tính từ JWT claims** (`userId`/NameIdentifier) trong controller — không tin body cho RefereeUserId/AdminUserId.
@@ -354,7 +358,7 @@ dotnet ef database update --project Infrastructure --startup-project Api
 
 - Cổng/Swagger: chạy lên là redirect `/` → `/swagger`.
 - Migration tự apply khi khởi động (`db.Database.MigrateAsync()` trong Program.cs); seed test data khi `Development` hoặc cấu hình `SeedTestData=true`.
-- **19 migration**, tất cả ở `Infrastructure/Migrations/` (namespace `Infrastructure.Migrations`). Hai migration cuối **cùng drop** bộ cột mồ côi per-leg (`Predictions.LegNumber`/`LegRaceId` + FK/index, `Legs.ExecutionStatus`/`PredictionOpenedAt`/`PredictionClosedAt`, `Horses.Stamina`):
+- **22 migration**, tất cả ở `Infrastructure/Migrations/` (namespace `Infrastructure.Migrations`). HEAD hiện tại: **`20260728165812_SimplifyOddsToSingleNumber`** (drop `Entries.PublishedOdds`, `Races.OddsPublishedAt`, `Races.BettingLockedAt` — xem khối "ĐỢT 2026-07-28 (đợt 2)" ở mục 6). Trước đó có hai migration **cùng drop** bộ cột mồ côi per-leg (`Predictions.LegNumber`/`LegRaceId` + FK/index, `Legs.ExecutionStatus`/`PredictionOpenedAt`/`PredictionClosedAt`, `Horses.Stamina`):
   - `20260725113128_RevertAllToOriginalState` — dùng `DropForeignKey`/`DropIndex`/`DropColumn` **không** có `IF EXISTS`.
   - `20260725162506_DropOrphanPerLegColumns` — raw SQL, **có** `IF EXISTS` (an toàn, idempotent).
   🔴 **Bẫy:** DB nào đã apply `DropOrphanPerLegColumns` mà **chưa** apply `RevertAllToOriginalState` (tức đã chạy app ở khoảng commit `e490dc8`…`eec39fb`) sẽ **crash lúc khởi động** — EF thấy `RevertAllToOriginalState` còn pending, chạy nó, và `DROP CONSTRAINT` trên constraint đã biến mất → lỗi. Xem [T-27](../.claude/TASKS.md) để biết cách xử lý.

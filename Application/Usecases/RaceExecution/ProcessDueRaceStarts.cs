@@ -76,9 +76,6 @@ public sealed class ProcessDueRaceStartsCommandHandler
                     enforceSchedule: true,
                     allowAutoClose: true,
                     throwOnFailure: false,
-                    // Worker tự khóa sổ cược: race tới giờ mà Admin quên bấm "Lock Betting"
-                    // thì vẫn phải chạy, không được kẹt ở Scheduled vĩnh viễn.
-                    requireBettingLocked: false,
                     cancellationToken);
 
                 items.Add(new DueRaceStartItem(raceId, result.Outcome, result.SkipReason));

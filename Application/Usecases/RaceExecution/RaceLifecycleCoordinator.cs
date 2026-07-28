@@ -49,17 +49,15 @@ public interface IRaceLifecycleCoordinator
     /// <param name="enforceSchedule">true = từ chối nếu chưa tới ScheduledStartTime.</param>
     /// <param name="allowAutoClose">true = tự đóng đăng ký nếu chưa đóng.</param>
     /// <param name="throwOnFailure">true = ném exception (HTTP thủ công); false = trả Skipped (worker).</param>
-    /// <param name="requireBettingLocked">
-    /// true = từ chối nếu Admin chưa bấm "Lock Betting" (đường bấm nút thủ công — Flow 7);
-    /// false = tự khóa cược rồi mới start (worker auto-start, nếu không race tới giờ mà Admin
-    /// quên bấm sẽ kẹt vĩnh viễn).
-    /// </param>
+    /// <remarks>
+    /// Cược tự khóa (<c>Pending → Locked</c>) ngay trong hàm này — không có bước "Lock Betting"
+    /// riêng để Admin/Referee phải bấm trước (Flow 7).
+    /// </remarks>
     Task<RaceStartLifecycleResult> StartRaceAsync(
         int raceId,
         bool enforceSchedule,
         bool allowAutoClose,
         bool throwOnFailure,
-        bool requireBettingLocked,
         CancellationToken cancellationToken = default);
     /// <summary>
     /// Cancel Race (chỉ khi đang Scheduled) + cascade: Entry Pending/Approved → Withdrawn,
@@ -209,7 +207,6 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
         bool enforceSchedule,
         bool allowAutoClose,
         bool throwOnFailure,
-        bool requireBettingLocked,
         CancellationToken cancellationToken = default)
     {
         await using var tx = await _context.Database.BeginTransactionAsync(cancellationToken);
@@ -271,21 +268,6 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
                     cancellationToken);
             }
 
-            // Kiểm sổ cược TRƯỚC khi đụng tới đăng ký: nếu để sau, một race chưa đóng đăng ký sẽ
-            // bị auto-close rồi mới báo "chưa khóa cược" — thao tác đúng thứ tự nhưng câu lỗi
-            // lại chỉ vào bước cuối, và người dùng không hiểu mình còn thiếu mấy bước.
-            if (requireBettingLocked && race.BettingLockedAt is null)
-            {
-                return await FailOrSkipAsync(
-                    tx,
-                    race.RaceId,
-                    throwOnFailure,
-                    race.OddsComputedAt is null
-                        ? "Close registration, publish the odds, then lock betting before starting the race."
-                        : "Betting must be locked before starting the race. Use \"Lock Betting\" first.",
-                    cancellationToken);
-            }
-
             var registrationWasClosed = false;
             if (race.OddsComputedAt is null)
             {
@@ -295,7 +277,7 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
                         tx,
                         race.RaceId,
                         throwOnFailure,
-                        "Registration must be closed (Odds locked) before starting the race.",
+                        "Registration must be closed before starting the race.",
                         cancellationToken);
                 }
 
@@ -329,17 +311,13 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
                 }
             }
 
-            // Đường auto-start (worker): tự đóng sổ cược. Race tới giờ mà Admin quên bấm thì
-            // vẫn phải chạy — nhưng dứt khoát không được để cửa cược mở khi ngựa đã xuất phát.
-            if (race.BettingLockedAt is null)
-                await RaceBettingLock.LockAsync(_context, race, now, cancellationToken);
-
             await RaceLegProvisioner.EnsureLegsExistAsync(_context, race, cancellationToken);
 
             race.Status = RaceExecutionConstants.RaceInProgress;
             race.UpdatedAt = now;
 
-            // Phòng thủ: cược nào còn Pending (đặt xen giữa lúc khóa và lúc start) cũng khóa nốt.
+            // Xuất phát là đóng sổ cược: mọi lệnh còn Pending chuyển sang Locked ngay tại đây.
+            // Đây là cơ chế khóa DUY NHẤT — không có nút "Lock Betting" nào phải bấm trước.
             var pendingPredictions = await _context.Predictions
                 .Where(p => p.RaceId == raceId && p.Status == PredictionStatus.Pending)
                 .ToListAsync(cancellationToken);
@@ -383,7 +361,8 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
     }
 
     /// <summary>
-    /// Auto-reject Pending, khóa Odds + GateNumber, set RegistrationCloseAt/OddsComputedAt.
+    /// Auto-reject Pending, sinh Odds + GateNumber (một lần duy nhất, qua
+    /// <see cref="RaceOddsAssigner"/>), set RegistrationCloseAt/OddsComputedAt.
     /// Caller phải đảm bảo race Scheduled, OddsComputedAt null, và ≥2 Approved.
     /// </summary>
     private async Task<(int approved, int rejected)> ApplyCloseRegistrationAsync(
@@ -417,24 +396,9 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
             throw new InvalidOperationException(
                 "At least 2 approved entries are required to close registration.");
 
-        var horseIds = approved.Select(e => e.HorseId).Distinct().ToList();
-        var history = await _context.RaceResults
-            .Where(r => horseIds.Contains(r.Entry.HorseId) && r.FinalPosition != null)
-            .Select(r => new { r.Entry.HorseId, r.FinalPosition })
-            .ToListAsync(cancellationToken);
-
-        var gate = 1;
-        foreach (var e in approved)
-        {
-            var rows = history.Where(h => h.HorseId == e.HorseId).ToList();
-            var firsts = rows.Count(h => h.FinalPosition == 1);
-            e.Odds = CloseRegistrationCommandHandler.OddsFor(firsts, rows.Count, approved.Count);
-            // Odds công bố mặc định = đề xuất − 10%. Admin xem/sửa lại trong modal rồi mới
-            // Publish Odds; tới lúc đó spectator chưa thấy gì (Flow 7).
-            e.PublishedOdds = RaceOddsPolicy.PublishedFromSuggested(e.Odds);
-            e.GateNumber = gate++;
-            e.UpdatedAt = now;
-        }
+        // Đây là thời điểm DUY NHẤT odds được sinh ra. Từ đây tới lúc race kết thúc, con số
+        // này không đổi nữa — spectator cược đúng nó, Prediction khóa đúng nó (Flow 7).
+        await RaceOddsAssigner.AssignAsync(_context, race.RaceId, approved, now, cancellationToken);
 
         race.RegistrationCloseAt = now;
         race.OddsComputedAt = now;

@@ -5,9 +5,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.RaceExecution;
 
-// GET /api/races/{raceId}/odds-board — bảng odds cho Admin (modal điều chỉnh odds, Flow 3+7).
-// Trả CẢ HAI giá: đề xuất (máy tính) và công bố (spectator sẽ thấy), kèm cơ sở tính toán
-// (số lần về nhất / tổng số lần đua) để Admin biết vì sao máy đề xuất con số đó.
+// GET /api/races/{raceId}/odds-board — bảng odds cho Admin XEM (Flow 3+7). READ-ONLY.
+// Odds là một con số tĩnh, máy tính lúc đóng đăng ký; không ai sửa được. Board tồn tại để
+// Admin đối chiếu cơ sở tính toán (số lần về nhất / tổng số lần đua) và xem cược đang đổ vào đâu.
 public sealed record GetRaceOddsBoardQuery(int RaceId) : IRequest<RaceOddsBoardResponse>;
 
 public sealed record RaceOddsBoardResponse(
@@ -16,12 +16,6 @@ public sealed record RaceOddsBoardResponse(
     string RaceStatus,
     DateTime? RegistrationCloseAt,
     DateTime? OddsComputedAt,
-    DateTime? OddsPublishedAt,
-    DateTime? BettingLockedAt,
-    decimal HouseMarginPercent,
-    decimal MinOdds,
-    decimal MaxOdds,
-    bool CanEdit,
     List<RaceOddsBoardEntryResponse> Entries);
 
 public sealed record RaceOddsBoardEntryResponse(
@@ -31,12 +25,9 @@ public sealed record RaceOddsBoardEntryResponse(
     int JockeyId,
     string? JockeyName,
     int? GateNumber,
-    // Giá máy đề xuất từ lịch sử thắng — chỉ Admin thấy.
-    decimal SuggestedOdds,
-    // Giá spectator đặt cược. Mặc định = đề xuất − 10%, Admin sửa được.
-    decimal PublishedOdds,
-    // Giá công bố hệ thống đề nghị cho giá đề xuất hiện tại (để Admin bấm "reset").
-    decimal RecommendedPublishedOdds,
+    // Odds duy nhất — cũng chính là giá spectator cược và khóa vào Prediction.
+    decimal Odds,
+    // Cơ sở máy dùng để ra con số trên.
     int CareerFirsts,
     int CareerRaces,
     // Tổng điểm spectator đã đặt vào entry này — số liệu tham khảo, KHÔNG ảnh hưởng giá.
@@ -66,9 +57,7 @@ public sealed class GetRaceOddsBoardQueryHandler
                 r.Name,
                 r.Status,
                 r.RegistrationCloseAt,
-                r.OddsComputedAt,
-                r.OddsPublishedAt,
-                r.BettingLockedAt
+                r.OddsComputedAt
             })
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new KeyNotFoundException("Race not found.");
@@ -87,15 +76,14 @@ public sealed class GetRaceOddsBoardQueryHandler
                 e.JockeyId,
                 JockeyName = e.Jockey.FullName,
                 e.GateNumber,
-                e.Odds,
-                e.PublishedOdds
+                e.Odds
             })
             .ToListAsync(cancellationToken);
 
         var horseIds = entries.Select(e => e.HorseId).Distinct().ToList();
 
-        // Cùng nguồn dữ liệu mà CloseRegistration dùng để tính odds đề xuất — hiện ra để Admin
-        // đối chiếu, không tính lại gì.
+        // Cùng nguồn dữ liệu mà RaceOddsAssigner dùng để tính odds — hiện ra để Admin đối
+        // chiếu, không tính lại gì.
         var history = await _context.RaceResults
             .AsNoTracking()
             .Where(r => horseIds.Contains(r.Entry.HorseId) && r.FinalPosition != null)
@@ -125,8 +113,6 @@ public sealed class GetRaceOddsBoardQueryHandler
                     e.JockeyName,
                     e.GateNumber,
                     e.Odds,
-                    e.PublishedOdds,
-                    RaceOddsPolicy.PublishedFromSuggested(e.Odds),
                     horseHistory.Count(h => h.FinalPosition == 1),
                     horseHistory.Count,
                     pool?.Amount ?? 0m,
@@ -134,23 +120,12 @@ public sealed class GetRaceOddsBoardQueryHandler
             })
             .ToList();
 
-        // Sửa odds được tới khi khóa cược — sau đó giá phải đứng yên vì cược đã chốt theo nó.
-        var canEdit = race.Status == RaceExecutionConstants.RaceScheduled
-            && race.OddsComputedAt != null
-            && race.BettingLockedAt == null;
-
         return new RaceOddsBoardResponse(
             race.RaceId,
             race.Name,
             race.Status,
             race.RegistrationCloseAt,
             race.OddsComputedAt,
-            race.OddsPublishedAt,
-            race.BettingLockedAt,
-            RaceOddsPolicy.HouseMarginRate * 100m,
-            RaceOddsPolicy.MinOdds,
-            RaceOddsPolicy.MaxOdds,
-            canEdit,
             rows);
     }
 }

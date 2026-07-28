@@ -32,34 +32,15 @@ public sealed class RaceExecutionController : ControllerBase
     public async Task<IActionResult> CloseRegistration(int raceId, CancellationToken ct)
         => Ok(await _sender.Send(new CloseRegistrationCommand(raceId), ct));
 
-    // ── Odds: đề xuất → công bố → khóa cược (Flow 3 + 7) ─────────────
-    // Đóng đăng ký sinh ra ODDS ĐỀ XUẤT (máy tính) + ODDS CÔNG BỐ mặc định (đề xuất − 10%).
-    // Admin xem/sửa ở odds-board, bấm publish-odds để mở cược, bấm lock-betting để đóng sổ.
-    // Start Race chỉ chạy sau khi đã lock-betting.
+    // ── Odds (Flow 3 + 7) ────────────────────────────────────────────
+    // Đóng đăng ký sinh ra odds — MỘT con số duy nhất cho mỗi Entry, tính từ lịch sử thắng,
+    // và từ đó không đổi nữa. Không có bước công bố/khóa/sửa: cửa cược mở ngay khi đóng
+    // đăng ký và tự đóng khi race xuất phát. Board dưới đây chỉ để Admin XEM.
 
     [HttpGet("{raceId:int}/odds-board")]
     [Authorize(Roles = "ADMIN")]
     public async Task<IActionResult> OddsBoard(int raceId, CancellationToken ct)
         => Ok(await _sender.Send(new GetRaceOddsBoardQuery(raceId), ct));
-
-    [HttpPut("{raceId:int}/odds")]
-    [Authorize(Roles = "ADMIN")]
-    public async Task<IActionResult> UpdateOdds(
-        int raceId, [FromBody] UpdateRaceOddsRequest body, CancellationToken ct)
-        => Ok(await _sender.Send(
-            new UpdateRaceOddsCommand(raceId, body?.Entries ?? new()), ct));
-
-    [HttpPost("{raceId:int}/publish-odds")]
-    [Authorize(Roles = "ADMIN")]
-    public async Task<IActionResult> PublishOdds(int raceId, CancellationToken ct)
-        => Ok(await _sender.Send(new PublishRaceOddsCommand(raceId), ct));
-
-    // REFEREE cũng khóa được: họ là người bấm Start Race, chặn họ ở bước khóa cược thì trận
-    // đấu kẹt lại chờ Admin có mặt.
-    [HttpPost("{raceId:int}/lock-betting")]
-    [Authorize(Roles = "ADMIN,REFEREE")]
-    public async Task<IActionResult> LockBetting(int raceId, CancellationToken ct)
-        => Ok(await _sender.Send(new LockRaceBettingCommand(raceId), ct));
 
     // ── Race lifecycle ───────────────────────────────────────────────
 
@@ -171,4 +152,3 @@ public sealed class RaceExecutionController : ControllerBase
 // Request DTOs
 public sealed record LegEntriesRequest(List<SubmitPositionItem>? Entries);
 public sealed record OverrideRequest(string? OverrideReason, List<OverrideDecisionItem>? Decisions);
-public sealed record UpdateRaceOddsRequest(List<RaceOddsAdjustment>? Entries);

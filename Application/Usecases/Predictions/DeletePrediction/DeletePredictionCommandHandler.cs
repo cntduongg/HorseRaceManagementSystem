@@ -44,13 +44,8 @@ public sealed class DeletePredictionCommandHandler
             throw new InvalidOperationException("You can only cancel predictions while the race is Scheduled.");
         }
 
-        // Sổ cược đã đóng thì không rút lệnh ra được nữa — cùng một mốc chặn với đặt cược mới.
-        if (prediction.Race.BettingLockedAt != null)
-        {
-            throw new InvalidOperationException("Betting is locked for this race — the bet can no longer be cancelled.");
-        }
-
-
+        // Không cần mốc khóa cược riêng: race xuất phát là rời "Scheduled" (chặn ở trên) và
+        // mọi prediction chuyển sang Locked (chặn ở dưới) — hai lớp đó đã kín.
         if (prediction.Status == PredictionStatus.Cancelled)
             throw new InvalidOperationException("Prediction already cancelled.");
 

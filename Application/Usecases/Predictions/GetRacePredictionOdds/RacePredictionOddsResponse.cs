@@ -5,12 +5,9 @@ public sealed record RacePredictionOddsResponse(
     string RaceName,
     string RaceStatus,
     DateTime ScheduledStartTime,
+    // Mốc đóng đăng ký = mốc odds được tính. Cửa cược = RaceStatus "Scheduled" + mốc này
+    // khác null; không có bước công bố/khóa nào nữa. FE suy trạng thái từ đúng 2 field đó.
     DateTime? OddsComputedAt,
-    // Mốc Admin công bố odds — cửa cược chỉ mở từ đây.
-    DateTime? OddsPublishedAt,
-    // Mốc Admin khóa sổ cược — sau đó không đặt/hủy được nữa.
-    DateTime? BettingLockedAt,
-    bool IsBettingOpen,
     List<RacePredictionOddsEntryResponse> Entries);
 
 public sealed record RacePredictionOddsEntryResponse(
@@ -24,9 +21,8 @@ public sealed record RacePredictionOddsEntryResponse(
     int HorseOwnerId,
     string? HorseOwnerName,
     int? GateNumber,
-    // ODDS CÔNG BỐ — con số Admin đã duyệt. Đây CHÍNH LÀ giá khóa vào lệnh cược:
-    // payout = betAmount × odds, không có giá thứ hai nào khác.
-    // (Trước 2026-07-28 odds động theo pool nên bảng hiện 4.00x mà lệnh khóa 2.00x.)
+    // Odds TĨNH — tính một lần lúc đóng đăng ký rồi không đổi. Đây CHÍNH LÀ giá khóa vào
+    // lệnh cược: payout = betAmount × odds, không có giá thứ hai nào khác.
     decimal Odds,
     // Số liệu tham khảo — tổng điểm đã đặt, KHÔNG ảnh hưởng tới giá.
     decimal EntryPool,
