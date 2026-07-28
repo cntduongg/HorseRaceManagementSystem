@@ -1,4 +1,5 @@
 using Application.Common.Interfaces;
+using Application.Common.Wallet;
 using Domain.Aggregates.Entities;
 using Microsoft.EntityFrameworkCore;
 using Domain.Aggregates.Constants;
@@ -21,6 +22,7 @@ public sealed record RaceCancelLifecycleResult(
     RaceCancelOutcome Outcome,
     int WithdrawnEntries,
     int CancelledInvitations,
+    int RefundedPredictions,
     string? SkipReason);
 
 public sealed record CloseRegistrationLifecycleResult(
@@ -112,7 +114,7 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
                     throw new InvalidOperationException(skipReason);
 
                 return new RaceCancelLifecycleResult(
-                    raceId, RaceCancelOutcome.Skipped, 0, 0, skipReason);
+                    raceId, RaceCancelOutcome.Skipped, 0, 0, 0, skipReason);
             }
 
             var now = _timeProvider.GetUtcNow().UtcDateTime;
@@ -143,6 +145,11 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
                 invitation.CancelledAt = now;
             }
 
+            // Cuộc đua không diễn ra thì mọi lệnh cược phải trả lại tiền. Nếu không, prediction
+            // đứng mãi ở Pending/Locked: settlement chỉ chạy trong PublishRaceResult, mà race
+            // đã Cancelled thì không bao giờ publish ⇒ tiền của spectator kẹt vĩnh viễn.
+            var refunded = await RefundPredictionsForCancelledRaceAsync(race, now, cancellationToken);
+
             await _context.SaveChangesAsync(cancellationToken);
             await tx.CommitAsync(cancellationToken);
 
@@ -151,6 +158,7 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
                 RaceCancelOutcome.Cancelled,
                 entries.Count,
                 invitations.Count,
+                refunded,
                 null);
         }
         catch (KeyNotFoundException)
@@ -164,6 +172,73 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
             throw;
         }
     }
+    /// <summary>
+    /// Hoàn 100% điểm cược cho mọi prediction còn sống của một race vừa bị hủy.
+    /// </summary>
+    /// <remarks>
+    /// Cùng cách xử lý với <c>RevokeHorseCommandHandler.RefundPredictionsForEntryAsync</c>, chỉ
+    /// khác bộ lọc: ở đây là cả race chứ không riêng một Entry.
+    ///
+    /// Ví đang <c>IsFrozen</c> (chủ tài khoản bị Admin khóa) thì prediction vẫn chuyển
+    /// <c>Cancelled</c> nhưng KHÔNG cộng tiền — đóng băng ví là cố ý chặn mọi biến động số dư,
+    /// cộng vào đây sẽ phá đúng cái mà LockUser vừa làm. Tiền được trả lại khi Admin unlock.
+    /// </remarks>
+    /// <returns>Số prediction đã hủy (kể cả trường hợp ví đóng băng không cộng được tiền).</returns>
+    private async Task<int> RefundPredictionsForCancelledRaceAsync(
+        Race race,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        // `!` trên FirstEntry: navigation khai báo nullable nhưng FK là bắt buộc, và ThenInclude
+        // cần kiểu non-null để không sinh CS8602.
+        var predictions = await _context.Predictions
+            .Include(p => p.FirstEntry!)
+                .ThenInclude(e => e.Horse)
+            .Include(p => p.FirstEntry!)
+                .ThenInclude(e => e.Jockey)
+            .Where(p => p.RaceId == race.RaceId &&
+                        (p.Status == PredictionStatus.Pending || p.Status == PredictionStatus.Locked))
+            .ToListAsync(cancellationToken);
+
+        if (predictions.Count == 0)
+            return 0;
+
+        var spectatorIds = predictions.Select(p => p.SpectatorId).Distinct().ToList();
+        var wallets = await _context.PointWallets
+            .Where(w => spectatorIds.Contains(w.SpectatorId))
+            .ToListAsync(cancellationToken);
+
+        foreach (var prediction in predictions)
+        {
+            prediction.Status = PredictionStatus.Cancelled;
+            prediction.CancelledAt = now;
+
+            var wallet = wallets.FirstOrDefault(w => w.SpectatorId == prediction.SpectatorId);
+            if (wallet is null || wallet.IsFrozen)
+                continue;
+
+            wallet.Balance += prediction.BetAmount;
+            wallet.UpdatedAt = now;
+
+            _context.WalletTransactions.Add(new WalletTransaction
+            {
+                WalletId = wallet.WalletId,
+                SpectatorId = prediction.SpectatorId,
+                PredictionId = prediction.PredictionId,
+                Type = "BetRefund",
+                Amount = prediction.BetAmount,
+                BalanceAfter = wallet.Balance,
+                Reason = WalletTransactionReasonBuilder.BetRefundRaceCancelled(
+                    race,
+                    prediction.FirstEntry!.Horse,
+                    prediction.FirstEntry.Jockey),
+                CreatedAt = now
+            });
+        }
+
+        return predictions.Count;
+    }
+
     public async Task<CloseRegistrationLifecycleResult> CloseRegistrationAsync(
         int raceId,
         CancellationToken cancellationToken = default)

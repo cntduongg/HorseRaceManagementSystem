@@ -28,6 +28,14 @@ public static class WalletTransactionReasonBuilder
         return $"Bet refunded | Race: {race.Name} | Horse: {horse.Name} | Jockey: {jockey.FullName} | Reason: Horse revoked";
     }
 
+    public static string BetRefundRaceCancelled(
+        Race race,
+        Horse horse,
+        User jockey)
+    {
+        return $"Bet refunded | Race: {race.Name} | Horse: {horse.Name} | Jockey: {jockey.FullName} | Reason: Race cancelled";
+    }
+
     public static string BetRefundAccountLocked(
         Race race,
         Horse horse,
