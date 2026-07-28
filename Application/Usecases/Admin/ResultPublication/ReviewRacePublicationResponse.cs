@@ -4,6 +4,8 @@ public sealed record ReviewRacePublicationResponse(
     int RaceId,
     string RaceName,
     string RaceStatus,
+    int PendingViolationCount,
+    bool HasUnresolvedTie,
     bool CanPublish,
     List<string> Warnings,
     List<FinalStandingReviewItem> FinalStandings,

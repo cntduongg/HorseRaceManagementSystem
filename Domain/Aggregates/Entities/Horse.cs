@@ -1,4 +1,5 @@
 namespace Domain.Aggregates.Entities;
+
 public class Horse
 {
     public int HorseId { get; set; }
@@ -14,6 +15,7 @@ public class Horse
     public DateTime? ApprovedAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+
     public User Owner { get; set; } = null!;
     public ICollection<Entry> Entries { get; set; } = new List<Entry>();
     public ICollection<JockeyInvitation> Invitations { get; set; } = new List<JockeyInvitation>();

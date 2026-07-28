@@ -28,6 +28,7 @@ public class Prediction
 
     public DateTime? CancelledAt { get; set; }
 
+    // Navigation Properties
     public Race? Race { get; set; }
 
     public Spectator? Spectator { get; set; }

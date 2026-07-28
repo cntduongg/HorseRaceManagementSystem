@@ -29,7 +29,8 @@ public sealed record RefereeLegViewResponse(
     bool MySubmitted,
     bool OpponentSubmitted,
     bool BothSubmitted,
-    string? LegStatus);
+    string? LegStatus,
+    string? AdminOverrideReason);
 
 public sealed class GetRefereeLegViewQueryHandler
     : IRequestHandler<GetRefereeLegViewQuery, RefereeLegViewResponse>
@@ -106,6 +107,11 @@ public sealed class GetRefereeLegViewQueryHandler
                : leg.Status == RaceExecutionConstants.LegConflicted ? "Conflicted"
                : leg.Status)
             : null;
+        // Lý do Admin resolve — chỉ lộ khi leg đã Resolved và cả hai referee đã submit.
+        string? adminOverrideReason =
+            legStatus == RaceExecutionConstants.LegResolved
+                ? leg.AdminOverrideReason
+                : null;
 
         var mySubmittedData = mySubmitted
             ? mine.Select(x => new RefereeSubmittedItemDto(
@@ -129,15 +135,16 @@ public sealed class GetRefereeLegViewQueryHandler
         }
 
         return new RefereeLegViewResponse(
-            request.RaceId,
-            request.LegIndex,
-            legNumber,
-            entries,
-            mySubmittedData,
-            myDraftData,
-            mySubmitted,
-            opponentSubmitted,
-            bothSubmitted,
-            legStatus);
+         request.RaceId,
+         request.LegIndex,
+         legNumber,
+         entries,
+         mySubmittedData,
+         myDraftData,
+         mySubmitted,
+         opponentSubmitted,
+         bothSubmitted,
+         legStatus,
+         adminOverrideReason);
     }
 }

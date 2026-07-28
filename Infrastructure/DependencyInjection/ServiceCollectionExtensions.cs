@@ -22,9 +22,13 @@ public static class ServiceCollectionExtensions
                                ?? throw new InvalidOperationException(
                                    "Missing connection string: ConnectionStrings:DefaultConnection");
 
-        services.AddDbContext<ApplicationDbContext>(options =>
+        services.AddSingleton<NormalizeUserPhoneNumberInterceptor>();
+
+        services.AddDbContext<ApplicationDbContext>((sp, options) =>
         {
             options.UseNpgsql(connectionString);
+            options.AddInterceptors(
+                sp.GetRequiredService<NormalizeUserPhoneNumberInterceptor>());
         });
         services.AddScoped<IApplicationDbContext>(sp =>
     sp.GetRequiredService<ApplicationDbContext>());
@@ -49,6 +53,7 @@ public static class ServiceCollectionExtensions
         services.Configure<SmtpOptions>(configuration.GetSection(SmtpOptions.SectionName));
         services.AddScoped<IPasswordResetOtpProtector, HmacPasswordResetOtpProtector>();
         services.AddScoped<IPasswordResetEmailSender, SmtpPasswordResetEmailSender>();
+      
         //services.AddScoped<ICurrentUser, CurrentUser>();
         return services;
     }

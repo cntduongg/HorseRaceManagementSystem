@@ -1,35 +1,35 @@
-using Application.Common.Interfaces;
+using Application.Usecases.RaceExecution;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.Races.DeleteRace;
 
 public sealed class DeleteRaceCommandHandler
     : IRequestHandler<DeleteRaceCommand, bool>
 {
-    private readonly IApplicationDbContext _context;
+    private readonly IRaceLifecycleCoordinator _lifecycle;
 
-    public DeleteRaceCommandHandler(IApplicationDbContext context)
+    public DeleteRaceCommandHandler(IRaceLifecycleCoordinator lifecycle)
     {
-        _context = context;
+        _lifecycle = lifecycle;
     }
 
     public async Task<bool> Handle(
         DeleteRaceCommand request,
         CancellationToken cancellationToken)
     {
-        var race = await _context.Races
-            .FirstOrDefaultAsync(
-                x => x.RaceId == request.RaceId,
+        try
+        {
+            await _lifecycle.CancelRaceAsync(
+                request.RaceId,
+                reason: "Race cancelled by admin.",
+                throwOnFailure: true,
                 cancellationToken);
 
-        if (race is null)
+            return true;
+        }
+        catch (KeyNotFoundException)
+        {
             return false;
-
-        _context.Races.Remove(race);
-
-        await _context.SaveChangesAsync(cancellationToken);
-
-        return true;
+        }
     }
 }

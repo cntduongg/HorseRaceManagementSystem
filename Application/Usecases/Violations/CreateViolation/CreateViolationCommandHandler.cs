@@ -1,4 +1,5 @@
 using Application.Common.Interfaces;
+using Application.Usecases.RaceExecution;
 using Domain.Aggregates.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -7,7 +8,8 @@ namespace Application.Usecases.Violations.CreateViolation;
 
 // Flow 6 — Referee báo cáo vi phạm (chỉ 1 referee, không blind).
 // FE chỉ gửi raceId + entryId + violationType + description; referee lấy từ JWT;
-// LegNumber mặc định = leg hiện hành; Penalty do Admin quyết khi Approve (mặc định Warning); Status = Pending.
+// LegNumber mặc định = leg hiện hành; Status = Pending.
+// Penalty LUÔN là "None" khi tạo — Admin mới là người ra quyết định xử phạt lúc Approve.
 public sealed class CreateViolationCommandHandler
     : IRequestHandler<CreateViolationCommand, int>
 {
@@ -32,6 +34,15 @@ public sealed class CreateViolationCommandHandler
             throw new InvalidOperationException("Could not determine the reporting referee.");
         if (string.IsNullOrWhiteSpace(request.ViolationType))
             throw new InvalidOperationException("ViolationType is required.");
+
+        // Race không được Finished/Cancelled — tránh report muộn sau khi đã publish/hủy
+        // (approve sau đó không tự re-run publish nên sẽ làm sai kết quả đã công bố).
+        var race = await _context.Races
+            .FirstOrDefaultAsync(r => r.RaceId == request.RaceId, cancellationToken)
+            ?? throw new InvalidOperationException("Race does not exist.");
+        if (race.Status is RaceExecutionConstants.RaceFinished or RaceExecutionConstants.RaceCancelled)
+            throw new InvalidOperationException(
+                $"Violations cannot be reported for a race that is already {race.Status}.");
 
         // Entry phải thuộc race.
         var entry = await _context.Entries
@@ -59,10 +70,12 @@ public sealed class CreateViolationCommandHandler
             throw new InvalidOperationException("The leg does not exist in this race.");
         }
 
-        var penalty = string.IsNullOrWhiteSpace(request.Penalty) ? "Warning" : request.Penalty.Trim();
-        if (penalty is not ("Warning" or "Demote" or "DQ"))
-            throw new InvalidOperationException("Penalty must be Warning, Demote or DQ.");
-
+        // Án phạt do ADMIN quyết khi Approve — báo cáo của trọng tài KHÔNG mang đề xuất.
+        // Trước đây handler nhận request.Penalty (mặc định "Warning") nên một báo cáo còn
+        // Pending đã hiện sẵn "Warning" ở bảng Admin, trông y như đã có phán quyết. Nay luôn ghi
+        // "None" = chưa quyết; `request.Penalty` bị bỏ qua hoàn toàn, không tin body.
+        // ApproveViolation vẫn bắt buộc Admin chọn Warning/Demote/DQ nên không có đường nào để
+        // "None" lọt vào một violation đã Approved.
         var violation = new Violation
         {
             RaceId = request.RaceId,
@@ -71,7 +84,7 @@ public sealed class CreateViolationCommandHandler
             ReportedByRefereeId = request.ReportedByRefereeId,
             ViolationType = request.ViolationType.Trim(),
             Description = request.Description?.Trim(),
-            Penalty = penalty,
+            Penalty = "None",
             Status = "Pending",
             CreatedAt = DateTime.UtcNow
         };

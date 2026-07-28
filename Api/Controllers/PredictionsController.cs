@@ -27,14 +27,17 @@ public sealed class PredictionsController : ControllerBase
     // Spectator xem locked odds của từng Entry trong Race đang Scheduled.
     [HttpGet("races/{raceId:int}/odds")]
     [Authorize(Roles = "SPECTATOR,ADMIN,REFEREE,HORSE_OWNER")]
+    // ?betAmount= (tùy chọn): mỗi entry trả thêm effectiveOdds = giá SẼ KHÓA nếu đặt số tiền đó
+    // vào entry ấy. FE phải dùng số này cho "Est. Payout"; currentOdds × betAmount luôn cao hơn
+    // số thực nhận. Tham số thuần tính toán — không ghi DB, không giữ chỗ trong pool.
     public async Task<ActionResult<RacePredictionOddsResponse>> GetRaceOdds(
         [FromRoute] int raceId,
+        [FromQuery] decimal? betAmount,
         CancellationToken cancellationToken)
     {
         var result = await _sender.Send(
-            new GetRacePredictionOddsQuery(raceId),
+            new GetRacePredictionOddsQuery(raceId, betAmount),
             cancellationToken);
-
         return Ok(result);
     }
 
@@ -55,11 +58,7 @@ public sealed class PredictionsController : ControllerBase
                 FirstEntryId: request.EntryId,
                 BetAmount: request.BetAmount),
             cancellationToken);
-
-        return CreatedAtAction(
-            nameof(GetById),
-            new { predictionId },
-            new { predictionId });
+        return CreatedAtAction(nameof(GetById), new { predictionId }, new { predictionId });
     }
 
     [HttpGet("{predictionId:int}")]
@@ -68,7 +67,7 @@ public sealed class PredictionsController : ControllerBase
         CancellationToken cancellationToken)
     {
         var prediction = await _sender.Send(
-            new GetPredictionDetailQuery(predictionId),
+            new GetPredictionDetailQuery(predictionId, GetViewerScope()),
             cancellationToken);
 
         if (prediction is null)
@@ -82,12 +81,13 @@ public sealed class PredictionsController : ControllerBase
         return Ok(prediction);
     }
 
+    // Danh sách cược **của chính mình** (ADMIN thấy tất cả) — xem GetViewerScope().
     [HttpGet]
     public async Task<ActionResult<List<PredictionListItemResponse>>> GetAll(
         CancellationToken cancellationToken)
     {
         var predictions = await _sender.Send(
-            new GetPredictionListQuery(),
+            new GetPredictionListQuery(GetViewerScope()),
             cancellationToken);
 
         return Ok(predictions);
@@ -109,6 +109,11 @@ public sealed class PredictionsController : ControllerBase
             success = result
         });
     }
+
+    // Phạm vi dữ liệu được đọc: ADMIN → null (không lọc); role khác → chỉ chính mình.
+    // (`ICurrentUser` vẫn đang bị comment — T-07 — nên resolve thủ công như các controller khác.)
+    private int? GetViewerScope()
+        => User.IsInRole("ADMIN") ? null : GetUserId();
 
     private int GetUserId()
     {

@@ -4,10 +4,9 @@ using Domain.Aggregates.Entities;
 using Domain.Aggregates.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-
+using Application.Common.Wallet;
 namespace Application.Usecases.RaceExecution;
 
-// POST /api/races/{raceId}/publish — Admin công bố kết quả + quyết toán cược (ATOMIC).
 public sealed record PublishRaceResultCommand(int RaceId, int AdminUserId)
     : ICommand<PublishRaceResultResponse>;
 
@@ -51,20 +50,6 @@ public sealed class PublishRaceResultCommandHandler
                 throw new InvalidOperationException(
                     $"Only a PendingResult race can be published (current: {race.Status}).");
 
-            var allLegsDone = race.Legs.Count > 0 && race.Legs.All(l =>
-                l.Status is RaceExecutionConstants.LegConfirmed
-                    or RaceExecutionConstants.LegResolved);
-            if (!allLegsDone)
-                throw new InvalidOperationException("There are still unconfirmed legs.");
-
-            // Không cho publish khi còn vi phạm CHƯA duyệt: một Violation Pending
-            // (DQ/Demote) nếu được duyệt sau đó sẽ thay đổi standings đã chốt (Flow 6 → 8).
-            var pendingViolations = await _context.Violations
-                .CountAsync(v => v.RaceId == race.RaceId && v.Status == "Pending", cancellationToken);
-            if (pendingViolations > 0)
-                throw new InvalidOperationException(
-                    $"There are still {pendingViolations} unresolved violation(s). Please review them before publishing.");
-
             var beforeSnapshot = ReviewHistoryJson.Serialize(new
             {
                 raceId = race.RaceId,
@@ -84,19 +69,14 @@ public sealed class PublishRaceResultCommandHandler
 
             var now = DateTime.UtcNow;
 
-            // Entry bị Race DQ (vi phạm đã duyệt) — xếp cuối, 0 điểm, 0 Prize (Flow 6).
             var dqSet = (await _context.Violations
                 .Where(v => v.RaceId == race.RaceId && v.Status == "Approved" && v.Penalty == "DQ")
                 .Select(v => v.EntryId)
                 .Distinct()
                 .ToListAsync(cancellationToken)).ToHashSet();
 
-            // ── 1. Tính tổng điểm & xếp hạng (DQ luôn xuống đáy) ──
-            // Công thức chung với màn "xem trước" (ReviewRacePublicationQueryHandler)
-            // để bảng điểm trước publish khớp tuyệt đối với kết quả publish thật.
             var ranked = RaceRankingCalculator.Rank(entries, officials, dqSet);
 
-            // ── 2. Ghi RaceResult ──
             int? winnerEntryId = null;
             foreach (var r in ranked)
             {
@@ -116,24 +96,17 @@ public sealed class PublishRaceResultCommandHandler
                 });
             }
 
-            await _context.SaveChangesAsync(
-                cancellationToken); // RaceResult tồn tại trước khi PrizePointTransaction tham chiếu FK
+            await _context.SaveChangesAsync(cancellationToken);
 
-            // ── 3. Cộng Prize Points cho Owner & Jockey (bỏ qua entry DQ) ──
+            // Trao giải Prize Points cho Owner/Jockey
             foreach (var r in ranked)
             {
-                if (r.IsDq)
-                {
-                    continue;
-                }
+                if (r.IsDq) continue;
 
                 var finalPosition = r.FinalPosition;
-                var prize = RaceExecutionConstants.PrizePointsFor(finalPosition);
+                var prize = RaceExecutionConstants.PrizePointsFor(finalPosition, entries.Count);
 
-                if (prize <= 0)
-                {
-                    continue;
-                }
+                if (prize <= 0) continue;
 
                 foreach (var (userId, source) in new[]
                          {
@@ -156,7 +129,7 @@ public sealed class PublishRaceResultCommandHandler
                 }
             }
 
-            // ── 3b. Cập nhật thống kê Career của Jockey (nếu có hồ sơ) ──
+            // Cập nhật thống kê Jockey Career
             var jockeyIds = ranked.Select(r => r.Entry.JockeyId).Distinct().ToList();
             var profiles = await _context.JockeyProfiles
                 .Where(p => jockeyIds.Contains(p.UserId))
@@ -169,12 +142,12 @@ public sealed class PublishRaceResultCommandHandler
                     profile.TotalRaces += 1;
                     if (!r.IsDq && r.FinalPosition == 1) profile.TotalWins += 1;
                     if (!r.IsDq && r.FinalPosition <= 3) profile.TotalTop3 += 1;
-                    profile.CareerPrizePoints += r.IsDq ? 0 : RaceExecutionConstants.PrizePointsFor(r.FinalPosition);
+                    profile.CareerPrizePoints += r.IsDq ? 0 : RaceExecutionConstants.PrizePointsFor(r.FinalPosition, entries.Count);
                     profile.UpdatedAt = now;
                 }
             }
 
-            // ── 4. Quyết toán dự đoán ──
+            // ── Quyết toán cược (Race-scoped) ──
             var run = new SettlementRun
             {
                 RaceId = race.RaceId,
@@ -185,9 +158,14 @@ public sealed class PublishRaceResultCommandHandler
             };
 
             _context.SettlementRuns.Add(run);
-            await _context.SaveChangesAsync(cancellationToken); // lấy SettlementRunId
+            await _context.SaveChangesAsync(cancellationToken);
 
             var predictions = await _context.Predictions
+                 .Include(p => p.Race)
+                .Include(p => p.FirstEntry)
+                    .ThenInclude(e => e.Horse)
+                .Include(p => p.FirstEntry)
+                    .ThenInclude(e => e.Jockey)
                 .Where(p =>
                     p.RaceId == race.RaceId &&
                     (
@@ -236,8 +214,6 @@ public sealed class PublishRaceResultCommandHandler
                             $"Wallet not found for spectator #{prediction.SpectatorId}.");
                     }
 
-                    // Settlement là giao dịch hệ thống.
-                    // Vẫn credit payout để kết quả tài chính đúng.
                     wallet.Balance += payout;
                     wallet.UpdatedAt = now;
 
@@ -250,8 +226,11 @@ public sealed class PublishRaceResultCommandHandler
                         Type = "Payout",
                         Amount = payout,
                         BalanceAfter = wallet.Balance,
-                        Reason =
-                            $"Won bet on race #{race.RaceId}, entry #{prediction.FirstEntryId}, odds {prediction.OddsLocked1}",
+                        Reason = WalletTransactionReasonBuilder.Payout(
+                        prediction.Race!,
+                        prediction.FirstEntry!.Horse,
+                        prediction.FirstEntry.Jockey,
+                        prediction.OddsLocked1),
                         CreatedAt = now
                     };
 
@@ -288,7 +267,8 @@ public sealed class PublishRaceResultCommandHandler
             run.TotalBetAmount = totalBet;
             run.TotalPayoutAmount = totalPayout;
 
-            // ── 5. Chốt race ──
+            // --- KHÔNG CÓ PHẦN KHẤU TRỪ THỂ LỰC NGỰA (ĐÃ XÓA) ---
+
             race.Status = RaceExecutionConstants.RaceFinished;
             race.PublishedAt = now;
             race.UpdatedAt = now;
@@ -319,8 +299,6 @@ public sealed class PublishRaceResultCommandHandler
             await _context.SaveChangesAsync(cancellationToken);
             await tx.CommitAsync(cancellationToken);
 
-            // Race → Finished. Đánh dấu ở handler (không phải controller) nên phủ cả
-            // POST /api/races/{id}/publish lẫn POST /api/admin/races/{id}/publish (2 route trùng nhau).
             _liveTracker.MarkChanged(race.RaceId);
 
             return new PublishRaceResultResponse(

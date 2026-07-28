@@ -1,3 +1,5 @@
+using Domain.Aggregates.Constants;
+
 namespace Domain.Aggregates.Entities;
 public class Leg
 {

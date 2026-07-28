@@ -19,7 +19,9 @@ public sealed class GetPendingEntriesQueryHandler
         CancellationToken cancellationToken)
     {
         return await _context.Entries
-            .Where(e => e.Status == EntryStatus.Pending)
+            .Where(e =>
+                e.Status == EntryStatus.Pending &&
+                e.Race.Status == RaceStatus.Scheduled)
             .Include(e => e.Race)
             .Include(e => e.Horse)
             .Include(e => e.Jockey)

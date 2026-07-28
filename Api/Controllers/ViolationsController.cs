@@ -51,7 +51,8 @@ public sealed class ViolationsController : ControllerBase
 	{
 		var violation = await _sender.Send(
 			new GetViolationDetailQuery(
-				violationId),
+				violationId,
+				GetViewerScope()),
 			cancellationToken);
 
 		if (violation is null)
@@ -65,12 +66,13 @@ public sealed class ViolationsController : ControllerBase
 		return Ok(violation);
 	}
 
+	// Danh sách báo cáo **của chính mình** (ADMIN thấy tất cả) — xem GetViewerScope().
 	[HttpGet]
 	public async Task<ActionResult<List<ViolationListItemResponse>>> GetAll(
 		CancellationToken cancellationToken)
 	{
 		var violations = await _sender.Send(
-			new GetViolationListQuery(),
+			new GetViolationListQuery(GetViewerScope()),
 			cancellationToken);
 
 		return Ok(violations);
@@ -128,6 +130,11 @@ public sealed class ViolationsController : ControllerBase
 			success = result
 		});
 	}
+
+	// Phạm vi dữ liệu được đọc: ADMIN → null (không lọc); REFEREE → chỉ báo cáo của chính mình.
+	// Lấy từ JWT, không tin body/query. (`ICurrentUser` vẫn đang bị comment — T-07.)
+	private int? GetViewerScope()
+		=> User.IsInRole("ADMIN") ? null : GetUserId();
 
 	private int GetUserId()
 	{

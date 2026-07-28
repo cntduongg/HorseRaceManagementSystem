@@ -1223,13 +1223,18 @@ namespace Infrastructure.Migrations
                     b.Property<DateTime?>("LockedUntil")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("NormalizedPhoneNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
                     b.Property<string>("PhoneNumber")
-                        .HasColumnType("text");
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
 
                     b.Property<int>("RoleId")
                         .HasColumnType("integer");
@@ -1255,6 +1260,11 @@ namespace Infrastructure.Migrations
                     b.HasIndex("LicenseNumber")
                         .IsUnique()
                         .HasFilter("\"LicenseNumber\" IS NOT NULL");
+
+                    b.HasIndex("NormalizedPhoneNumber")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Users_NormalizedPhoneNumber")
+                        .HasFilter("\"NormalizedPhoneNumber\" IS NOT NULL");
 
                     b.HasIndex("RoleId");
 

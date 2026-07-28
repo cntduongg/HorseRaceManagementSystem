@@ -1,10 +1,12 @@
+using System.Text.Json;
 using Application.Common;
 using Application.Common.Interfaces;
 using Domain.Aggregates.Entities;
 using Domain.Aggregates.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-
+using Microsoft.Extensions.Logging;
+using Application.Common.Wallet;
 namespace Application.Usecases.RaceExecution;
 
 // POST /api/races/{raceId}/unpublish — Admin rollback kết quả + payout (ATOMIC) → PendingResult.
@@ -22,15 +24,18 @@ public sealed class UnpublishRaceResultCommandHandler
     private readonly IApplicationDbContext _context;
     private readonly IReviewHistoryRepository _reviewHistoryRepository;
     private readonly IRaceLiveChangeTracker _liveTracker;
+    private readonly ILogger<UnpublishRaceResultCommandHandler> _logger;
 
     public UnpublishRaceResultCommandHandler(
         IApplicationDbContext context,
         IReviewHistoryRepository reviewHistoryRepository,
-        IRaceLiveChangeTracker liveTracker)
+        IRaceLiveChangeTracker liveTracker,
+        ILogger<UnpublishRaceResultCommandHandler> logger)
     {
         _context = context;
         _reviewHistoryRepository = reviewHistoryRepository;
         _liveTracker = liveTracker;
+        _logger = logger;
     }
 
     public async Task<UnpublishRaceResultResponse> Handle(
@@ -69,8 +74,16 @@ public sealed class UnpublishRaceResultCommandHandler
 
             // ── 1. Hoàn lại payout đã chi ──
             var settlements = await _context.PredictionSettlements
-                .Where(s => s.RaceId == race.RaceId && !s.IsRollbacked)
-                .ToListAsync(cancellationToken);
+            .Include(s => s.Prediction)
+                .ThenInclude(p => p!.Race)
+            .Include(s => s.Prediction)
+                .ThenInclude(p => p!.FirstEntry)
+                    .ThenInclude(e => e.Horse)
+            .Include(s => s.Prediction)
+                .ThenInclude(p => p!.FirstEntry)
+                    .ThenInclude(e => e.Jockey)
+            .Where(s => s.RaceId == race.RaceId && !s.IsRollbacked)
+            .ToListAsync(cancellationToken);
 
             var spectatorIds = settlements.Select(s => s.SpectatorId).Distinct().ToList();
             var wallets = await _context.PointWallets
@@ -101,7 +114,10 @@ public sealed class UnpublishRaceResultCommandHandler
                         Type = "PayoutRollback",
                         Amount = -s.PayoutAmount,
                         BalanceAfter = wallet.Balance,
-                        Reason = $"Rollback payout race #{race.RaceId}",
+                        Reason = WalletTransactionReasonBuilder.PayoutRollback(
+                        s.Prediction!.Race!,
+                        s.Prediction.FirstEntry!.Horse,
+                        s.Prediction.FirstEntry.Jockey),
                         RollbackOfTransactionId = s.PayoutTransactionId,
                         CreatedAt = now
                     });
@@ -146,8 +162,12 @@ public sealed class UnpublishRaceResultCommandHandler
             // ── 4b. Hoàn lại thống kê Career của Jockey (đối xứng với Publish) ──
             var entries = await _context.Entries
                 .Where(e => e.RaceId == race.RaceId)
-                .Select(e => new { e.EntryId, e.JockeyId })
+                .Select(e => new { e.EntryId, e.JockeyId, e.Status })
                 .ToListAsync(cancellationToken);
+
+            // Phải dùng ĐÚNG sĩ số mà Publish đã dùng (số Entry Approved), nếu không
+            // rollback Prize Points sẽ lệch so với lúc cộng.
+            var fieldSize = entries.Count(e => e.Status == RaceExecutionConstants.EntryApproved);
             var jockeyByEntry = entries.ToDictionary(e => e.EntryId, e => e.JockeyId);
             var jockeyIds = entries.Select(e => e.JockeyId).Distinct().ToList();
             var profiles = await _context.JockeyProfiles
@@ -165,7 +185,9 @@ public sealed class UnpublishRaceResultCommandHandler
                     profile.TotalWins = Math.Max(0, profile.TotalWins - 1);
                 if (!res.IsRaceDQ && res.FinalPosition is >= 1 and <= 3)
                     profile.TotalTop3 = Math.Max(0, profile.TotalTop3 - 1);
-                var prize = res.IsRaceDQ ? 0 : RaceExecutionConstants.PrizePointsFor(res.FinalPosition ?? 0);
+                var prize = res.IsRaceDQ
+                    ? 0
+                    : RaceExecutionConstants.PrizePointsFor(res.FinalPosition ?? 0, fieldSize);
                 profile.CareerPrizePoints = Math.Max(0, profile.CareerPrizePoints - prize);
                 profile.UpdatedAt = now;
             }

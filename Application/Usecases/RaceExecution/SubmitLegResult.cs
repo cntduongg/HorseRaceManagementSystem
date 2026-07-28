@@ -17,7 +17,7 @@ public sealed record SubmitLegResultCommand(
 public sealed record SubmitPositionItem(int EntryId, int Position);
 
 public sealed record SubmitLegResultResponse(
-    string Status,            // AwaitingSecondReferee | Matched | Conflicted
+    string Status, // AwaitingSecondReferee | Matched | Conflicted
     int LegIndex,
     int LegNumber,
     string Message,
@@ -45,9 +45,9 @@ public sealed class SubmitLegResultCommandHandler
         var legNumber = request.LegIndex + 1;
 
         var race = await _context.Races
-            .Include(r => r.Legs)
-            .FirstOrDefaultAsync(r => r.RaceId == request.RaceId, cancellationToken)
-            ?? throw new KeyNotFoundException("Race not found.");
+                       .Include(r => r.Legs)
+                       .FirstOrDefaultAsync(r => r.RaceId == request.RaceId, cancellationToken)
+                   ?? throw new KeyNotFoundException("Race not found.");
 
         if (race.Status != RaceExecutionConstants.RaceInProgress)
             throw new InvalidOperationException(
@@ -60,11 +60,11 @@ public sealed class SubmitLegResultCommandHandler
             throw new UnauthorizedAccessException("Only an assigned referee can submit.");
 
         var leg = race.Legs.FirstOrDefault(l => l.LegNumber == legNumber)
-            ?? throw new KeyNotFoundException("Leg not found.");
+                  ?? throw new KeyNotFoundException("Leg not found.");
 
         if (leg.Status is RaceExecutionConstants.LegConfirmed
-                       or RaceExecutionConstants.LegConflicted
-                       or RaceExecutionConstants.LegResolved)
+            or RaceExecutionConstants.LegConflicted
+            or RaceExecutionConstants.LegResolved)
             throw new InvalidOperationException($"Leg {legNumber} is already locked ({leg.Status}).");
 
         // ── Validate payload so với entry đã duyệt ──
@@ -82,13 +82,14 @@ public sealed class SubmitLegResultCommandHandler
         if (!submittedIds.SetEquals(approvedEntryIds))
             throw new InvalidOperationException("The entry list does not match the race's approved entries.");
 
-        // Không trùng thứ hạng dương.
-        var positiveRanks = submitted
-            .Where(x => x.Position > 0)
-            .Select(x => x.Position)
-            .ToList();
-        if (positiveRanks.Count != positiveRanks.Distinct().Count())
-            throw new InvalidOperationException("Duplicate ranking — each position can be assigned to only one entry.");
+        // Số ngựa thực đua của race — vừa là biên trên của thứ hạng, vừa là cơ sở tính Leg Points.
+        var fieldSize = approvedEntryIds.Count;
+
+        // Vị trí phải nằm trong 1..fieldSize, không trùng, và liên tục từ 1 (bỏ DNF/DQ).
+        var positionError = RaceExecutionConstants.ValidatePositions(
+            submitted.Select(x => x.Position).ToList(), fieldSize);
+        if (positionError is not null)
+            throw new InvalidOperationException(positionError);
 
         // ── Chặn submit trùng (append-only, 1 referee/leg) ──
         var alreadyMine = await _context.LegRefereeEntries.AnyAsync(
@@ -182,7 +183,7 @@ public sealed class SubmitLegResultCommandHandler
                     EntryId = item.EntryId,
                     FinishPosition = finishPosition,
                     ResultStatus = resultStatus,
-                    LegPoints = RaceExecutionConstants.LegPointsFor(finishPosition, resultStatus),
+                    LegPoints = RaceExecutionConstants.LegPointsFor(finishPosition, resultStatus, fieldSize),
                     ConfirmationType = RaceExecutionConstants.AutoMatched,
                     ConfirmedAt = now
                 });

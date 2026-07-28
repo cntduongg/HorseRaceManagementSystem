@@ -50,26 +50,45 @@ public sealed class ApproveViolationCommandHandler
                 .FirstOrDefaultAsync(v => v.ViolationId == request.ViolationId, cancellationToken)
                 ?? throw new KeyNotFoundException("Violation not found.");
 
+            var race = await _context.Races
+                .FirstOrDefaultAsync(r => r.RaceId == violation.RaceId, cancellationToken)
+                ?? throw new KeyNotFoundException("Race not found.");
+            if (race.Status == RaceExecutionConstants.RaceFinished)
+                throw new InvalidOperationException("Race already published — unpublish it first.");
+
             if (violation.Status != "Pending")
                 throw new InvalidOperationException("This violation has already been processed.");
 
+            // Báo cáo của trọng tài không mang đề xuất án phạt (luôn lưu "None"), nên Admin BẮT
+            // BUỘC phải chọn ở bước này. Fallback về violation.Penalty chỉ còn ý nghĩa với các
+            // bản ghi cũ đã có sẵn án phạt trong DB.
             var penalty = string.IsNullOrWhiteSpace(request.Penalty)
                 ? violation.Penalty
                 : request.Penalty.Trim();
             if (penalty is not ("Warning" or "Demote" or "DQ"))
-                throw new InvalidOperationException("Penalty must be Warning, Demote or DQ.");
+                throw new InvalidOperationException(
+                    "Select a penalty (Warning, Demote or DQ) — the referee's report does not propose one; " +
+                    "the sanction is the Admin's decision.");
 
             var now = DateTime.UtcNow;
+
+            // Sĩ số race — Leg Points tuyến tính theo số ngựa nên phải tính lại đúng mốc này.
+            var fieldSize = await _context.Entries
+                .CountAsync(e => e.RaceId == violation.RaceId &&
+                                 e.Status == RaceExecutionConstants.EntryApproved,
+                    cancellationToken);
 
             List<LegOfficialResult> affectedOfficials;
             switch (penalty)
             {
                 case "Demote":
+                    // Nạp TOÀN BỘ leg, không chỉ entry vi phạm: Demote nay hoán đổi với entry
+                    // ngay dưới nên phải có cả hai dòng trong change-tracker, và audit snapshot
+                    // cũng cần ghi lại cả hai.
                     affectedOfficials = await _context.LegOfficialResults
                         .Where(o =>
                             o.RaceId == violation.RaceId &&
-                            o.LegNumber == violation.LegNumber &&
-                            o.EntryId == violation.EntryId)
+                            o.LegNumber == violation.LegNumber)
                         .ToListAsync(cancellationToken);
                     break;
 
@@ -93,13 +112,15 @@ public sealed class ApproveViolationCommandHandler
             switch (penalty)
             {
                 case "Demote":
-                    var official = affectedOfficials.FirstOrDefault();
-                    if (official is { ResultStatus: RaceExecutionConstants.ResultFinished, FinishPosition: not null })
-                    {
-                        official.FinishPosition += 1;
-                        official.LegPoints = RaceExecutionConstants.LegPointsFor(
-                            official.FinishPosition, official.ResultStatus);
-                    }
+                    // Hoán đổi với entry ngay dưới (không phải +1 rồi bỏ đó — xem
+                    // ViolationPenaltyGuard.ApplyDemote). Không áp được thì THROW, đừng bỏ qua
+                    // im lặng: violation sẽ hiện Approved/Demote trong khi standings không đổi
+                    // gì và Admin không hề hay biết.
+                    ViolationPenaltyGuard.ApplyDemote(
+                        affectedOfficials,
+                        violation.EntryId,
+                        violation.LegNumber,
+                        fieldSize);
                     break;
 
                 case "DQ":

@@ -1,8 +1,11 @@
 using Application.Common;
 using Application.Common.Interfaces;
+using Domain.Aggregates.Constants;
 using Domain.Aggregates.Entities;
+using Domain.Aggregates.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace Application.Usecases.RaceExecution;
 
@@ -29,13 +32,16 @@ public sealed class OverrideLegResultCommandHandler
 {
     private readonly IApplicationDbContext _context;
     private readonly IRaceLiveChangeTracker _liveTracker;
+    private readonly IReviewHistoryRepository _reviewHistoryRepository;
 
     public OverrideLegResultCommandHandler(
         IApplicationDbContext context,
-        IRaceLiveChangeTracker liveTracker)
+        IRaceLiveChangeTracker liveTracker,
+        IReviewHistoryRepository reviewHistoryRepository)
     {
         _context = context;
         _liveTracker = liveTracker;
+        _reviewHistoryRepository = reviewHistoryRepository;
     }
 
     public async Task<OverrideLegResultResponse> Handle(
@@ -48,16 +54,26 @@ public sealed class OverrideLegResultCommandHandler
         var legNumber = request.LegIndex + 1;
 
         var race = await _context.Races
-            .Include(r => r.Legs)
-            .FirstOrDefaultAsync(r => r.RaceId == request.RaceId, cancellationToken)
-            ?? throw new KeyNotFoundException("Race not found.");
+                       .Include(r => r.Legs)
+                       .FirstOrDefaultAsync(r => r.RaceId == request.RaceId, cancellationToken)
+                   ?? throw new KeyNotFoundException("Race not found.");
 
         var leg = race.Legs.FirstOrDefault(l => l.LegNumber == legNumber)
-            ?? throw new KeyNotFoundException("Leg not found.");
+                  ?? throw new KeyNotFoundException("Leg not found.");
 
         if (leg.Status != RaceExecutionConstants.LegConflicted)
             throw new InvalidOperationException(
                 $"Only a Conflicted leg can be resolved (current: {leg.Status}).");
+
+        // Snapshot trước khi đổi — cho audit trail.
+        var beforeSnapshot = new
+        {
+            leg.RaceId,
+            leg.LegNumber,
+            leg.Status,
+            leg.ConfirmationType,
+            leg.AdminOverrideReason
+        };
 
         var approvedEntryIds = await _context.Entries
             .Where(e => e.RaceId == request.RaceId &&
@@ -70,10 +86,13 @@ public sealed class OverrideLegResultCommandHandler
         if (!decisionIds.SetEquals(approvedEntryIds))
             throw new InvalidOperationException("The decision does not match the approved entries.");
 
-        var positiveRanks = decisions.Where(d => d.OfficialPosition > 0)
-            .Select(d => d.OfficialPosition).ToList();
-        if (positiveRanks.Count != positiveRanks.Distinct().Count())
-            throw new InvalidOperationException("Duplicate ranking.");
+        // Số ngựa thực đua — biên trên của thứ hạng và cơ sở tính Leg Points.
+        var fieldSize = approvedEntryIds.Count;
+
+        var positionError = RaceExecutionConstants.ValidatePositions(
+            decisions.Select(d => d.OfficialPosition).ToList(), fieldSize);
+        if (positionError is not null)
+            throw new InvalidOperationException(positionError);
 
         var now = DateTime.UtcNow;
         var reason = request.OverrideReason!.Trim();
@@ -97,7 +116,7 @@ public sealed class OverrideLegResultCommandHandler
                 EntryId = d.EntryId,
                 FinishPosition = finishPosition,
                 ResultStatus = resultStatus,
-                LegPoints = RaceExecutionConstants.LegPointsFor(finishPosition, resultStatus),
+                LegPoints = RaceExecutionConstants.LegPointsFor(finishPosition, resultStatus, fieldSize),
                 ConfirmationType = RaceExecutionConstants.AdminOverride,
                 ConfirmedAt = now,
                 ConfirmedByAdminId = request.AdminUserId,
@@ -121,6 +140,30 @@ public sealed class OverrideLegResultCommandHandler
             ? RaceExecutionConstants.RaceInProgress
             : RaceExecutionConstants.RacePendingResult;
         race.UpdatedAt = now;
+
+        // Snapshot sau khi đổi — cho audit trail.
+        var afterSnapshot = new
+        {
+            leg.RaceId,
+            leg.LegNumber,
+            leg.Status,
+            leg.ConfirmationType,
+            leg.AdminOverrideReason,
+            Decisions = decisions
+        };
+
+        await _reviewHistoryRepository.AddAsync(
+            new ReviewHistory
+            {
+                EntityType = ReviewEntity.Leg,
+                EntityId = request.RaceId,
+                Action = ReviewAction.AdminOverride,
+                Reason = reason,
+                BeforeData = JsonSerializer.Serialize(beforeSnapshot),
+                AfterData = JsonSerializer.Serialize(afterSnapshot),
+                AdminId = request.AdminUserId
+            },
+            cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
 

@@ -32,12 +32,13 @@ public sealed class CloseRegistrationCommandHandler
             result.RejectedEntries);
     }
 
-    // Odds = 1 / winRate (clamp 1.1..25). Chưa có lịch sử → theo cỡ field.
+    // Odds = 1 / winRate (clamp 1.1..25). Laplace prior để mẫu nhỏ không cực đoan.
     public static decimal OddsFor(int firsts, int total, int fieldSize)
     {
+        var n = Math.Max(fieldSize, 2);
         double winRate = total > 0
-            ? (double)firsts / total
-            : 1.0 / Math.Max(fieldSize, 2);
+            ? (firsts + 1.0) / (total + n)
+            : 1.0 / n;
 
         var odds = (decimal)Math.Round(1.0 / Math.Max(winRate, 0.04), 2);
         return Math.Clamp(odds, 1.1m, 25m);

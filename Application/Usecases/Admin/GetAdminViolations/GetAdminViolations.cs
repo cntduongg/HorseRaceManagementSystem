@@ -4,8 +4,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Application.Usecases.Admin.GetAdminViolations;
 
-// GET /api/admin/violations?status=&page=&pageSize=
-public sealed record GetAdminViolationsQuery(string? Status, int Page, int PageSize)
+// GET /api/admin/violations?status=&page=&pageSize=&search=&sort=&sortDirection=
+// Search khớp: loại vi phạm, mô tả, tên race, tên nài, tên ngựa.
+public sealed record GetAdminViolationsQuery(
+    string? Status,
+    int Page,
+    int PageSize,
+    string? Search = null,
+    string? Sort = null,
+    string? SortDirection = null)
     : IRequest<AdminViolationsResult>;
 
 public sealed record AdminViolationItem(
@@ -62,12 +69,38 @@ public sealed class GetAdminViolationsQueryHandler
         if (domainStatus is not null)
             query = query.Where(v => v.Status == domainStatus);
 
+        // Search — dùng ToLower().Contains (không dùng ILike của Npgsql) để chạy được
+        // trên cả PostgreSQL lẫn InMemory provider trong test.
+        var search = request.Search?.Trim();
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.ToLower();
+            query = query.Where(v =>
+                v.ViolationType.ToLower().Contains(term) ||
+                (v.Description != null && v.Description.ToLower().Contains(term)) ||
+                v.Entry.Race.Name.ToLower().Contains(term) ||
+                v.Entry.Jockey.FullName.ToLower().Contains(term) ||
+                v.Entry.Horse.Name.ToLower().Contains(term));
+        }
+
         var total = await query.CountAsync(cancellationToken);
         var pendingCount = await _context.Violations.CountAsync(v => v.Status == "Pending", cancellationToken);
         var resolvedCount = await _context.Violations.CountAsync(v => v.Status == "Approved", cancellationToken);
 
-        var rows = await query
-            .OrderByDescending(v => v.CreatedAt)
+        // Sort — mặc định mới nhất trước; ViolationId làm tie-break để phân trang ổn định.
+        var desc = !string.Equals(request.SortDirection, "asc", StringComparison.OrdinalIgnoreCase);
+        var ordered = request.Sort?.Trim().ToLowerInvariant() switch
+        {
+            "violationtype" => desc ? query.OrderByDescending(v => v.ViolationType) : query.OrderBy(v => v.ViolationType),
+            "status"        => desc ? query.OrderByDescending(v => v.Status) : query.OrderBy(v => v.Status),
+            "penalty"       => desc ? query.OrderByDescending(v => v.Penalty) : query.OrderBy(v => v.Penalty),
+            "legnumber"     => desc ? query.OrderByDescending(v => v.LegNumber) : query.OrderBy(v => v.LegNumber),
+            "racename"      => desc ? query.OrderByDescending(v => v.Entry.Race.Name) : query.OrderBy(v => v.Entry.Race.Name),
+            _               => desc ? query.OrderByDescending(v => v.CreatedAt) : query.OrderBy(v => v.CreatedAt),
+        };
+
+        var rows = await ordered
+            .ThenByDescending(v => v.ViolationId)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(v => new

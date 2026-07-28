@@ -20,6 +20,8 @@ public sealed class GetViolationListQueryHandler
     {
         return await _context.Violations
             .AsNoTracking()
+            .Where(x => request.ViewerRefereeId == null ||
+                        x.ReportedByRefereeId == request.ViewerRefereeId)
             .OrderByDescending(x => x.CreatedAt)
             .Select(x => new ViolationListItemResponse(
                 x.ViolationId,

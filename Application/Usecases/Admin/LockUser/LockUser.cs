@@ -3,7 +3,7 @@ using Application.Common.Interfaces;
 using Domain.Aggregates.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-
+using Application.Common.Wallet;
 namespace Application.Usecases.Admin.LockUser;
 
 // POST /api/admin/users/{id}/lock — Admin khóa tài khoản.
@@ -55,6 +55,11 @@ public sealed class LockUserCommandHandler
 
                 // Hoàn cược Pending trước khi đóng băng.
                 var pending = await _context.Predictions
+                      .Include(p => p.Race)
+                        .Include(p => p.FirstEntry)
+                            .ThenInclude(e => e.Horse)
+                        .Include(p => p.FirstEntry)
+                            .ThenInclude(e => e.Jockey)
                     .Where(p => p.SpectatorId == request.UserId && p.Status == "Pending")
                     .ToListAsync(cancellationToken);
 
@@ -72,7 +77,10 @@ public sealed class LockUserCommandHandler
                             Type = "BetRefund",
                             Amount = p.BetAmount,
                             BalanceAfter = wallet.Balance,
-                            Reason = "Bet refund due to account lock",
+                            Reason = WalletTransactionReasonBuilder.BetRefundAccountLocked(
+                            p.Race!,
+                            p.FirstEntry!.Horse,
+                            p.FirstEntry.Jockey),
                             CreatedAt = now
                         });
                     }

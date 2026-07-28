@@ -6,5 +6,6 @@ public enum ReviewEntity
 	Horse = 2,
 	Entry = 3,
 	Race = 4,
-	Violation = 5
+	Violation = 5,
+	Leg = 6
 }

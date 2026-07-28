@@ -1,17 +1,17 @@
 using Application.Common;
 using Application.Common.Interfaces;
+using Application.Usecases.RaceExecution;
 using Domain.Aggregates.Constants;
 using Domain.Aggregates.Entities;
 using Domain.Aggregates.Enums;
 using Microsoft.EntityFrameworkCore;
 using MediatR;
-
+using Application.Common.Wallet;
 namespace Application.Usecases.Admin.RevokeHorse;
 
 public class RevokeHorseCommandHandler
     : IRequestHandler<RevokeHorseCommand, RevokeHorseResponse>
 {
-    // Chỉ cho phép Revoke khi Race chưa bắt đầu (Scheduled) hoặc đã kết thúc hẳn (Finished/Cancelled).
     private static readonly string[] AllowedRaceStatusesForRevoke =
     {
         RaceStatus.Scheduled,
@@ -19,7 +19,6 @@ public class RevokeHorseCommandHandler
         RaceStatus.Cancelled
     };
 
-    // Lý do mặc định khi Admin revoke mà không nhập lý do (FE không có ô nhập).
     private const string DefaultRevokeReason = "Revoked by admin.";
 
     private readonly IApplicationDbContext _context;
@@ -55,8 +54,6 @@ public class RevokeHorseCommandHandler
             if (horse.Status != HorseStatus.Approved)
                 throw new InvalidOperationException("Only approved horse can be revoked");
 
-            // Chặn nếu có Entry (chưa Cancelled) thuộc Race đang diễn ra (Ongoing hoặc bất kỳ
-            // status nào ngoài Scheduled/Finished/Cancelled).
             var hasEntryInActiveRace = horse.Entries.Any(e =>
                 e.Status != EntryStatus.Cancelled &&
                 !AllowedRaceStatusesForRevoke.Contains(e.Race.Status));
@@ -67,31 +64,36 @@ public class RevokeHorseCommandHandler
                     "The horse has an Entry in an ongoing race and cannot be revoked.");
             }
 
-            // 1. Revoke — trạng thái riêng, KHÔNG dùng Rejected
             horse.Status = HorseStatus.Revoked;
             horse.RejectionReason = reason;
             horse.UpdatedAt = DateTime.UtcNow;
 
-            // 2. Chỉ tự động Cancel Entry đang Pending.
-            //    Entry Approved: KHÔNG tự huỷ ngầm, để Admin xử lý thủ công riêng.
             var cancelled = 0;
-            var approvedEntriesNeedingReview = new List<int>();
+            var now = DateTime.UtcNow;
+            var racesToRecalc = new HashSet<int>();
 
-            foreach (var entry in horse.Entries)
+            foreach (var entry in horse.Entries.Where(e => e.Status != EntryStatus.Cancelled))
             {
-                if (entry.Status == EntryStatus.Pending)
+                var race = entry.Race;
+                if (!AllowedRaceStatusesForRevoke.Contains(race.Status))
+                    continue;
+
+                if (race.OddsComputedAt != null)
                 {
-                    entry.Status = EntryStatus.Cancelled;
-                    entry.UpdatedAt = DateTime.UtcNow;
-                    cancelled++;
+                    await RefundPredictionsForEntryAsync(entry.EntryId, now, cancellationToken);
+                    racesToRecalc.Add(race.RaceId);
                 }
-                else if (entry.Status == EntryStatus.Approved)
-                {
-                    approvedEntriesNeedingReview.Add(entry.EntryId);
-                }
+
+                entry.Status = EntryStatus.Cancelled;
+                entry.UpdatedAt = now;
+                cancelled++;
             }
 
-            // 3. Audit log
+            foreach (var raceId in racesToRecalc)
+            {
+                await RecalculateOddsAndGatesAsync(raceId, now, cancellationToken);
+            }
+
             await _reviewHistoryRepository.AddAsync(
                 new ReviewHistory
                 {
@@ -110,13 +112,96 @@ public class RevokeHorseCommandHandler
                 horse.HorseId,
                 horse.Status,
                 cancelled,
-                approvedEntriesNeedingReview
-            );
+                new List<int>());
         }
         catch
         {
             await transaction.RollbackAsync(cancellationToken);
             throw;
+        }
+    }
+
+    private async Task RefundPredictionsForEntryAsync(int entryId, DateTime now, CancellationToken ct)
+    {
+        var predictions = await _context.Predictions
+             .Include(p => p.Race)
+    .Include(p => p.FirstEntry)
+        .ThenInclude(e => e.Horse)
+    .Include(p => p.FirstEntry)
+        .ThenInclude(e => e.Jockey)
+            .Where(p => p.FirstEntryId == entryId &&
+                        (p.Status == PredictionStatus.Pending || p.Status == PredictionStatus.Locked))
+            .ToListAsync(ct);
+
+        if (predictions.Count == 0)
+            return;
+
+        var spectatorIds = predictions.Select(p => p.SpectatorId).Distinct().ToList();
+        var wallets = await _context.PointWallets
+            .Where(w => spectatorIds.Contains(w.SpectatorId))
+            .ToListAsync(ct);
+
+        foreach (var prediction in predictions)
+        {
+            var wallet = wallets.FirstOrDefault(w => w.SpectatorId == prediction.SpectatorId);
+            if (wallet is null || wallet.IsFrozen)
+            {
+                prediction.Status = PredictionStatus.Cancelled;
+                prediction.CancelledAt = now;
+                continue;
+            }
+
+            prediction.Status = PredictionStatus.Cancelled;
+            prediction.CancelledAt = now;
+            wallet.Balance += prediction.BetAmount;
+            wallet.UpdatedAt = now;
+
+            _context.WalletTransactions.Add(new WalletTransaction
+            {
+                WalletId = wallet.WalletId,
+                SpectatorId = prediction.SpectatorId,
+                PredictionId = prediction.PredictionId,
+                Type = "BetRefund",
+                Amount = prediction.BetAmount,
+                BalanceAfter = wallet.Balance,
+                Reason = WalletTransactionReasonBuilder.BetRefundHorseRevoked(
+                prediction.Race!,
+                prediction.FirstEntry!.Horse,
+                prediction.FirstEntry.Jockey),
+                CreatedAt = now
+            });
+        }
+    }
+
+    private async Task RecalculateOddsAndGatesAsync(int raceId, DateTime now, CancellationToken ct)
+    {
+        var race = await _context.Races.FirstOrDefaultAsync(r => r.RaceId == raceId, ct);
+        if (race?.OddsComputedAt is null)
+            return;
+
+        var approved = await _context.Entries
+            .Where(e => e.RaceId == raceId && e.Status == RaceExecutionConstants.EntryApproved)
+            .OrderBy(e => e.SubmittedAt)
+            .ThenBy(e => e.EntryId)
+            .ToListAsync(ct);
+
+        if (approved.Count < 2)
+            return;
+
+        var horseIds = approved.Select(e => e.HorseId).Distinct().ToList();
+        var history = await _context.RaceResults
+            .Where(r => horseIds.Contains(r.Entry.HorseId) && r.FinalPosition != null)
+            .Select(r => new { r.Entry.HorseId, r.FinalPosition })
+            .ToListAsync(ct);
+
+        var gate = 1;
+        foreach (var e in approved)
+        {
+            var rows = history.Where(h => h.HorseId == e.HorseId).ToList();
+            var firsts = rows.Count(h => h.FinalPosition == 1);
+            e.Odds = CloseRegistrationCommandHandler.OddsFor(firsts, rows.Count, approved.Count);
+            e.GateNumber = gate++;
+            e.UpdatedAt = now;
         }
     }
 }

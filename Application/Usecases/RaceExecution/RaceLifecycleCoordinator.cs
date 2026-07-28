@@ -1,7 +1,7 @@
 using Application.Common.Interfaces;
 using Domain.Aggregates.Entities;
 using Microsoft.EntityFrameworkCore;
-
+using Domain.Aggregates.Constants;
 namespace Application.Usecases.RaceExecution;
 
 public enum RaceStartOutcome
@@ -10,6 +10,18 @@ public enum RaceStartOutcome
     AlreadyStarted,
     Skipped
 }
+
+public enum RaceCancelOutcome
+{
+    Cancelled,
+    Skipped
+}
+public sealed record RaceCancelLifecycleResult(
+    int RaceId,
+    RaceCancelOutcome Outcome,
+    int WithdrawnEntries,
+    int CancelledInvitations,
+    string? SkipReason);
 
 public sealed record CloseRegistrationLifecycleResult(
     int RaceId,
@@ -43,6 +55,16 @@ public interface IRaceLifecycleCoordinator
         bool allowAutoClose,
         bool throwOnFailure,
         CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Cancel Race (chỉ khi đang Scheduled) + cascade: Entry Pending/Approved → Withdrawn,
+    /// JockeyInvitation Pending/Accepted/Confirmed → Cancelled. Dùng chung bởi endpoint
+    /// Delete thủ công (throwOnFailure=true) và worker auto-cancel (throwOnFailure=false).
+    /// </summary>
+    Task<RaceCancelLifecycleResult> CancelRaceAsync(
+        int raceId,
+        string reason,
+        bool throwOnFailure,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
@@ -60,7 +82,84 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
         _timeProvider = timeProvider;
         _liveTracker = liveTracker;
     }
+    public async Task<RaceCancelLifecycleResult> CancelRaceAsync(
+        int raceId,
+        string reason,
+        bool throwOnFailure,
+        CancellationToken cancellationToken = default)
+    {
+        await using var tx = await _context.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            await LockRaceRowAsync(raceId, cancellationToken);
 
+            var race = await _context.Races
+                .FirstOrDefaultAsync(r => r.RaceId == raceId, cancellationToken)
+                ?? throw new KeyNotFoundException("Race not found.");
+
+            if (race.Status != RaceExecutionConstants.RaceScheduled)
+            {
+                await tx.RollbackAsync(cancellationToken);
+
+                var skipReason =
+                    $"Only scheduled races can be cancelled (current: {race.Status}).";
+
+                if (throwOnFailure)
+                    throw new InvalidOperationException(skipReason);
+
+                return new RaceCancelLifecycleResult(
+                    raceId, RaceCancelOutcome.Skipped, 0, 0, skipReason);
+            }
+
+            var now = _timeProvider.GetUtcNow().UtcDateTime;
+
+            race.Status = RaceExecutionConstants.RaceCancelled;
+            race.UpdatedAt = now;
+
+            var entries = await _context.Entries
+                .Where(e => e.RaceId == raceId &&
+                    (e.Status == EntryStatus.Pending || e.Status == EntryStatus.Approved))
+                .ToListAsync(cancellationToken);
+
+            foreach (var entry in entries)
+            {
+                entry.Status = "Withdrawn";
+                entry.RejectionReason = reason;
+                entry.UpdatedAt = now;
+            }
+
+            var invitations = await _context.JockeyInvitations
+                .Where(i => i.RaceId == raceId &&
+                    (i.Status == "Pending" || i.Status == "Accepted" || i.Status == "Confirmed"))
+                .ToListAsync(cancellationToken);
+
+            foreach (var invitation in invitations)
+            {
+                invitation.Status = "Cancelled";
+                invitation.CancelledAt = now;
+            }
+
+            await _context.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+
+            return new RaceCancelLifecycleResult(
+                race.RaceId,
+                RaceCancelOutcome.Cancelled,
+                entries.Count,
+                invitations.Count,
+                null);
+        }
+        catch (KeyNotFoundException)
+        {
+            await tx.RollbackAsync(cancellationToken);
+            throw;
+        }
+        catch
+        {
+            try { await tx.RollbackAsync(cancellationToken); } catch { /* ignore */ }
+            throw;
+        }
+    }
     public async Task<CloseRegistrationLifecycleResult> CloseRegistrationAsync(
         int raceId,
         CancellationToken cancellationToken = default)
@@ -73,7 +172,11 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
             var race = await _context.Races
                 .FirstOrDefaultAsync(r => r.RaceId == raceId, cancellationToken)
                 ?? throw new KeyNotFoundException("Race not found.");
-
+            if (race.Status == RaceStatus.Cancelled)
+            {
+                throw new InvalidOperationException(
+                    "Cancelled races cannot close registration.");
+            }
             if (race.Status != RaceExecutionConstants.RaceScheduled)
                 throw new InvalidOperationException(
                     $"Registration can only be closed while the race is Scheduled (current: {race.Status}).");
@@ -204,28 +307,14 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
                 }
             }
 
-            if (race.Legs.Count == 0)
-            {
-                for (var legNumber = 1; legNumber <= race.NumberOfLegs; legNumber++)
-                {
-                    _context.Legs.Add(new Leg
-                    {
-                        RaceId = race.RaceId,
-                        LegNumber = legNumber,
-                        Status = RaceExecutionConstants.LegPending
-                    });
-                }
-            }
+            await RaceLegProvisioner.EnsureLegsExistAsync(_context, race, cancellationToken);
 
             race.Status = RaceExecutionConstants.RaceInProgress;
             race.UpdatedAt = now;
 
             var pendingPredictions = await _context.Predictions
-                .Where(p =>
-                    p.RaceId == race.RaceId &&
-                    p.Status == PredictionStatus.Pending)
+                .Where(p => p.RaceId == raceId && p.Status == PredictionStatus.Pending)
                 .ToListAsync(cancellationToken);
-
             foreach (var prediction in pendingPredictions)
                 prediction.Status = PredictionStatus.Locked;
 
@@ -274,6 +363,8 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
         DateTime now,
         CancellationToken cancellationToken)
     {
+        await RaceLegProvisioner.EnsureLegsExistAsync(_context, race, cancellationToken);
+
         var entries = race.Entries.Count > 0
             ? race.Entries.ToList()
             : await _context.Entries

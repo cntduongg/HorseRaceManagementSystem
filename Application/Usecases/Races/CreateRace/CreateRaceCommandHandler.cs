@@ -1,4 +1,5 @@
 using Application.Common.Interfaces;
+using Application.Usecases.RaceExecution;
 using Domain.Aggregates.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -30,6 +31,9 @@ public sealed class CreateRaceCommandHandler
         if (request.Referee1Id == request.Referee2Id)
             throw new InvalidOperationException("Referees must be different.");
 
+        await RaceRefereeValidator.EnsureRefereesAsync(
+            _context, request.Referee1Id, request.Referee2Id, cancellationToken);
+
         var tournament = await _context.Tournaments
             .FirstOrDefaultAsync(t => t.TournamentId == request.TournamentId, cancellationToken);
 
@@ -38,7 +42,12 @@ public sealed class CreateRaceCommandHandler
 
         var startUtc = request.ScheduledStartTime.ToUniversalTime();
         var endUtc = request.ScheduledEndTime.ToUniversalTime();
+        var nowUtc = DateTime.UtcNow;
 
+        if (startUtc < nowUtc)
+        {
+            throw new InvalidOperationException("Start Time cannot be in the past.");
+        }
         // Giờ kết thúc phải sau giờ bắt đầu.
         if (endUtc <= startUtc)
             throw new InvalidOperationException("ScheduledEndTime must be after ScheduledStartTime.");
@@ -74,6 +83,9 @@ public sealed class CreateRaceCommandHandler
         };
 
         _context.Races.Add(race);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        await RaceLegProvisioner.EnsureLegsExistAsync(_context, race, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
 
         return race.RaceId;

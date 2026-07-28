@@ -20,23 +20,45 @@ builder.Services.AddProblemDetails();
 builder.Services.AddControllers();
 builder.Services.AddSignalR(); // Flow 4 — push diễn biến đua trực tiếp (RaceLiveHub).
 //builder.Services.AddHttpContextAccessor();
-var allowedOrigins = builder.Configuration
-                         .GetSection("Cors:AllowedOrigins")
-                         .Get<string[]>()
-                     ?? [];
+// FE deploy trên Vercel ⇒ MỌI request từ browser đều là cross-origin (khác dev: Vite proxy
+// làm cho nó thành same-origin). Danh sách origin đọc từ `Cors:AllowedOrigins`, hỗ trợ `*`
+// cho một nhãn tên miền để phủ các bản deploy preview của Vercel — xem AllowedOriginMatcher.
+var configuredOrigins = builder.Configuration
+                            .GetSection("Cors:AllowedOrigins")
+                            .Get<string[]>()
+                        ?? [];
+
+// Render/Docker thường cấu hình bằng biến môi trường; nếu ai đó set `Cors__AllowedOrigins`
+// thành một chuỗi "a,b" thay vì `Cors__AllowedOrigins__0`/`__1` thì bind sang string[] ra rỗng
+// và policy sẽ **chặn sạch** mọi origin mà không báo gì. Nhận luôn dạng chuỗi cho chắc.
+if (configuredOrigins.Length == 0)
+{
+    var singleValue = builder.Configuration["Cors:AllowedOrigins"];
+    if (!string.IsNullOrWhiteSpace(singleValue))
+    {
+        configuredOrigins = singleValue.Split(
+            ',',
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+}
+
+var originMatcher = new Api.Cors.AllowedOriginMatcher(configuredOrigins);
 
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendPolicy", policy =>
     {
         policy
-            .WithOrigins(allowedOrigins)
+            .SetIsOriginAllowed(originMatcher.IsAllowed)
             .AllowAnyHeader()
             .AllowAnyMethod()
             // Bắt buộc cho SignalR browser client (negotiate gửi withCredentials: true).
-            // KHÔNG đổi WithOrigins thành AllowAnyOrigin(): kèm AllowCredentials() sẽ ném
+            // KHÔNG đổi sang AllowAnyOrigin(): kèm AllowCredentials() sẽ ném
             // InvalidOperationException lúc khởi động (spec cấm "*" đi với credentials).
-            .AllowCredentials();
+            // SetIsOriginAllowed echo lại đúng origin của request nên vẫn hợp lệ.
+            .AllowCredentials()
+            // Cache preflight 1 giờ: đỡ phải đánh thức instance Render đang ngủ chỉ để trả OPTIONS.
+            .SetPreflightMaxAge(TimeSpan.FromHours(1));
     });
 });
 
@@ -103,6 +125,11 @@ builder.Services.AddHostedService<Api.Services.WeeklyTopUpBackgroundService>();
 builder.Services.Configure<Api.Services.RaceAutoStartOptions>(
     builder.Configuration.GetSection(Api.Services.RaceAutoStartOptions.SectionName));
 builder.Services.AddHostedService<Api.Services.RaceAutoStartBackgroundService>();
+
+// Tournament — tự chuyển Draft/Open → Ongoing → Finished theo ngày (quét thưa, mặc định 1 giờ).
+builder.Services.Configure<Api.Services.TournamentStatusSyncOptions>(
+    builder.Configuration.GetSection(Api.Services.TournamentStatusSyncOptions.SectionName));
+builder.Services.AddHostedService<Api.Services.TournamentStatusSyncBackgroundService>();
 
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"]
@@ -187,12 +214,32 @@ builder.Services.Configure<PasswordResetOptions>(
 
 var app = builder.Build();
 
+// Log lúc khởi động: CORS hỏng là lỗi chỉ browser mới thấy (server vẫn trả 204/200 bình thường),
+// nên in thẳng cấu hình ra log Render để đối chiếu với origin thật của FE.
+var corsLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Cors");
+if (originMatcher.HasAny)
+{
+    corsLogger.LogInformation(
+        "CORS allowed origins: {Origins}",
+        string.Join(", ", originMatcher.ConfiguredEntries));
+}
+else
+{
+    corsLogger.LogWarning(
+        "CORS: no origins configured (Cors:AllowedOrigins) — every cross-origin browser request will be blocked.");
+}
+
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
 
     await db.Database.MigrateAsync();
+
+    await UserPhoneNumberBackfill.RunAsync(
+        db,
+        scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("UserPhoneNumberBackfill"));
 
     var seedTestDataEnabled =
         builder.Configuration.GetValue<bool>("SeedTestData");

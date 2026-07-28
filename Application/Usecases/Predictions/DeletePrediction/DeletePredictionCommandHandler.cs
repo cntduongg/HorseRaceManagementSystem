@@ -2,15 +2,13 @@ using Application.Common.Interfaces;
 using Domain.Aggregates.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-
+using Application.Common.Wallet;
 namespace Application.Usecases.Predictions.DeletePrediction;
 
 
 public sealed class DeletePredictionCommandHandler
     : IRequestHandler<DeletePredictionCommand, bool>
 {
-    private const string RaceScheduled = "Scheduled";
-
     private readonly IApplicationDbContext _context;
 
     public DeletePredictionCommandHandler(IApplicationDbContext context)
@@ -22,6 +20,7 @@ public sealed class DeletePredictionCommandHandler
         DeletePredictionCommand request,
         CancellationToken cancellationToken)
     {
+        
         if (request.PredictionId <= 0)
             throw new InvalidOperationException("PredictionId is required.");
 
@@ -30,30 +29,27 @@ public sealed class DeletePredictionCommandHandler
 
         var prediction = await _context.Predictions
             .Include(x => x.Race)
+             .Include(x => x.FirstEntry)
+        .ThenInclude(e => e.Horse)
+           .Include(x => x.FirstEntry)
+        .ThenInclude(e => e.Jockey)
             .FirstOrDefaultAsync(
                 x => x.PredictionId == request.PredictionId &&
                      x.SpectatorId == request.SpectatorId,
                 cancellationToken)
             ?? throw new InvalidOperationException("Prediction not found.");
 
+        if (prediction.Race is null || prediction.Race.Status != "Scheduled")
+        {
+            throw new InvalidOperationException("You can only cancel predictions while the race is Scheduled.");
+        }
+        
         if (prediction.Status == PredictionStatus.Cancelled)
             throw new InvalidOperationException("Prediction already cancelled.");
 
         if (prediction.Status != PredictionStatus.Pending)
             throw new InvalidOperationException(
                 $"Only pending prediction can be cancelled. Current status: {prediction.Status}");
-
-        if (prediction.Race is null)
-            throw new InvalidOperationException("Prediction race not found.");
-
-        if (!string.Equals(
-                prediction.Race.Status?.Trim(),
-                RaceScheduled,
-                StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                $"A prediction can only be cancelled while the race is Scheduled. Current race status: {prediction.Race.Status}");
-        }
 
         var wallet = await _context.PointWallets
             .FirstOrDefaultAsync(
@@ -84,7 +80,10 @@ public sealed class DeletePredictionCommandHandler
                 Type = "BetRefund",
                 Amount = prediction.BetAmount,
                 BalanceAfter = wallet.Balance,
-                Reason = $"Refund for cancelled prediction #{prediction.PredictionId}",
+                Reason = WalletTransactionReasonBuilder.BetCancelled(
+                prediction.Race!,
+                prediction.FirstEntry!.Horse,
+                prediction.FirstEntry.Jockey),
                 CreatedAt = now
             });
 
@@ -98,5 +97,6 @@ public sealed class DeletePredictionCommandHandler
             await tx.RollbackAsync(cancellationToken);
             throw;
         }
+        
     }
 }

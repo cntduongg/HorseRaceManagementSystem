@@ -37,36 +37,75 @@ public static class RaceExecutionConstants
     public const int PositionDnf = -1;
     public const int PositionDq = -2;
 
-    /// <summary>Leg Points: 1st=6, 2nd=5, ... 6th=1, 7th+=0, DNF/DQ=0.</summary>
-    public static int LegPointsFor(int? finishPosition, string resultStatus)
+    /// <summary>
+    /// Leg Points TUYẾN TÍNH theo sĩ số: hạng p trong N ngựa → (N - p + 1) điểm.
+    /// VD N=8 → 1st=8, 2nd=7 … 8th=1; N=4 → 1st=4 … 4th=1. DNF/DQ = 0.
+    /// fieldSize = số Entry Approved của race (không phải cả giải).
+    /// Thay cho thang cứng 6/5/4/3/2/1 cũ: race đông ngựa thì hạng chót không còn bị 0 điểm oan.
+    /// </summary>
+    public static int LegPointsFor(int? finishPosition, string resultStatus, int fieldSize)
     {
         if (resultStatus != ResultFinished || finishPosition is null or < 1)
             return 0;
+        if (fieldSize <= 0)
+            return 0;
 
-        return finishPosition.Value switch
-        {
-            1 => 6,
-            2 => 5,
-            3 => 4,
-            4 => 3,
-            5 => 2,
-            6 => 1,
-            _ => 0
-        };
+        var position = finishPosition.Value;
+        if (position > fieldSize)
+            return 0; // phòng thủ: hạng vượt sĩ số là dữ liệu hỏng → không tính điểm
+
+        return fieldSize - position + 1;
     }
 
-    /// <summary>Prize Points chung cuộc: 1st=1000, 2nd=600, 3rd=400, 4th=200, 5th=100, 6th+=0.</summary>
-    public static int PrizePointsFor(int finalPosition)
+    /// <summary>
+    /// Đơn giá Prize Points cho mỗi bậc hạng. Neo với thang cũ: race 5 ngựa → nhất được
+    /// 5 × 200 = 1000 điểm, đúng bằng mức 1st của thang cứng trước đây.
+    /// </summary>
+    public const int PrizePointUnit = 200;
+
+    /// <summary>
+    /// Prize Points chung cuộc TUYẾN TÍNH theo sĩ số: (N - p + 1) × <see cref="PrizePointUnit"/>.
+    /// Cùng nguyên tắc với <see cref="LegPointsFor"/> để hai thang điểm nhất quán.
+    /// </summary>
+    public static int PrizePointsFor(int finalPosition, int fieldSize)
     {
-        return finalPosition switch
+        if (finalPosition < 1 || fieldSize <= 0 || finalPosition > fieldSize)
+            return 0;
+
+        return (fieldSize - finalPosition + 1) * PrizePointUnit;
+    }
+
+    /// <summary>
+    /// Kiểm tra bộ vị trí do referee/admin nhập cho một leg.
+    /// Quy tắc: mỗi giá trị là 1..fieldSize, hoặc -1 (DNF) / -2 (DQ); hạng dương không trùng
+    /// và phải liên tục từ 1 (bỏ DNF/DQ ra thì đúng 1..k). Trả null nếu hợp lệ.
+    /// </summary>
+    public static string? ValidatePositions(IReadOnlyCollection<int> positions, int fieldSize)
+    {
+        if (fieldSize <= 0)
+            return "The race has no approved entries.";
+
+        foreach (var p in positions)
         {
-            1 => 1000,
-            2 => 600,
-            3 => 400,
-            4 => 200,
-            5 => 100,
-            _ => 0
-        };
+            if (p == PositionDnf || p == PositionDq) continue;
+            if (p < 1)
+                return "Invalid position value. Use 1..N, -1 (DNF) or -2 (DQ).";
+            if (p > fieldSize)
+                return $"Position {p} is out of range — this race has {fieldSize} horses (valid positions are 1..{fieldSize}).";
+        }
+
+        var ranked = positions.Where(p => p > 0).OrderBy(p => p).ToList();
+
+        if (ranked.Distinct().Count() != ranked.Count)
+            return "Duplicate ranking — each position can be assigned to only one entry.";
+
+        for (var i = 0; i < ranked.Count; i++)
+        {
+            if (ranked[i] != i + 1)
+                return $"Rankings must run consecutively from 1 with no gaps (found {ranked[i]} where {i + 1} was expected).";
+        }
+
+        return null;
     }
 
     /// <summary>Chuyển position-code của FE (-1/-2) thành (FinishPosition, ResultStatus).</summary>
