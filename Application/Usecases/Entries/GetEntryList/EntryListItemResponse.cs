@@ -15,6 +15,9 @@ public sealed record EntryListItemResponse(
     string Status,
     DateTime SubmittedAt,
     DateTime? ApprovedAt,
+    // Odds ĐỀ XUẤT (Entry.Odds) — giá máy tính từ lịch sử thắng, chỉ Admin đọc.
     decimal? CurrentOdds,
+    // Odds CÔNG BỐ (Entry.PublishedOdds) — giá spectator thật sự cược. null = chưa tính.
+    decimal? PublishedOdds,
     string TournamentName
 );

@@ -53,8 +53,8 @@ Schema phủ đủ 8 flow. Các entity chính và trường trạng thái:
 | `JockeyProfile` | Hồ sơ nài để Owner tìm kiếm. (Flow 2) |
 | `JockeyInvitation` | Lời mời nài cho (Race+Horse). (Flow 2) |
 | `Tournament` | Giải đấu (tên, venue, logo, ngày). `StartDate`/`EndDate` là **`DateOnly`**; `Status` (Draft\|Open\|Ongoing\|Finished\|Cancelled) nay có hằng số `Domain/Aggregates/Constants/TournamentStatus.cs` + **tự chuyển theo ngày** qua `TournamentStatusSyncBackgroundService`. (Flow 3) |
-| `Race` | `NumberOfLegs` (1–10), `MaxHorses`, `Referee1Id`/`Referee2Id`, `Status` (Scheduled→InProgress→Paused→PendingResult→Finished→Cancelled), `ScheduledStartTime`/`ScheduledEndTime` (khung giờ để chống trùng lịch), `RegistrationOpen/CloseAt`, `OddsComputedAt`, `PublishedAt`. (Flow 3) |
-| `Entry` | Cặp Horse+Jockey nộp vào Race. `Status`: Pending\|Approved\|Rejected\|Withdrawn, `GateNumber`, `Odds` (khóa khi đóng ĐK). (Flow 2) |
+| `Race` | `NumberOfLegs` (1–10), `MaxHorses`, `Referee1Id`/`Referee2Id`, `Status` (Scheduled→InProgress→Paused→PendingResult→Finished→Cancelled), `ScheduledStartTime`/`ScheduledEndTime` (khung giờ để chống trùng lịch), `RegistrationOpen/CloseAt`, `OddsComputedAt`, **`OddsPublishedAt`** (Admin công bố odds → mở cược), **`BettingLockedAt`** (đóng sổ cược → bắt buộc trước Start Race), `PublishedAt`. (Flow 3, 7) |
+| `Entry` | Cặp Horse+Jockey nộp vào Race. `Status`: Pending\|Approved\|Rejected\|Withdrawn, `GateNumber`, **`Odds`** (odds **đề xuất** — máy tính lúc đóng ĐK, chỉ Admin thấy), **`PublishedOdds`** (odds **công bố** — giá spectator cược, = đề xuất − 10%, Admin sửa được). (Flow 2, 7) |
 | `Leg` | PK ghép `(RaceId, LegNumber)`. `Status` (blind): Pending\|AwaitingSecondReferee\|Confirmed\|Conflicted\|Resolved; `StartedAt`/`FinishedAt`/`ConfirmedAt`/`ConflictReportedAt`; `ConfirmationType` (AutoMatched\|AdminOverride), `AdminOverrideReason`. ⚠️ **`ExecutionStatus`/`PredictionOpenedAt`/`PredictionClosedAt` ĐÃ BỊ GỠ** trong đợt revert 2026-07-25; file `Constants/LegExecutionStatuses.cs` **đã xóa** (T-21). (Flow 4-5) |
 | `LegRefereeEntry` | Bản ghi blind của từng Referee/Leg (append-only). (Flow 4) |
 | `LegRefereeDraft` | Nháp thứ hạng của referee (upsert, KHÔNG append-only) — để khôi phục khi quay lại (migration `AddLegRefereeDraft`). (Flow 4) |
@@ -119,7 +119,43 @@ EF mapping: `Infrastructure/Data/Configurations/*Configuration.cs` (mỗi entity
 > Cập nhật: **2026-07-26, HEAD `705c9b5`** (đọc lại toàn bộ code base + verify trực tiếp file nguồn). Build **0 lỗi / 0 warning**. Việc cần làm: [.claude/TASKS.md](../.claude/TASKS.md).
 > Lưu ý lịch sử: docs cũ (≤2026-06-25) mô tả Flow 3–8 "chỉ CRUD generic, chưa có orchestration". **Điều đó đã lỗi thời** — toàn bộ nghiệp vụ lõi Flow 3–8 nay nằm ở `Application/Usecases/RaceExecution/*` (use case đặc thù, không phải CRUD).
 >
-> ### 🆕 ĐỢT 2026-07-26 (9 commit sau `26b8f6c`) — đọc trước tiên
+> ### 🆕 ĐỢT 2026-07-28 — ODDS HAI TẦNG + KHÓA CƯỢC — đọc trước tiên
+>
+> **Xóa sổ odds động theo pool.** `Application/Usecases/Predictions/common/PredictionOddsCalculator.cs` **đã bị xóa**; mọi thứ liên quan tới `BaseOdds`/`CurrentOdds`/`EffectiveOdds`/`?betAmount=` đều lỗi thời.
+>
+> **Lý do:** cùng một khái niệm "odds" có **ba** hiện thực — Admin xem `Entry.Odds`, bảng cược của spectator hiện `CurrentOdds` (động theo pool), còn lệnh cược lại khóa `EffectiveOdds` (thấp hơn nữa, vì `CalculateEntryOddsAsync` cộng chính số tiền đang đặt vào pool **trước khi** chốt giá). Spectator thấy `4.00x` rồi đặt xong nhận `2.00x` ⇒ đọc thành gian lận.
+>
+> **Mô hình mới — 2 con số, 1 nguồn sự thật (`RaceExecution/RaceOddsPolicy.cs`):**
+>
+> | | Cột | Ai thấy | Cách tính |
+> |---|---|---|---|
+> | **Odds đề xuất** | `Entry.Odds` (cũ) | chỉ Admin | `CloseRegistrationCommandHandler.OddsFor` (Laplace, theo lịch sử thắng) — **không đổi** |
+> | **Odds công bố** | **`Entry.PublishedOdds`** (mới) | Spectator, Jockey | `PublishedFromSuggested` = đề xuất × (1 − `HouseMarginRate` 0.10), clamp `[1.01, 25.00]` |
+>
+> Sàn **1.01** là bắt buộc chứ không phải phòng thủ thừa: đề xuất `1.10` trừ 10% còn `0.99` — đoán đúng vẫn mất tiền.
+>
+> **Race có 2 mốc mới:** `Race.OddsPublishedAt` (Admin công bố → **mở cược**) và `Race.BettingLockedAt` (Admin đóng sổ → **bắt buộc trước Start Race**).
+>
+> | Route | Use case | Role | Ghi chú |
+> |---|---|---|---|
+> | `GET /api/races/{id}/odds-board` | `RaceExecution/GetRaceOddsBoard` | ADMIN | 2 giá + `careerFirsts/careerRaces` (cơ sở tính) + `betPool/betCount` + `canEdit` |
+> | `PUT /api/races/{id}/odds` | `RaceExecution/UpdateRaceOdds` | ADMIN | body `{ entries: [{entryId, suggestedOdds?, publishedOdds?}] }`; `publishedOdds` bỏ trống = tính lại theo công thức. Chặn khi đã `BettingLockedAt` |
+> | `POST /api/races/{id}/publish-odds` | `RaceExecution/PublishRaceOdds` | ADMIN | idempotent; lấp `PublishedOdds` còn 0 bằng công thức thay vì chặn (giá 0 lọt ra bảng cược = cược chắc chắn không được trả) |
+> | `POST /api/races/{id}/lock-betting` | `RaceExecution/LockRaceBetting` | **ADMIN + REFEREE** | set `BettingLockedAt` + `Pending → Locked`. Referee được phép vì họ là người bấm Start Race |
+>
+> **`StartRaceAsync` thêm tham số `requireBettingLocked`:**
+> - `POST /races/{id}/start` (bấm tay) → **`true`**: chưa khóa cược thì **400**. Check này đặt **trước** nhánh auto-close để race chưa đóng đăng ký nhận đúng câu *"Close registration, publish the odds, then lock betting…"* thay vì bị auto-close rồi mới báo lỗi ở bước cuối.
+> - Worker `ProcessDueRaceStarts` → **`false`**: **tự khóa** (`RaceBettingLock.LockAsync`). Chặn worker sẽ khiến race tới giờ mà Admin quên bấm kẹt `Scheduled` vĩnh viễn.
+>
+> **Cửa cược (`CreatePrediction` + `DeletePrediction` + `GetRacePredictionOdds`):** `Scheduled` **và** `OddsPublishedAt != null` **và** `BettingLockedAt == null`. ⚠️ **Đóng đăng ký không còn tự mở cược.** `CreatePrediction` khóa thẳng `selectedEntry.PublishedOdds` — không tính lại gì.
+>
+> **Khác:** `GetRaceLive` trả `PublishedOdds` (khán giả xem lại chính cuộc đua mình cược); `EntryListItemResponse` thêm `PublishedOdds`; `RaceListItemResponse` thêm `OddsPublishedAt` + `BettingLockedAt` (FE bật/tắt nút theo đó); `RevokeHorse` tính lại **cả hai** giá khi sĩ số đổi.
+>
+> **Migration `AddPublishedOddsAndBettingLock`** — kèm 3 câu SQL backfill (`PublishedOdds` từ `Odds`, `OddsPublishedAt = OddsComputedAt`, `BettingLockedAt` cho race đã rời `Scheduled`). Thiếu backfill thì mọi race đã đóng đăng ký từ trước sẽ có bảng cược trống.
+>
+> **Hồ sơ nài (Flow 2) — cùng đợt:** `Infrastructure/Data/JockeyProfileBackfill.cs` chạy lúc khởi động, tạo bù `JockeyProfile` cho user JOCKEY chưa có (chép License/Weight/Bio từ `Users`, bỏ qua License trùng); `CreateUserCommandHandler` role JOCKEY nay cũng tạo profile; `UpdateJockeyProfileCommandHandler` **ghi ngược về `Users`** để hai bảng không lệch. Lý do: đăng ký ghi vào `Users` nhưng **mọi** luồng Flow 2 đọc `JockeyProfiles` ⇒ không có row = nài tàng hình + form Professional Identity trống.
+>
+> ### 🆕 ĐỢT 2026-07-26 (9 commit sau `26b8f6c`)
 >
 > | # | Thay đổi | File chính |
 > |---|---|---|

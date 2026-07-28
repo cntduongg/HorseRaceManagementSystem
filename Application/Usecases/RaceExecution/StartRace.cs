@@ -25,11 +25,14 @@ public sealed class StartRaceCommandHandler
     {
         // Manual fallback — FE vẫn gọi /start khi Admin/Referee bấm nút (không kiểm tra giờ ở UI).
         // Không enforce schedule để khớp FE; auto-start do worker lo khi tới ScheduledStartTime.
+        // requireBettingLocked: bấm tay thì PHẢI khóa cược trước (Flow 7) — người bấm đang đứng
+        // trước màn hình, nên bắt bấm đúng thứ tự thay vì âm thầm đóng sổ cược giúp họ.
         var result = await _lifecycle.StartRaceAsync(
             request.RaceId,
             enforceSchedule: false,
             allowAutoClose: true,
             throwOnFailure: true,
+            requireBettingLocked: true,
             cancellationToken);
 
         return new StartRaceResponse(

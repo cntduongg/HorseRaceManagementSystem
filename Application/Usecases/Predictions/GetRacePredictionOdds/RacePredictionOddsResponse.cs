@@ -6,6 +6,11 @@ public sealed record RacePredictionOddsResponse(
     string RaceStatus,
     DateTime ScheduledStartTime,
     DateTime? OddsComputedAt,
+    // Mốc Admin công bố odds — cửa cược chỉ mở từ đây.
+    DateTime? OddsPublishedAt,
+    // Mốc Admin khóa sổ cược — sau đó không đặt/hủy được nữa.
+    DateTime? BettingLockedAt,
+    bool IsBettingOpen,
     List<RacePredictionOddsEntryResponse> Entries);
 
 public sealed record RacePredictionOddsEntryResponse(
@@ -19,12 +24,10 @@ public sealed record RacePredictionOddsEntryResponse(
     int HorseOwnerId,
     string? HorseOwnerName,
     int? GateNumber,
-    decimal BaseOdds,
-    decimal CurrentOdds,
-    // Giá SẼ BỊ KHÓA nếu đặt `betAmount` vào chính entry này. Khác CurrentOdds vì lúc ghi lệnh,
-    // CreatePrediction cộng chính số tiền đang đặt vào pool trước khi tính giá — nên
-    // `currentOdds × betAmount` KHÔNG phải payout thật. Est. Payout phải dùng số này.
-    // Không truyền betAmount (hoặc ≤ 0) → EffectiveOdds == CurrentOdds.
-    decimal EffectiveOdds,
+    // ODDS CÔNG BỐ — con số Admin đã duyệt. Đây CHÍNH LÀ giá khóa vào lệnh cược:
+    // payout = betAmount × odds, không có giá thứ hai nào khác.
+    // (Trước 2026-07-28 odds động theo pool nên bảng hiện 4.00x mà lệnh khóa 2.00x.)
+    decimal Odds,
+    // Số liệu tham khảo — tổng điểm đã đặt, KHÔNG ảnh hưởng tới giá.
     decimal EntryPool,
-    decimal TotalPool);
+    decimal TotalPool);

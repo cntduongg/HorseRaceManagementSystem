@@ -25,7 +25,10 @@ public sealed record RaceLiveEntryDto(
     string JockeyName,
     string? Color,        // màu lông (free-text: Bay/Chestnut/…)
     string? ImageUrl,
-    decimal Odds);        // đã khóa lúc đóng đăng ký
+    // ODDS CÔNG BỐ — đúng con số spectator đã cược. KHÔNG dùng Entry.Odds (giá đề xuất nội bộ)
+    // ở đây: khán giả đang xem lại chính cuộc đua mình đặt cược, thấy một tỉ lệ khác với tỉ lệ
+    // khóa trong lệnh là đọc thành sai lệch.
+    decimal Odds);
 
 public sealed record RaceLiveLegResultDto(
     int EntryId,
@@ -113,7 +116,7 @@ public sealed class GetRaceLiveQueryHandler
                 e.Jockey?.FullName ?? $"Jockey #{e.JockeyId}",
                 e.Horse?.Color,
                 e.Horse?.ImageUrl,
-                e.Odds))
+                e.PublishedOdds > 0 ? e.PublishedOdds : e.Odds))
             .ToList();
 
         var legs = race.Legs

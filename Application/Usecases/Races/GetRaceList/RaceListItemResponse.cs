@@ -20,5 +20,9 @@ public sealed record RaceListItemResponse(
     DateTime? RegistrationOpenAt,
     DateTime? RegistrationCloseAt,
     DateTime? OddsComputedAt,
+    // Mốc Admin công bố odds cho spectator / khóa sổ cược (Flow 7). FE dùng để bật-tắt
+    // nút Publish Odds · Lock Betting · Start Race.
+    DateTime? OddsPublishedAt,
+    DateTime? BettingLockedAt,
     DateTime? PublishedAt
 );

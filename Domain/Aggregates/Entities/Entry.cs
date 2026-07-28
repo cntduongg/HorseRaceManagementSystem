@@ -10,7 +10,12 @@ public class Entry
 
     public string Status { get; set; } = "Pending";
     public int? GateNumber { get; set; }
-    public decimal Odds { get; set; } = 0;          // Khóa khi đóng đăng ký (Flow 3)
+    // ODDS ĐỀ XUẤT — máy tính từ lịch sử thắng khi đóng đăng ký (Flow 3). Chỉ Admin nhìn thấy.
+    public decimal Odds { get; set; } = 0;
+    // ODDS CÔNG BỐ — giá thật spectator đặt cược và bị khóa vào Prediction.
+    // Mặc định = Odds − 10% (biên nhà cái), Admin sửa được trong modal điều chỉnh odds.
+    // 0 = chưa tính (race chưa đóng đăng ký).
+    public decimal PublishedOdds { get; set; } = 0;
     public string? RejectionReason { get; set; }
 
     public DateTime SubmittedAt { get; set; }

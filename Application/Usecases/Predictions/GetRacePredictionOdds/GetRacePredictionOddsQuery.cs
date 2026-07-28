@@ -2,9 +2,8 @@ using MediatR;
 
 namespace Application.Usecases.Predictions.GetRacePredictionOdds;
 
-// BetAmount là tham số TÍNH TOÁN, không ghi DB và không giữ chỗ trong pool: nó chỉ để trả về
-// EffectiveOdds = giá sẽ bị khóa nếu spectator đặt đúng số tiền đó vào entry tương ứng.
+// Bảng giá cược của một race — đúng một giá mỗi ngựa (odds công bố Admin đã duyệt).
+// Không còn tham số BetAmount: giá không phụ thuộc số tiền đặt nữa nên không có gì để preview.
 public sealed record GetRacePredictionOddsQuery(
-    int RaceId,
-    decimal? BetAmount = null
+    int RaceId
 ) : IRequest<RacePredictionOddsResponse>;

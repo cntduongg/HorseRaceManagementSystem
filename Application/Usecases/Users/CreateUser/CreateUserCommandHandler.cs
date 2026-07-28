@@ -9,6 +9,7 @@ public sealed class CreateUserCommandHandler
     : IRequestHandler<CreateUserCommand, int>
 {
     private const string SpectatorRoleCode = "SPECTATOR";
+    private const string JockeyRoleCode = "JOCKEY";
 
     private readonly IApplicationDbContext _context;
     private readonly IPasswordHasher _passwordHasher;
@@ -81,6 +82,25 @@ public sealed class CreateUserCommandHandler
         _context.Users.Add(user);
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        // Cùng lý do như Spectator phải có ví: nài không có JockeyProfile là nài "tàng hình".
+        // License/Weight ở bảng Users không được luồng nào của Flow 2 đọc — trang hồ sơ nài,
+        // Owner tìm nài và điều kiện mời nài đều truy vấn JockeyProfiles.
+        if (string.Equals(role.Code, JockeyRoleCode, StringComparison.OrdinalIgnoreCase))
+        {
+            _context.JockeyProfiles.Add(new JockeyProfile
+            {
+                UserId = user.UserId,
+                LicenseNumber = string.IsNullOrWhiteSpace(request.LicenseNumber)
+                    ? null
+                    : request.LicenseNumber.Trim(),
+                Weight = request.Weight,
+                Bio = request.Bio,
+                CreatedAt = DateTime.UtcNow
+            });
+
+            await _context.SaveChangesAsync(cancellationToken);
+        }
 
         return user.UserId;
     }

@@ -40,6 +40,8 @@ public sealed class RaceReadService : IRaceReadService
                 x.RegistrationOpenAt,
                 x.RegistrationCloseAt,
                 x.OddsComputedAt,
+                x.OddsPublishedAt,
+                x.BettingLockedAt,
                 x.PublishedAt
             ))
             .ToListAsync(cancellationToken);

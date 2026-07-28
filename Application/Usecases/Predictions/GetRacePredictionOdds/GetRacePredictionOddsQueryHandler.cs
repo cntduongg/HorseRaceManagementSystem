@@ -1,5 +1,5 @@
 using Application.Common.Interfaces;
-using Application.Usecases.Predictions.Common;
+using Domain.Aggregates.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -31,7 +31,9 @@ public sealed class GetRacePredictionOddsQueryHandler
                 r.Name,
                 r.Status,
                 r.ScheduledStartTime,
-                r.OddsComputedAt
+                r.OddsComputedAt,
+                r.OddsPublishedAt,
+                r.BettingLockedAt
             })
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new InvalidOperationException("Race not found.");
@@ -48,20 +50,20 @@ public sealed class GetRacePredictionOddsQueryHandler
                 "Odds have not been generated. Admin must close registration first.");
         }
 
-        var dynamicOdds = await PredictionOddsCalculator.CalculateRaceOddsAsync(
-            _context,
-            request.RaceId,
-            cancellationToken,
-            request.BetAmount ?? 0m);
-
-        var oddsByEntryId = dynamicOdds.ToDictionary(x => x.EntryId);
+        // Giá chỉ lộ ra sau khi Admin duyệt & bấm "Publish Odds" — trước đó nó vẫn đang được
+        // chỉnh trong modal, cho spectator xem là cho xem một con số sắp đổi.
+        if (race.OddsPublishedAt is null)
+        {
+            throw new InvalidOperationException(
+                "Odds have not been published yet. Betting opens once the Admin publishes the odds.");
+        }
 
         var entries = await _context.Entries
             .AsNoTracking()
             .Where(e =>
                 e.RaceId == request.RaceId &&
                 e.Status == EntryApproved &&
-                e.Odds > 0)
+                e.PublishedOdds > 0)
             .OrderBy(e => e.GateNumber ?? int.MaxValue)
             .ThenBy(e => e.EntryId)
             .Select(e => new
@@ -75,15 +77,30 @@ public sealed class GetRacePredictionOddsQueryHandler
                 JockeyAvatarUrl = e.Jockey.AvatarUrl,
                 e.HorseOwnerId,
                 HorseOwnerName = e.HorseOwner.FullName,
-                e.GateNumber
+                e.GateNumber,
+                e.PublishedOdds
             })
             .ToListAsync(cancellationToken);
 
+        if (entries.Count == 0)
+        {
+            throw new InvalidOperationException("The race has no Approved entries with valid odds.");
+        }
+
+        // Pool chỉ để hiển thị "bao nhiêu người đang theo con này" — KHÔNG còn tham gia vào giá.
+        var pools = await _context.Predictions
+            .AsNoTracking()
+            .Where(p => p.RaceId == request.RaceId && p.Status != PredictionStatus.Cancelled)
+            .GroupBy(p => p.FirstEntryId)
+            .Select(g => new { EntryId = g.Key, Amount = g.Sum(x => x.BetAmount) })
+            .ToDictionaryAsync(x => x.EntryId, x => x.Amount, cancellationToken);
+
+        var totalPool = pools.Values.Sum();
+
         var resultEntries = entries
-            .Where(e => oddsByEntryId.ContainsKey(e.EntryId))
             .Select(e =>
             {
-                var odds = oddsByEntryId[e.EntryId];
+                pools.TryGetValue(e.EntryId, out var entryPool);
 
                 return new RacePredictionOddsEntryResponse(
                     e.EntryId,
@@ -96,18 +113,11 @@ public sealed class GetRacePredictionOddsQueryHandler
                     e.HorseOwnerId,
                     e.HorseOwnerName,
                     e.GateNumber,
-                    odds.BaseOdds,
-                    odds.CurrentOdds,
-                    odds.EffectiveOdds,
-                    odds.EntryPool,
-                    odds.TotalPool);
+                    e.PublishedOdds,
+                    entryPool,
+                    totalPool);
             })
             .ToList();
-
-        if (resultEntries.Count == 0)
-        {
-            throw new InvalidOperationException("The race has no Approved entries with valid odds.");
-        }
 
         return new RacePredictionOddsResponse(
             race.RaceId,
@@ -115,6 +125,9 @@ public sealed class GetRacePredictionOddsQueryHandler
             race.Status,
             race.ScheduledStartTime,
             race.OddsComputedAt,
+            race.OddsPublishedAt,
+            race.BettingLockedAt,
+            IsBettingOpen: race.BettingLockedAt is null,
             resultEntries);
     }
 }

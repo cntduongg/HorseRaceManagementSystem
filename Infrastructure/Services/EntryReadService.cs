@@ -46,6 +46,7 @@ public sealed class EntryReadService : IEntryReadService
                 x.SubmittedAt,
                 x.ApprovedAt,
                 x.Odds > 0 ? x.Odds : (decimal?)null,
+                x.PublishedOdds > 0 ? x.PublishedOdds : (decimal?)null,
                 x.Race.Tournament != null
     ? x.Race.Tournament.Name
     : null

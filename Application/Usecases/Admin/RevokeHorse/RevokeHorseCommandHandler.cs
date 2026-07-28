@@ -200,6 +200,9 @@ public class RevokeHorseCommandHandler
             var rows = history.Where(h => h.HorseId == e.HorseId).ToList();
             var firsts = rows.Count(h => h.FinalPosition == 1);
             e.Odds = CloseRegistrationCommandHandler.OddsFor(firsts, rows.Count, approved.Count);
+            // Sĩ số đổi → giá đề xuất đổi → giá công bố phải tính lại theo, nếu không bảng cược
+            // của spectator giữ nguyên giá tính cho sĩ số cũ.
+            e.PublishedOdds = RaceOddsPolicy.PublishedFromSuggested(e.Odds);
             e.GateNumber = gate++;
             e.UpdatedAt = now;
         }

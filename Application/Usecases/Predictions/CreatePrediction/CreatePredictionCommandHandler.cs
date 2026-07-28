@@ -2,7 +2,6 @@ using Application.Common.Interfaces;
 using Domain.Aggregates.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using Application.Usecases.Predictions.Common;
 using Application.Common.Wallet;
 namespace Application.Usecases.Predictions.CreatePrediction;
 
@@ -24,6 +23,15 @@ public sealed class CreatePredictionCommandHandler : IRequestHandler<CreatePredi
 
         if (race.OddsComputedAt == null)
             throw new InvalidOperationException("Registration must be closed and odds computed first.");
+
+        // Cửa cược = [Admin publish odds → Admin khóa cược]. Trước khi publish, giá vẫn đang
+        // được Admin chỉnh; sau khi khóa, sổ đã đóng để chuẩn bị xuất phát (Flow 7).
+        if (race.OddsPublishedAt == null)
+            throw new InvalidOperationException(
+                "Odds have not been published yet. Betting opens once the Admin publishes the odds.");
+
+        if (race.BettingLockedAt != null)
+            throw new InvalidOperationException("Betting is locked for this race.");
 
         var spectator = await _context.Spectators.FirstOrDefaultAsync(x => x.UserId == request.SpectatorId, cancellationToken)
             ?? throw new KeyNotFoundException("Spectator not found.");
@@ -47,7 +55,17 @@ public sealed class CreatePredictionCommandHandler : IRequestHandler<CreatePredi
              e.RaceId == request.RaceId,
         cancellationToken)
     ?? throw new KeyNotFoundException("Selected entry not found.");
-        var odds = await PredictionOddsCalculator.CalculateEntryOddsAsync(_context, request.RaceId, request.FirstEntryId, request.BetAmount, cancellationToken);
+
+        if (selectedEntry.Status != "Approved")
+            throw new InvalidOperationException("You can only bet on approved entries.");
+
+        // Giá khóa = ĐÚNG con số spectator vừa nhìn thấy trên bảng (odds công bố của Admin).
+        // Không tính lại, không điều chỉnh theo pool — đó chính là chỗ trước đây sinh ra
+        // "bảng hiện 4.00x, lệnh khóa 2.00x".
+        var odds = selectedEntry.PublishedOdds;
+        if (odds <= 0)
+            throw new InvalidOperationException("The selected entry does not have published odds.");
+
         var now = DateTime.UtcNow;
 
         await using var tx = await _context.Database.BeginTransactionAsync(cancellationToken);

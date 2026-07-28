@@ -16,6 +16,10 @@ public class Race
     public DateTime? RegistrationOpenAt { get; set; }
     public DateTime? RegistrationCloseAt { get; set; }
     public DateTime? OddsComputedAt { get; set; }
+    // Admin bấm "Publish Odds" — từ mốc này spectator mới thấy giá & đặt được cược (Flow 7).
+    public DateTime? OddsPublishedAt { get; set; }
+    // Admin bấm "Lock Betting" — chặn cược mới/hủy cược; bắt buộc trước khi Start Race.
+    public DateTime? BettingLockedAt { get; set; }
     public DateTime? PublishedAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
