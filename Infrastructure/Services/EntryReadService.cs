@@ -43,6 +43,7 @@ public sealed class EntryReadService : IEntryReadService
                 x.HorseOwner.FullName,
                 x.GateNumber,
                 x.Status,
+                x.RejectionReason,
                 x.SubmittedAt,
                 x.ApprovedAt,
                 x.Odds > 0 ? x.Odds : (decimal?)null,

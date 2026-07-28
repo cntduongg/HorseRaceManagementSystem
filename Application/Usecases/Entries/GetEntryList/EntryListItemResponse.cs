@@ -13,6 +13,7 @@ public sealed record EntryListItemResponse(
     string? HorseOwnerName,
     int? GateNumber,
     string Status,
+    string? RejectionReason,
     DateTime SubmittedAt,
     DateTime? ApprovedAt,
     // Odds ĐỀ XUẤT (Entry.Odds) — giá máy tính từ lịch sử thắng, chỉ Admin đọc.
