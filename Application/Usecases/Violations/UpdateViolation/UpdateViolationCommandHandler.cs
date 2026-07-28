@@ -98,6 +98,7 @@ public sealed class UpdateViolationCommandHandler
         var oldStatus = violation.Status;
         var oldPenalty = violation.Penalty;
         var oldLegNumber = violation.LegNumber; // đọc trước khi ghi đè — dùng cho message khi rollback
+        var oldEntryId = violation.EntryId;     // Demote gỡ ngược theo entry CŨ, không phải entry mới
         var newStatus = requestedStatus;
         var newPenalty = requestedPenalty;
         var newNote = ReviewHistoryReason.Normalize(
@@ -255,20 +256,15 @@ public sealed class UpdateViolationCommandHandler
                 : 0;
 
             var newRaceTotalLegs = mustApplyNewPenalty
-                ? (violation.RaceId == request.RaceId
-                    ? await _context.Races
-                        .Where(r => r.RaceId == request.RaceId)
-                        .Select(r => r.NumberOfLegs)
-                        .FirstAsync(cancellationToken)
-                    : await _context.Races
-                        .Where(r => r.RaceId == request.RaceId)
-                        .Select(r => r.NumberOfLegs)
-                        .FirstAsync(cancellationToken))
-                : 0;
+    ? await _context.Races
+        .Where(r => r.RaceId == request.RaceId)
+        .Select(r => r.NumberOfLegs)
+        .FirstAsync(cancellationToken)
+    : 0;
 
             if (mustReverseOldPenalty)
-                ReverseAppliedPenalty(oldPenalty, oldAffectedResults, fieldSize, oldRaceTotalLegs);
-           
+                ReverseAppliedPenalty(
+                    oldPenalty, oldLegNumber, oldEntryId, oldAffectedResults, fieldSize, oldRaceTotalLegs);
 
             violation.RaceId = request.RaceId;
             violation.LegNumber = request.LegNumber;
@@ -286,7 +282,8 @@ public sealed class UpdateViolationCommandHandler
             violation.ReviewedAt = newStatus is "Approved" or "Rejected" ? DateTime.UtcNow : null;
 
             if (mustApplyNewPenalty)
-                ApplyPenalty(newPenalty, newAffectedResults, fieldSize, newRaceTotalLegs);
+                ApplyPenalty(
+                    newPenalty, request.LegNumber, request.EntryId, newAffectedResults, fieldSize, newRaceTotalLegs);
 
             var action = penaltyChanged
                 ? ReviewAction.PenaltyChanged
@@ -328,11 +325,12 @@ public sealed class UpdateViolationCommandHandler
     {
         return penalty switch
         {
+            // Toàn bộ leg: Demote hoán đổi với entry liền kề nên cần cả hai dòng (xem
+            // ViolationPenaltyGuard.ApplyDemote/ReverseDemote).
             "Demote" => await _context.LegOfficialResults
                 .Where(o =>
                     o.RaceId == raceId &&
-                    o.LegNumber == legNumber &&
-                    o.EntryId == entryId)
+                    o.LegNumber == legNumber)
                 .ToListAsync(cancellationToken),
 
             "DQ" => await _context.LegOfficialResults
@@ -346,29 +344,19 @@ public sealed class UpdateViolationCommandHandler
     }
 
     private static void ApplyPenalty(
-       string penalty,
-       IReadOnlyList<LegOfficialResult> affectedResults,
-       int fieldSize,
-       int totalLegs)
+         string penalty,
+         int legNumber,
+         int entryId,
+         IReadOnlyList<LegOfficialResult> affectedResults,
+         int fieldSize,
+         int totalLegs)
     {
         switch (penalty)
         {
             case "Demote":
-                var official = affectedResults.FirstOrDefault();
-                if (official is
-                    {
-                        ResultStatus: RaceExecutionConstants.ResultFinished,
-                        FinishPosition: not null
-                    })
-                {
-                    official.FinishPosition += 1;
-                    official.LegPoints = RaceExecutionConstants.LegPointsFor(
-                        official.FinishPosition,
-                        official.ResultStatus,
-                        fieldSize,
-                        official.LegNumber,
-                        totalLegs);
-                }
+                // Giống ApproveViolation: hoán đổi với entry ngay dưới; không áp được thì báo
+                // lỗi, không im lặng bỏ qua.
+                ViolationPenaltyGuard.ApplyDemote(affectedResults, entryId, legNumber, fieldSize, totalLegs);
                 break;
 
             case "DQ":
@@ -385,6 +373,8 @@ public sealed class UpdateViolationCommandHandler
     // DQ cannot be reversed because the legacy model overwrote original positions.
     private static void ReverseAppliedPenalty(
         string penalty,
+        int legNumber,
+        int entryId,
         IReadOnlyList<LegOfficialResult> affectedResults,
         int fieldSize,
         int totalLegs)
@@ -392,21 +382,9 @@ public sealed class UpdateViolationCommandHandler
         switch (penalty)
         {
             case "Demote":
-                var official = affectedResults.FirstOrDefault();
-                if (official is
-                    {
-                        ResultStatus: RaceExecutionConstants.ResultFinished,
-                        FinishPosition: > 1
-                    })
-                {
-                    official.FinishPosition -= 1;
-                    official.LegPoints = RaceExecutionConstants.LegPointsFor(
-                        official.FinishPosition,
-                        official.ResultStatus,
-                        fieldSize,
-                        official.LegNumber,
-                        totalLegs);
-                }
+                // Hoán đổi ngược với entry ngay trên — đối xứng với ApplyDemote. Kết quả leg đã
+                // bị ghi đè (DQ/DNF/override) thì báo lỗi thay vì im lặng để lại standings sai.
+                ViolationPenaltyGuard.ReverseDemote(affectedResults, entryId, legNumber, fieldSize, totalLegs);
                 break;
 
             case "DQ":

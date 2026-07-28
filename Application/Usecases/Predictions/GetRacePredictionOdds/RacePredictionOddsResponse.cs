@@ -21,5 +21,10 @@ public sealed record RacePredictionOddsEntryResponse(
     int? GateNumber,
     decimal BaseOdds,
     decimal CurrentOdds,
+    // Giá SẼ BỊ KHÓA nếu đặt `betAmount` vào chính entry này. Khác CurrentOdds vì lúc ghi lệnh,
+    // CreatePrediction cộng chính số tiền đang đặt vào pool trước khi tính giá — nên
+    // `currentOdds × betAmount` KHÔNG phải payout thật. Est. Payout phải dùng số này.
+    // Không truyền betAmount (hoặc ≤ 0) → EffectiveOdds == CurrentOdds.
+    decimal EffectiveOdds,
     decimal EntryPool,
     decimal TotalPool);

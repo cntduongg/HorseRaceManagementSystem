@@ -51,7 +51,8 @@ public sealed class GetRacePredictionOddsQueryHandler
         var dynamicOdds = await PredictionOddsCalculator.CalculateRaceOddsAsync(
             _context,
             request.RaceId,
-            cancellationToken);
+            cancellationToken,
+            request.BetAmount ?? 0m);
 
         var oddsByEntryId = dynamicOdds.ToDictionary(x => x.EntryId);
 
@@ -97,6 +98,7 @@ public sealed class GetRacePredictionOddsQueryHandler
                     e.GateNumber,
                     odds.BaseOdds,
                     odds.CurrentOdds,
+                    odds.EffectiveOdds,
                     odds.EntryPool,
                     odds.TotalPool);
             })
