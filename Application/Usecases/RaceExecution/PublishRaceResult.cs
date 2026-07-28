@@ -4,7 +4,7 @@ using Domain.Aggregates.Entities;
 using Domain.Aggregates.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-
+using Application.Common.Wallet;
 namespace Application.Usecases.RaceExecution;
 
 public sealed record PublishRaceResultCommand(int RaceId, int AdminUserId)
@@ -161,6 +161,11 @@ public sealed class PublishRaceResultCommandHandler
             await _context.SaveChangesAsync(cancellationToken);
 
             var predictions = await _context.Predictions
+                 .Include(p => p.Race)
+                .Include(p => p.FirstEntry)
+                    .ThenInclude(e => e.Horse)
+                .Include(p => p.FirstEntry)
+                    .ThenInclude(e => e.Jockey)
                 .Where(p =>
                     p.RaceId == race.RaceId &&
                     (
@@ -221,8 +226,11 @@ public sealed class PublishRaceResultCommandHandler
                         Type = "Payout",
                         Amount = payout,
                         BalanceAfter = wallet.Balance,
-                        Reason =
-                            $"Won bet on race #{race.RaceId}, entry #{prediction.FirstEntryId}, odds {prediction.OddsLocked1}",
+                        Reason = WalletTransactionReasonBuilder.Payout(
+                        prediction.Race!,
+                        prediction.FirstEntry!.Horse,
+                        prediction.FirstEntry.Jockey,
+                        prediction.OddsLocked1),
                         CreatedAt = now
                     };
 

@@ -3,7 +3,7 @@ using Domain.Aggregates.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Application.Usecases.Predictions.Common;
-
+using Application.Common.Wallet;
 namespace Application.Usecases.Predictions.CreatePrediction;
 
 public sealed class CreatePredictionCommandHandler : IRequestHandler<CreatePredictionCommand, int>
@@ -39,7 +39,14 @@ public sealed class CreatePredictionCommandHandler : IRequestHandler<CreatePredi
             ?? throw new KeyNotFoundException("Wallet not found.");
         if (wallet.Balance < request.BetAmount) throw new InvalidOperationException("Insufficient balance.");
         if (request.BetAmount > wallet.Balance * 0.5m) throw new InvalidOperationException("Cannot bet more than 50% of your balance.");
-
+        var selectedEntry = await _context.Entries
+    .Include(e => e.Horse)
+    .Include(e => e.Jockey)
+    .FirstOrDefaultAsync(
+        e => e.EntryId == request.FirstEntryId &&
+             e.RaceId == request.RaceId,
+        cancellationToken)
+    ?? throw new KeyNotFoundException("Selected entry not found.");
         var odds = await PredictionOddsCalculator.CalculateEntryOddsAsync(_context, request.RaceId, request.FirstEntryId, request.BetAmount, cancellationToken);
         var now = DateTime.UtcNow;
 
@@ -71,7 +78,10 @@ public sealed class CreatePredictionCommandHandler : IRequestHandler<CreatePredi
                 Type = "BetPlaced",
                 Amount = -request.BetAmount,
                 BalanceAfter = wallet.Balance,
-                Reason = $"Bet on Race #{request.RaceId}, Entry #{request.FirstEntryId}",
+                Reason = WalletTransactionReasonBuilder.BetPlaced(
+                race,
+                selectedEntry.Horse,
+                selectedEntry.Jockey),
                 CreatedAt = now
             });
 

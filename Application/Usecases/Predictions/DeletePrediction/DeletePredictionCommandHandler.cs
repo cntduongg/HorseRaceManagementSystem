@@ -2,7 +2,7 @@ using Application.Common.Interfaces;
 using Domain.Aggregates.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-
+using Application.Common.Wallet;
 namespace Application.Usecases.Predictions.DeletePrediction;
 
 
@@ -29,6 +29,10 @@ public sealed class DeletePredictionCommandHandler
 
         var prediction = await _context.Predictions
             .Include(x => x.Race)
+             .Include(x => x.FirstEntry)
+        .ThenInclude(e => e.Horse)
+           .Include(x => x.FirstEntry)
+        .ThenInclude(e => e.Jockey)
             .FirstOrDefaultAsync(
                 x => x.PredictionId == request.PredictionId &&
                      x.SpectatorId == request.SpectatorId,
@@ -76,7 +80,10 @@ public sealed class DeletePredictionCommandHandler
                 Type = "BetRefund",
                 Amount = prediction.BetAmount,
                 BalanceAfter = wallet.Balance,
-                Reason = $"Refund for cancelled prediction #{prediction.PredictionId}",
+                Reason = WalletTransactionReasonBuilder.BetCancelled(
+                prediction.Race!,
+                prediction.FirstEntry!.Horse,
+                prediction.FirstEntry.Jockey),
                 CreatedAt = now
             });
 

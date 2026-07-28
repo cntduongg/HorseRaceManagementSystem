@@ -6,7 +6,7 @@ using Domain.Aggregates.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-
+using Application.Common.Wallet;
 namespace Application.Usecases.RaceExecution;
 
 // POST /api/races/{raceId}/unpublish — Admin rollback kết quả + payout (ATOMIC) → PendingResult.
@@ -74,8 +74,16 @@ public sealed class UnpublishRaceResultCommandHandler
 
             // ── 1. Hoàn lại payout đã chi ──
             var settlements = await _context.PredictionSettlements
-                .Where(s => s.RaceId == race.RaceId && !s.IsRollbacked)
-                .ToListAsync(cancellationToken);
+            .Include(s => s.Prediction)
+                .ThenInclude(p => p!.Race)
+            .Include(s => s.Prediction)
+                .ThenInclude(p => p!.FirstEntry)
+                    .ThenInclude(e => e.Horse)
+            .Include(s => s.Prediction)
+                .ThenInclude(p => p!.FirstEntry)
+                    .ThenInclude(e => e.Jockey)
+            .Where(s => s.RaceId == race.RaceId && !s.IsRollbacked)
+            .ToListAsync(cancellationToken);
 
             var spectatorIds = settlements.Select(s => s.SpectatorId).Distinct().ToList();
             var wallets = await _context.PointWallets
@@ -106,7 +114,10 @@ public sealed class UnpublishRaceResultCommandHandler
                         Type = "PayoutRollback",
                         Amount = -s.PayoutAmount,
                         BalanceAfter = wallet.Balance,
-                        Reason = $"Rollback payout race #{race.RaceId}",
+                        Reason = WalletTransactionReasonBuilder.PayoutRollback(
+                        s.Prediction!.Race!,
+                        s.Prediction.FirstEntry!.Horse,
+                        s.Prediction.FirstEntry.Jockey),
                         RollbackOfTransactionId = s.PayoutTransactionId,
                         CreatedAt = now
                     });

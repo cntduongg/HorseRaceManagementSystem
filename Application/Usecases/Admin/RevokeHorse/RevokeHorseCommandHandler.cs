@@ -6,7 +6,7 @@ using Domain.Aggregates.Entities;
 using Domain.Aggregates.Enums;
 using Microsoft.EntityFrameworkCore;
 using MediatR;
-
+using Application.Common.Wallet;
 namespace Application.Usecases.Admin.RevokeHorse;
 
 public class RevokeHorseCommandHandler
@@ -124,6 +124,11 @@ public class RevokeHorseCommandHandler
     private async Task RefundPredictionsForEntryAsync(int entryId, DateTime now, CancellationToken ct)
     {
         var predictions = await _context.Predictions
+             .Include(p => p.Race)
+    .Include(p => p.FirstEntry)
+        .ThenInclude(e => e.Horse)
+    .Include(p => p.FirstEntry)
+        .ThenInclude(e => e.Jockey)
             .Where(p => p.FirstEntryId == entryId &&
                         (p.Status == PredictionStatus.Pending || p.Status == PredictionStatus.Locked))
             .ToListAsync(ct);
@@ -159,7 +164,10 @@ public class RevokeHorseCommandHandler
                 Type = "BetRefund",
                 Amount = prediction.BetAmount,
                 BalanceAfter = wallet.Balance,
-                Reason = $"Refund: entry #{entryId} cancelled (horse revoked)",
+                Reason = WalletTransactionReasonBuilder.BetRefundHorseRevoked(
+                prediction.Race!,
+                prediction.FirstEntry!.Horse,
+                prediction.FirstEntry.Jockey),
                 CreatedAt = now
             });
         }

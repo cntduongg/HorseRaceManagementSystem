@@ -53,7 +53,7 @@ public static class ServiceCollectionExtensions
         services.Configure<SmtpOptions>(configuration.GetSection(SmtpOptions.SectionName));
         services.AddScoped<IPasswordResetOtpProtector, HmacPasswordResetOtpProtector>();
         services.AddScoped<IPasswordResetEmailSender, SmtpPasswordResetEmailSender>();
-
+      
         //services.AddScoped<ICurrentUser, CurrentUser>();
         return services;
     }
