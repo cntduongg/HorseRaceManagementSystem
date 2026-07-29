@@ -391,6 +391,18 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
             race.Status = RaceExecutionConstants.RaceInProgress;
             race.UpdatedAt = now;
 
+            // Race xuất phát = Leg 1 xuất phát. Trước đây StartedAt chỉ được ghi lúc referee
+            // ĐẦU TIÊN nộp kết quả (SubmitLegResult), tức sau khi chặng đã chạy xong — nên
+            // trang Live của spectator hiện "Not started" suốt cả chặng đang đua.
+            // Đọc từ Local vì leg vừa tạo trong EnsureLegsExistAsync chưa SaveChanges (query
+            // xuống DB sẽ không thấy), còn leg cũ đã nằm sẵn trong tracker qua Include(r => r.Legs).
+            var firstLeg = _context.Legs.Local
+                .Where(l => l.RaceId == race.RaceId)
+                .OrderBy(l => l.LegNumber)
+                .FirstOrDefault();
+            if (firstLeg is not null && firstLeg.StartedAt is null)
+                firstLeg.StartedAt = now;
+
             // Xuất phát là đóng sổ cược: mọi lệnh còn Pending chuyển sang Locked ngay tại đây.
             // Đây là cơ chế khóa DUY NHẤT — không có nút "Lock Betting" nào phải bấm trước.
             var pendingPredictions = await _context.Predictions
