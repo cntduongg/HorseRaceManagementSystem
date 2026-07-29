@@ -44,7 +44,6 @@ public sealed class CreateTournamentCommandHandler
             Location = request.Location,
             StartDate = request.StartDate,
             EndDate = request.EndDate,
-            LogoUrl = request.LogoUrl,
             Status = status,
             CreatedAt = now
         };

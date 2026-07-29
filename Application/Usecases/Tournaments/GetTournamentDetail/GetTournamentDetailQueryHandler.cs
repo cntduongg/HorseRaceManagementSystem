@@ -30,7 +30,6 @@ public sealed class GetTournamentDetailQueryHandler
                 x.Location,
                 x.StartDate,
                 x.EndDate,
-                x.LogoUrl,
                 x.Status,
                 x.CancelReason
             ))

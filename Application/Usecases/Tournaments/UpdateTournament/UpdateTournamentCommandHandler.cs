@@ -84,7 +84,6 @@ public sealed class UpdateTournamentCommandHandler
         tournament.Location = request.Location;
         tournament.StartDate = request.StartDate;
         tournament.EndDate = request.EndDate;
-        tournament.LogoUrl = request.LogoUrl;
         // Admin vẫn tự quyết được (kể cả Finished sớm trước EndDate, hoặc Cancelled) — miễn là đã
         // qua guard bên trên, tức không còn race con nào đang sống. Worker chỉ đẩy TIẾN từ
         // Draft/Open/Ongoing và không bao giờ đụng vào Cancelled/Finished, nên lựa chọn của Admin

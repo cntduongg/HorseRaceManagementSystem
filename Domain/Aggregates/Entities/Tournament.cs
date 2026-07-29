@@ -7,7 +7,6 @@ public class Tournament
     public string? Location { get; set; }
     public DateOnly StartDate { get; set; }
     public DateOnly EndDate { get; set; }
-    public string? LogoUrl { get; set; }
     public string Status { get; set; } = "Draft"; // Draft|Open|Ongoing|Finished|Cancelled
     public string? CancelReason { get; set; }
     public DateTime CreatedAt { get; set; }
