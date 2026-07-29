@@ -19,6 +19,8 @@ public sealed record RaceListItemResponse(
     string? Referee2AvatarUrl,
     DateTime? RegistrationOpenAt,
     DateTime? RegistrationCloseAt,
+    // Mốc đóng đăng ký = mốc odds được tính. Đây là cờ DUY NHẤT của cửa cược (Flow 7):
+    // có mốc này + race còn Scheduled ⇒ spectator cược được, và Start Race đủ điều kiện.
     DateTime? OddsComputedAt,
     DateTime? PublishedAt
 );

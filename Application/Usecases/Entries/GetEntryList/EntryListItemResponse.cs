@@ -13,8 +13,11 @@ public sealed record EntryListItemResponse(
     string? HorseOwnerName,
     int? GateNumber,
     string Status,
+    string? RejectionReason,
     DateTime SubmittedAt,
     DateTime? ApprovedAt,
-    decimal? CurrentOdds,
+    // Odds duy nhất của Entry — máy tính từ lịch sử thắng lúc đóng đăng ký rồi đứng yên.
+    // Đây cũng CHÍNH LÀ giá spectator cược và bị khóa vào Prediction. null = chưa tính.
+    decimal? Odds,
     string TournamentName
 );

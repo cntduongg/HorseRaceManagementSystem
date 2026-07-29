@@ -41,6 +41,21 @@ public sealed class UpdateJockeyProfileCommandHandler
         profile.Bio = request.Bio;
         profile.UpdatedAt = DateTime.UtcNow;
 
+        // Giữ Users khớp với JockeyProfiles: cùng ba trường này được LƯU ở cả hai bảng
+        // (đăng ký ghi vào Users, Flow 2 đọc từ JockeyProfiles). Không đồng bộ thì sau lần
+        // sửa hồ sơ đầu tiên hai nguồn lệch nhau vĩnh viễn — và bản ở Users là bản mà
+        // CreateUser dùng để check trùng License.
+        var user = await _context.Users
+            .FirstOrDefaultAsync(u => u.UserId == request.UserId, cancellationToken);
+
+        if (user is not null)
+        {
+            user.LicenseNumber = request.LicenseNumber;
+            user.Weight = request.Weight;
+            user.Bio = request.Bio;
+            user.UpdatedAt = DateTime.UtcNow;
+        }
+
         await _context.SaveChangesAsync(cancellationToken);
 
         return true;

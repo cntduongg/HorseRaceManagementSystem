@@ -2,7 +2,6 @@ using Application.Common.Interfaces;
 using Domain.Aggregates.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using Application.Usecases.Predictions.Common;
 using Application.Common.Wallet;
 namespace Application.Usecases.Predictions.CreatePrediction;
 
@@ -22,8 +21,10 @@ public sealed class CreatePredictionCommandHandler : IRequestHandler<CreatePredi
         if (race.Status != "Scheduled")
             throw new InvalidOperationException("You can only bet while the race is Scheduled.");
 
+        // Cửa cược = [Admin đóng đăng ký → race xuất phát]. Không có bước công bố/khóa odds
+        // nào ở giữa: đóng đăng ký là sinh odds, và odds sinh ra thì đứng yên (Flow 7).
         if (race.OddsComputedAt == null)
-            throw new InvalidOperationException("Registration must be closed and odds computed first.");
+            throw new InvalidOperationException("Betting opens once the Admin closes registration.");
 
         var spectator = await _context.Spectators.FirstOrDefaultAsync(x => x.UserId == request.SpectatorId, cancellationToken)
             ?? throw new KeyNotFoundException("Spectator not found.");
@@ -47,7 +48,16 @@ public sealed class CreatePredictionCommandHandler : IRequestHandler<CreatePredi
              e.RaceId == request.RaceId,
         cancellationToken)
     ?? throw new KeyNotFoundException("Selected entry not found.");
-        var odds = await PredictionOddsCalculator.CalculateEntryOddsAsync(_context, request.RaceId, request.FirstEntryId, request.BetAmount, cancellationToken);
+
+        if (selectedEntry.Status != "Approved")
+            throw new InvalidOperationException("You can only bet on approved entries.");
+
+        // Giá khóa = ĐÚNG con số spectator vừa nhìn thấy trên bảng. Chỉ có một giá duy nhất
+        // trong hệ thống, tính lúc đóng đăng ký và không đổi — nên không có gì để tính lại.
+        var odds = selectedEntry.Odds;
+        if (odds <= 0)
+            throw new InvalidOperationException("The selected entry does not have odds yet.");
+
         var now = DateTime.UtcNow;
 
         await using var tx = await _context.Database.BeginTransactionAsync(cancellationToken);

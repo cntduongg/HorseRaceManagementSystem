@@ -13,7 +13,7 @@ public sealed record RaceStandingDto(
     int? GateNumber,
     string HorseName,
     string JockeyName,
-    int TotalPoints,
+    decimal TotalPoints,
     int LegWins,
     int Leg2nds,
     int LegTop3,

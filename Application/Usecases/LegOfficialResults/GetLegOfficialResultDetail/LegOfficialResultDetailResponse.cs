@@ -6,7 +6,7 @@ public sealed record LegOfficialResultDetailResponse(
     int EntryId,
     int? FinishPosition,
     string ResultStatus,
-    int LegPoints,
+    decimal LegPoints,
     string ConfirmationType,
     DateTime ConfirmedAt,
     int? ConfirmedByAdminId,

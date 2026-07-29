@@ -1,5 +1,6 @@
 using Application.Common.Interfaces;
 using Application.Usecases.RaceExecution;
+using Domain.Aggregates.Constants;
 using Domain.Aggregates.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -39,6 +40,15 @@ public sealed class CreateRaceCommandHandler
 
         if (tournament is null)
             throw new KeyNotFoundException("Tournament not found.");
+
+        // Giải đã đóng thì không được đẻ thêm race. Trước đây handler nạp tournament lên nhưng
+        // CHỈ dùng để so khoảng ngày, không hề đọc Status ⇒ giải Cancelled/Finished vẫn tạo được
+        // race mới, miễn giờ đua rơi vào StartDate–EndDate. Race đó sau đó sống hoàn toàn độc lập
+        // (nhận entry, khóa odds, nhận cược, publish) vì không handler nào đọc Tournament.Status.
+        // Cùng hằng số với guard ở UpdateTournamentCommandHandler để hai đầu không lệch định nghĩa.
+        if (TournamentStatus.IsTerminal(tournament.Status))
+            throw new InvalidOperationException(
+                $"Cannot create a race for a {tournament.Status} tournament.");
 
         var startUtc = request.ScheduledStartTime.ToUniversalTime();
         var endUtc = request.ScheduledEndTime.ToUniversalTime();

@@ -1,5 +1,5 @@
 using Application.Common.Interfaces;
-using Application.Usecases.Predictions.Common;
+using Domain.Aggregates.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -48,14 +48,6 @@ public sealed class GetRacePredictionOddsQueryHandler
                 "Odds have not been generated. Admin must close registration first.");
         }
 
-        var dynamicOdds = await PredictionOddsCalculator.CalculateRaceOddsAsync(
-            _context,
-            request.RaceId,
-            cancellationToken,
-            request.BetAmount ?? 0m);
-
-        var oddsByEntryId = dynamicOdds.ToDictionary(x => x.EntryId);
-
         var entries = await _context.Entries
             .AsNoTracking()
             .Where(e =>
@@ -75,15 +67,30 @@ public sealed class GetRacePredictionOddsQueryHandler
                 JockeyAvatarUrl = e.Jockey.AvatarUrl,
                 e.HorseOwnerId,
                 HorseOwnerName = e.HorseOwner.FullName,
-                e.GateNumber
+                e.GateNumber,
+                e.Odds
             })
             .ToListAsync(cancellationToken);
 
+        if (entries.Count == 0)
+        {
+            throw new InvalidOperationException("The race has no Approved entries with valid odds.");
+        }
+
+        // Pool chỉ để hiển thị "bao nhiêu người đang theo con này" — KHÔNG còn tham gia vào giá.
+        var pools = await _context.Predictions
+            .AsNoTracking()
+            .Where(p => p.RaceId == request.RaceId && p.Status != PredictionStatus.Cancelled)
+            .GroupBy(p => p.FirstEntryId)
+            .Select(g => new { EntryId = g.Key, Amount = g.Sum(x => x.BetAmount) })
+            .ToDictionaryAsync(x => x.EntryId, x => x.Amount, cancellationToken);
+
+        var totalPool = pools.Values.Sum();
+
         var resultEntries = entries
-            .Where(e => oddsByEntryId.ContainsKey(e.EntryId))
             .Select(e =>
             {
-                var odds = oddsByEntryId[e.EntryId];
+                pools.TryGetValue(e.EntryId, out var entryPool);
 
                 return new RacePredictionOddsEntryResponse(
                     e.EntryId,
@@ -96,18 +103,11 @@ public sealed class GetRacePredictionOddsQueryHandler
                     e.HorseOwnerId,
                     e.HorseOwnerName,
                     e.GateNumber,
-                    odds.BaseOdds,
-                    odds.CurrentOdds,
-                    odds.EffectiveOdds,
-                    odds.EntryPool,
-                    odds.TotalPool);
+                    e.Odds,
+                    entryPool,
+                    totalPool);
             })
             .ToList();
-
-        if (resultEntries.Count == 0)
-        {
-            throw new InvalidOperationException("The race has no Approved entries with valid odds.");
-        }
 
         return new RacePredictionOddsResponse(
             race.RaceId,

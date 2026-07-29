@@ -19,6 +19,7 @@ public sealed class GetUserDetailQueryHandler
         CancellationToken cancellationToken)
     {
         return await _context.Users
+            .AsNoTracking()
             .Where(x => x.UserId == request.UserId)
             .Select(x => new UserDetailResponse(
                 x.UserId,
@@ -29,9 +30,24 @@ public sealed class GetUserDetailQueryHandler
                 x.RoleId,
                 x.IsActive,
                 x.LockedUntil,
-                x.LicenseNumber,
-                x.Weight,
-                x.Bio,
+                x.Role.Code == "JOCKEY"
+                    ? _context.JockeyProfiles
+                        .Where(p => p.UserId == x.UserId)
+                        .Select(p => p.LicenseNumber)
+                        .FirstOrDefault()
+                    : x.LicenseNumber,
+                x.Role.Code == "JOCKEY"
+                    ? _context.JockeyProfiles
+                        .Where(p => p.UserId == x.UserId)
+                        .Select(p => p.Weight)
+                        .FirstOrDefault()
+                    : x.Weight,
+                x.Role.Code == "JOCKEY"
+                    ? _context.JockeyProfiles
+                        .Where(p => p.UserId == x.UserId)
+                        .Select(p => p.Bio)
+                        .FirstOrDefault()
+                    : x.Bio,
                 x.IsProfileComplete
             ))
             .FirstOrDefaultAsync(cancellationToken);

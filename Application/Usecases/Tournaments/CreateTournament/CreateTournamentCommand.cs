@@ -7,6 +7,5 @@ public sealed record CreateTournamentCommand(
     string? Description,
     string? Location,
     DateOnly StartDate,
-    DateOnly EndDate,
-    string? LogoUrl
+    DateOnly EndDate
 ) : IRequest<int>;

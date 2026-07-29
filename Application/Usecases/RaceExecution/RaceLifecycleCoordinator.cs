@@ -1,4 +1,5 @@
 using Application.Common.Interfaces;
+using Application.Common.Wallet;
 using Domain.Aggregates.Entities;
 using Microsoft.EntityFrameworkCore;
 using Domain.Aggregates.Constants;
@@ -21,6 +22,7 @@ public sealed record RaceCancelLifecycleResult(
     RaceCancelOutcome Outcome,
     int WithdrawnEntries,
     int CancelledInvitations,
+    int RefundedPredictions,
     string? SkipReason);
 
 public sealed record CloseRegistrationLifecycleResult(
@@ -49,6 +51,10 @@ public interface IRaceLifecycleCoordinator
     /// <param name="enforceSchedule">true = từ chối nếu chưa tới ScheduledStartTime.</param>
     /// <param name="allowAutoClose">true = tự đóng đăng ký nếu chưa đóng.</param>
     /// <param name="throwOnFailure">true = ném exception (HTTP thủ công); false = trả Skipped (worker).</param>
+    /// <remarks>
+    /// Cược tự khóa (<c>Pending → Locked</c>) ngay trong hàm này — không có bước "Lock Betting"
+    /// riêng để Admin/Referee phải bấm trước (Flow 7).
+    /// </remarks>
     Task<RaceStartLifecycleResult> StartRaceAsync(
         int raceId,
         bool enforceSchedule,
@@ -108,7 +114,7 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
                     throw new InvalidOperationException(skipReason);
 
                 return new RaceCancelLifecycleResult(
-                    raceId, RaceCancelOutcome.Skipped, 0, 0, skipReason);
+                    raceId, RaceCancelOutcome.Skipped, 0, 0, 0, skipReason);
             }
 
             var now = _timeProvider.GetUtcNow().UtcDateTime;
@@ -139,6 +145,11 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
                 invitation.CancelledAt = now;
             }
 
+            // Cuộc đua không diễn ra thì mọi lệnh cược phải trả lại tiền. Nếu không, prediction
+            // đứng mãi ở Pending/Locked: settlement chỉ chạy trong PublishRaceResult, mà race
+            // đã Cancelled thì không bao giờ publish ⇒ tiền của spectator kẹt vĩnh viễn.
+            var refunded = await RefundPredictionsForCancelledRaceAsync(race, now, cancellationToken);
+
             await _context.SaveChangesAsync(cancellationToken);
             await tx.CommitAsync(cancellationToken);
 
@@ -147,6 +158,7 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
                 RaceCancelOutcome.Cancelled,
                 entries.Count,
                 invitations.Count,
+                refunded,
                 null);
         }
         catch (KeyNotFoundException)
@@ -160,6 +172,73 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
             throw;
         }
     }
+    /// <summary>
+    /// Hoàn 100% điểm cược cho mọi prediction còn sống của một race vừa bị hủy.
+    /// </summary>
+    /// <remarks>
+    /// Cùng cách xử lý với <c>RevokeHorseCommandHandler.RefundPredictionsForEntryAsync</c>, chỉ
+    /// khác bộ lọc: ở đây là cả race chứ không riêng một Entry.
+    ///
+    /// Ví đang <c>IsFrozen</c> (chủ tài khoản bị Admin khóa) thì prediction vẫn chuyển
+    /// <c>Cancelled</c> nhưng KHÔNG cộng tiền — đóng băng ví là cố ý chặn mọi biến động số dư,
+    /// cộng vào đây sẽ phá đúng cái mà LockUser vừa làm. Tiền được trả lại khi Admin unlock.
+    /// </remarks>
+    /// <returns>Số prediction đã hủy (kể cả trường hợp ví đóng băng không cộng được tiền).</returns>
+    private async Task<int> RefundPredictionsForCancelledRaceAsync(
+        Race race,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        // `!` trên FirstEntry: navigation khai báo nullable nhưng FK là bắt buộc, và ThenInclude
+        // cần kiểu non-null để không sinh CS8602.
+        var predictions = await _context.Predictions
+            .Include(p => p.FirstEntry!)
+                .ThenInclude(e => e.Horse)
+            .Include(p => p.FirstEntry!)
+                .ThenInclude(e => e.Jockey)
+            .Where(p => p.RaceId == race.RaceId &&
+                        (p.Status == PredictionStatus.Pending || p.Status == PredictionStatus.Locked))
+            .ToListAsync(cancellationToken);
+
+        if (predictions.Count == 0)
+            return 0;
+
+        var spectatorIds = predictions.Select(p => p.SpectatorId).Distinct().ToList();
+        var wallets = await _context.PointWallets
+            .Where(w => spectatorIds.Contains(w.SpectatorId))
+            .ToListAsync(cancellationToken);
+
+        foreach (var prediction in predictions)
+        {
+            prediction.Status = PredictionStatus.Cancelled;
+            prediction.CancelledAt = now;
+
+            var wallet = wallets.FirstOrDefault(w => w.SpectatorId == prediction.SpectatorId);
+            if (wallet is null || wallet.IsFrozen)
+                continue;
+
+            wallet.Balance += prediction.BetAmount;
+            wallet.UpdatedAt = now;
+
+            _context.WalletTransactions.Add(new WalletTransaction
+            {
+                WalletId = wallet.WalletId,
+                SpectatorId = prediction.SpectatorId,
+                PredictionId = prediction.PredictionId,
+                Type = "BetRefund",
+                Amount = prediction.BetAmount,
+                BalanceAfter = wallet.Balance,
+                Reason = WalletTransactionReasonBuilder.BetRefundRaceCancelled(
+                    race,
+                    prediction.FirstEntry!.Horse,
+                    prediction.FirstEntry.Jockey),
+                CreatedAt = now
+            });
+        }
+
+        return predictions.Count;
+    }
+
     public async Task<CloseRegistrationLifecycleResult> CloseRegistrationAsync(
         int raceId,
         CancellationToken cancellationToken = default)
@@ -273,7 +352,7 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
                         tx,
                         race.RaceId,
                         throwOnFailure,
-                        "Registration must be closed (Odds locked) before starting the race.",
+                        "Registration must be closed before starting the race.",
                         cancellationToken);
                 }
 
@@ -312,6 +391,20 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
             race.Status = RaceExecutionConstants.RaceInProgress;
             race.UpdatedAt = now;
 
+            // Race xuất phát = Leg 1 xuất phát. Trước đây StartedAt chỉ được ghi lúc referee
+            // ĐẦU TIÊN nộp kết quả (SubmitLegResult), tức sau khi chặng đã chạy xong — nên
+            // trang Live của spectator hiện "Not started" suốt cả chặng đang đua.
+            // Đọc từ Local vì leg vừa tạo trong EnsureLegsExistAsync chưa SaveChanges (query
+            // xuống DB sẽ không thấy), còn leg cũ đã nằm sẵn trong tracker qua Include(r => r.Legs).
+            var firstLeg = _context.Legs.Local
+                .Where(l => l.RaceId == race.RaceId)
+                .OrderBy(l => l.LegNumber)
+                .FirstOrDefault();
+            if (firstLeg is not null && firstLeg.StartedAt is null)
+                firstLeg.StartedAt = now;
+
+            // Xuất phát là đóng sổ cược: mọi lệnh còn Pending chuyển sang Locked ngay tại đây.
+            // Đây là cơ chế khóa DUY NHẤT — không có nút "Lock Betting" nào phải bấm trước.
             var pendingPredictions = await _context.Predictions
                 .Where(p => p.RaceId == raceId && p.Status == PredictionStatus.Pending)
                 .ToListAsync(cancellationToken);
@@ -355,7 +448,8 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
     }
 
     /// <summary>
-    /// Auto-reject Pending, khóa Odds + GateNumber, set RegistrationCloseAt/OddsComputedAt.
+    /// Auto-reject Pending, sinh Odds + GateNumber (một lần duy nhất, qua
+    /// <see cref="RaceOddsAssigner"/>), set RegistrationCloseAt/OddsComputedAt.
     /// Caller phải đảm bảo race Scheduled, OddsComputedAt null, và ≥2 Approved.
     /// </summary>
     private async Task<(int approved, int rejected)> ApplyCloseRegistrationAsync(
@@ -389,21 +483,9 @@ public sealed class RaceLifecycleCoordinator : IRaceLifecycleCoordinator
             throw new InvalidOperationException(
                 "At least 2 approved entries are required to close registration.");
 
-        var horseIds = approved.Select(e => e.HorseId).Distinct().ToList();
-        var history = await _context.RaceResults
-            .Where(r => horseIds.Contains(r.Entry.HorseId) && r.FinalPosition != null)
-            .Select(r => new { r.Entry.HorseId, r.FinalPosition })
-            .ToListAsync(cancellationToken);
-
-        var gate = 1;
-        foreach (var e in approved)
-        {
-            var rows = history.Where(h => h.HorseId == e.HorseId).ToList();
-            var firsts = rows.Count(h => h.FinalPosition == 1);
-            e.Odds = CloseRegistrationCommandHandler.OddsFor(firsts, rows.Count, approved.Count);
-            e.GateNumber = gate++;
-            e.UpdatedAt = now;
-        }
+        // Đây là thời điểm DUY NHẤT odds được sinh ra. Từ đây tới lúc race kết thúc, con số
+        // này không đổi nữa — spectator cược đúng nó, Prediction khóa đúng nó (Flow 7).
+        await RaceOddsAssigner.AssignAsync(_context, race.RaceId, approved, now, cancellationToken);
 
         race.RegistrationCloseAt = now;
         race.OddsComputedAt = now;

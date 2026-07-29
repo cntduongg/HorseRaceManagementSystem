@@ -25,12 +25,13 @@ public sealed record RaceLiveEntryDto(
     string JockeyName,
     string? Color,        // màu lông (free-text: Bay/Chestnut/…)
     string? ImageUrl,
-    decimal Odds);        // đã khóa lúc đóng đăng ký
+    // Odds tĩnh của Entry — đúng con số spectator đã cược và đã khóa vào lệnh.
+    decimal Odds);
 
 public sealed record RaceLiveLegResultDto(
     int EntryId,
     int Position, // >0 = thứ hạng; -1 = DNF; -2 = DQ (RaceExecutionConstants.EncodePosition)
-    int Points);
+    decimal Points);
 
 public sealed record RaceLiveLegDto(
     int LegIndex,
@@ -49,7 +50,7 @@ public sealed record RaceLiveStandingDto(
     int? GateNumber,
     string HorseName,
     string JockeyName,
-    int TotalPoints,
+    decimal TotalPoints,
     int LegWins,
     int Leg2nds,
     int LegTop3,

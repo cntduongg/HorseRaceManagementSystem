@@ -7,7 +7,6 @@ public sealed record TournamentDetailResponse(
     string? Location,
     DateOnly StartDate,
     DateOnly EndDate,
-    string? LogoUrl,
     string Status,
     string? CancelReason
 );

@@ -94,8 +94,8 @@ public sealed class ProcessDueRaceCancellationsCommandHandler
                 {
                     cancelled++;
                     _logger.LogInformation(
-                        "Auto-cancelled race {RaceId} (withdrawnEntries={Entries}, cancelledInvitations={Invitations}).",
-                        raceId, result.WithdrawnEntries, result.CancelledInvitations);
+                        "Auto-cancelled race {RaceId} (withdrawnEntries={Entries}, cancelledInvitations={Invitations}, refundedPredictions={Refunds}).",
+                        raceId, result.WithdrawnEntries, result.CancelledInvitations, result.RefundedPredictions);
                 }
                 else
                 {

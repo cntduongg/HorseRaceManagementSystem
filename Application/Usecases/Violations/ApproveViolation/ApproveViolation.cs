@@ -120,7 +120,8 @@ public sealed class ApproveViolationCommandHandler
                         affectedOfficials,
                         violation.EntryId,
                         violation.LegNumber,
-                        fieldSize);
+                        fieldSize,
+                        race.NumberOfLegs);
                     break;
 
                 case "DQ":
@@ -128,7 +129,7 @@ public sealed class ApproveViolationCommandHandler
                     {
                         o.ResultStatus = RaceExecutionConstants.ResultDq;
                         o.FinishPosition = null;
-                        o.LegPoints = 0;
+                        o.LegPoints = 0m;
                     }
                     break;
 

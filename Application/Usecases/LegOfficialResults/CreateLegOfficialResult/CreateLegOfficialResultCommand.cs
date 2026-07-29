@@ -8,7 +8,7 @@ public sealed record CreateLegOfficialResultCommand(
     int EntryId,
     int? FinishPosition,
     string ResultStatus,
-    int LegPoints,
+    decimal LegPoints,
     string ConfirmationType,
     int? ConfirmedByAdminId,
     string? OverrideReason

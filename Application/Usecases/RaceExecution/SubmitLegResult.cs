@@ -183,13 +183,14 @@ public sealed class SubmitLegResultCommandHandler
                     EntryId = item.EntryId,
                     FinishPosition = finishPosition,
                     ResultStatus = resultStatus,
-                    LegPoints = RaceExecutionConstants.LegPointsFor(finishPosition, resultStatus, fieldSize),
+                    LegPoints = RaceExecutionConstants.LegPointsFor(
+                        finishPosition, resultStatus, fieldSize, legNumber, race.NumberOfLegs),
                     ConfirmationType = RaceExecutionConstants.AutoMatched,
                     ConfirmedAt = now
                 });
             }
 
-            var (isComplete, nextLegIndex) = AdvanceRaceIfComplete(race, legNumber);
+            var (isComplete, nextLegIndex) = AdvanceRaceIfComplete(race, legNumber, now);
             await _context.SaveChangesAsync(cancellationToken);
 
             // Leg đã chốt → vị trí chính thức xuất hiện, đẩy cho spectator.
@@ -227,7 +228,10 @@ public sealed class SubmitLegResultCommandHandler
     }
 
     // Đặt race sang PendingResult nếu mọi leg đã Confirmed/Resolved; trả nextLegIndex còn mở.
-    private static (bool isComplete, int? nextLegIndex) AdvanceRaceIfComplete(Race race, int justConfirmedLeg)
+    private static (bool isComplete, int? nextLegIndex) AdvanceRaceIfComplete(
+        Race race,
+        int justConfirmedLeg,
+        DateTime now)
     {
         var openLeg = race.Legs
             .Where(l => l.LegNumber != justConfirmedLeg)
@@ -239,9 +243,14 @@ public sealed class SubmitLegResultCommandHandler
         if (openLeg is null)
         {
             race.Status = RaceExecutionConstants.RacePendingResult;
-            race.UpdatedAt = DateTime.UtcNow;
+            race.UpdatedAt = now;
             return (true, null);
         }
+
+        // Chốt xong leg này thì leg kế tiếp bắt đầu chạy ngay — đánh dấu để trang Live của
+        // spectator hiện "Racing" thay vì đứng ở "Not started" cho tới lúc có referee nộp bài.
+        if (openLeg.StartedAt is null)
+            openLeg.StartedAt = now;
 
         return (false, openLeg.LegNumber - 1);
     }

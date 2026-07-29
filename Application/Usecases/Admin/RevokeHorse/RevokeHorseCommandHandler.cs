@@ -70,7 +70,6 @@ public class RevokeHorseCommandHandler
 
             var cancelled = 0;
             var now = DateTime.UtcNow;
-            var racesToRecalc = new HashSet<int>();
 
             foreach (var entry in horse.Entries.Where(e => e.Status != EntryStatus.Cancelled))
             {
@@ -79,19 +78,15 @@ public class RevokeHorseCommandHandler
                     continue;
 
                 if (race.OddsComputedAt != null)
-                {
                     await RefundPredictionsForEntryAsync(entry.EntryId, now, cancellationToken);
-                    racesToRecalc.Add(race.RaceId);
-                }
 
                 entry.Status = EntryStatus.Cancelled;
+                // Trả gate về cho race — entry đã hủy không được chiếm slot trong unique index
+                // (RaceId, GateNumber) nữa. Odds của các entry CÒN LẠI thì giữ nguyên: giá đã
+                // công bố là giá spectator đã cược theo, tính lại là đổi luật giữa chừng.
+                entry.GateNumber = null;
                 entry.UpdatedAt = now;
                 cancelled++;
-            }
-
-            foreach (var raceId in racesToRecalc)
-            {
-                await RecalculateOddsAndGatesAsync(raceId, now, cancellationToken);
             }
 
             await _reviewHistoryRepository.AddAsync(
@@ -173,35 +168,4 @@ public class RevokeHorseCommandHandler
         }
     }
 
-    private async Task RecalculateOddsAndGatesAsync(int raceId, DateTime now, CancellationToken ct)
-    {
-        var race = await _context.Races.FirstOrDefaultAsync(r => r.RaceId == raceId, ct);
-        if (race?.OddsComputedAt is null)
-            return;
-
-        var approved = await _context.Entries
-            .Where(e => e.RaceId == raceId && e.Status == RaceExecutionConstants.EntryApproved)
-            .OrderBy(e => e.SubmittedAt)
-            .ThenBy(e => e.EntryId)
-            .ToListAsync(ct);
-
-        if (approved.Count < 2)
-            return;
-
-        var horseIds = approved.Select(e => e.HorseId).Distinct().ToList();
-        var history = await _context.RaceResults
-            .Where(r => horseIds.Contains(r.Entry.HorseId) && r.FinalPosition != null)
-            .Select(r => new { r.Entry.HorseId, r.FinalPosition })
-            .ToListAsync(ct);
-
-        var gate = 1;
-        foreach (var e in approved)
-        {
-            var rows = history.Where(h => h.HorseId == e.HorseId).ToList();
-            var firsts = rows.Count(h => h.FinalPosition == 1);
-            e.Odds = CloseRegistrationCommandHandler.OddsFor(firsts, rows.Count, approved.Count);
-            e.GateNumber = gate++;
-            e.UpdatedAt = now;
-        }
-    }
 }

@@ -241,6 +241,13 @@ using (var scope = app.Services.CreateScope())
         scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
             .CreateLogger("UserPhoneNumberBackfill"));
 
+    // Nài đăng ký trước khi /register bootstrap JockeyProfile thì License/Weight chỉ nằm ở
+    // bảng Users — mọi luồng Flow 2 đọc JockeyProfiles nên họ "mất" thông tin nghề nghiệp.
+    await JockeyProfileBackfill.RunAsync(
+        db,
+        scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("JockeyProfileBackfill"));
+
     var seedTestDataEnabled =
         builder.Configuration.GetValue<bool>("SeedTestData");
 

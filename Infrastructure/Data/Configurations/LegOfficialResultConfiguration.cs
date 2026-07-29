@@ -15,6 +15,9 @@ public class LegOfficialResultConfiguration : IEntityTypeConfiguration<LegOffici
             l.EntryId
         });
 
+        builder.Property(l => l.LegPoints)
+            .HasPrecision(6, 2); // đủ chứa fieldSize lớn × 1.1, VD 99.9
+
         builder.Property(l => l.ResultStatus)
             .HasMaxLength(20)
             .IsRequired();

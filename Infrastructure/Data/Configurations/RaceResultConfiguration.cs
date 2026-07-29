@@ -24,7 +24,9 @@ public class RaceResultConfiguration : IEntityTypeConfiguration<RaceResult>
     .HasForeignKey(r => r.EntryId)
     .OnDelete(DeleteBehavior.Restrict);
 
-        builder.Property(r => r.TotalPoints).HasDefaultValue(0);
+        builder.Property(r => r.TotalPoints)
+     .HasPrecision(8, 2)
+     .HasDefaultValue(0m);
         builder.Property(r => r.LegWinCount).HasDefaultValue(0);
         builder.Property(r => r.LegTop3Count).HasDefaultValue(0);
         builder.Property(r => r.IsRaceDQ).HasDefaultValue(false);

@@ -49,6 +49,19 @@ public sealed class UpdateRaceCommandHandler
         if (tournament is null)
             throw new KeyNotFoundException("Tournament not found.");
 
+        // Cùng guard với CreateRace, và ở đây còn cần hơn: handler gán thẳng
+        // `race.TournamentId = request.TournamentId` ở cuối, nên nếu không chặn thì Admin CHUYỂN
+        // được một race đang Scheduled vào giải đã Cancelled/Finished — đi vòng qua guard của
+        // CreateRace mà vẫn ra đúng cái trạng thái sai đó.
+        // `tournament` ở đây là giải ĐÍCH (request.TournamentId). Khi không đổi giải thì đích
+        // trùng giải hiện tại, nên nó cũng chặn luôn việc sửa một race nằm sẵn trong giải đã đóng
+        // — tình huống worker auto-status tạo ra được (nó cố ý không bị guard của UpdateTournament).
+        // Muốn cứu race đó thì chuyển sang một giải còn hoạt động, hoặc hủy hẳn race.
+        if (TournamentStatus.IsTerminal(tournament.Status))
+            throw new InvalidOperationException(
+                $"Cannot update a race under a {tournament.Status} tournament. " +
+                "Move the race to an active tournament, or cancel the race instead.");
+
         var startUtc = request.ScheduledStartTime.ToUniversalTime();
         var endUtc = request.ScheduledEndTime.ToUniversalTime();
 

@@ -43,7 +43,9 @@ public sealed class DeletePredictionCommandHandler
         {
             throw new InvalidOperationException("You can only cancel predictions while the race is Scheduled.");
         }
-        
+
+        // Không cần mốc khóa cược riêng: race xuất phát là rời "Scheduled" (chặn ở trên) và
+        // mọi prediction chuyển sang Locked (chặn ở dưới) — hai lớp đó đã kín.
         if (prediction.Status == PredictionStatus.Cancelled)
             throw new InvalidOperationException("Prediction already cancelled.");
 

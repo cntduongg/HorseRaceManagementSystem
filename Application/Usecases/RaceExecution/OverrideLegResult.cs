@@ -116,7 +116,8 @@ public sealed class OverrideLegResultCommandHandler
                 EntryId = d.EntryId,
                 FinishPosition = finishPosition,
                 ResultStatus = resultStatus,
-                LegPoints = RaceExecutionConstants.LegPointsFor(finishPosition, resultStatus, fieldSize),
+                LegPoints = RaceExecutionConstants.LegPointsFor(
+                    finishPosition, resultStatus, fieldSize, legNumber, race.NumberOfLegs),
                 ConfirmationType = RaceExecutionConstants.AdminOverride,
                 ConfirmedAt = now,
                 ConfirmedByAdminId = request.AdminUserId,
@@ -131,15 +132,23 @@ public sealed class OverrideLegResultCommandHandler
         leg.FinishedAt = now;
 
         // Resume: nếu còn leg mở → InProgress; hết → PendingResult.
-        var openLeg = race.Legs
+        var nextLeg = race.Legs
             .Where(l => l.LegNumber != legNumber)
-            .Any(l => l.Status != RaceExecutionConstants.LegConfirmed &&
-                      l.Status != RaceExecutionConstants.LegResolved);
+            .Where(l => l.Status != RaceExecutionConstants.LegConfirmed &&
+                        l.Status != RaceExecutionConstants.LegResolved)
+            .OrderBy(l => l.LegNumber)
+            .FirstOrDefault();
+        var openLeg = nextLeg is not null;
 
         race.Status = openLeg
             ? RaceExecutionConstants.RaceInProgress
             : RaceExecutionConstants.RacePendingResult;
         race.UpdatedAt = now;
+
+        // Giống nhánh AutoMatched ở SubmitLegResult: Admin xử xong tranh chấp là race chạy
+        // tiếp, nên leg kế tiếp bắt đầu ngay tại đây (nếu không, trang Live đứng ở "Not started").
+        if (nextLeg is not null && nextLeg.StartedAt is null)
+            nextLeg.StartedAt = now;
 
         // Snapshot sau khi đổi — cho audit trail.
         var afterSnapshot = new

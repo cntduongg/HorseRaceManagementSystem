@@ -247,9 +247,24 @@ public sealed class UpdateViolationCommandHandler
                 .CountAsync(e => e.RaceId == request.RaceId &&
                                  e.Status == RaceExecutionConstants.EntryApproved,
                     cancellationToken);
+            // Số leg của race — cần biết leg cuối (bonus tie-break) giống LegPointsFor.
+            var oldRaceTotalLegs = mustReverseOldPenalty
+                ? await _context.Races
+                    .Where(r => r.RaceId == violation.RaceId)
+                    .Select(r => r.NumberOfLegs)
+                    .FirstAsync(cancellationToken)
+                : 0;
+
+            var newRaceTotalLegs = mustApplyNewPenalty
+    ? await _context.Races
+        .Where(r => r.RaceId == request.RaceId)
+        .Select(r => r.NumberOfLegs)
+        .FirstAsync(cancellationToken)
+    : 0;
 
             if (mustReverseOldPenalty)
-                ReverseAppliedPenalty(oldPenalty, oldLegNumber, oldEntryId, oldAffectedResults, fieldSize);
+                ReverseAppliedPenalty(
+                    oldPenalty, oldLegNumber, oldEntryId, oldAffectedResults, fieldSize, oldRaceTotalLegs);
 
             violation.RaceId = request.RaceId;
             violation.LegNumber = request.LegNumber;
@@ -267,7 +282,8 @@ public sealed class UpdateViolationCommandHandler
             violation.ReviewedAt = newStatus is "Approved" or "Rejected" ? DateTime.UtcNow : null;
 
             if (mustApplyNewPenalty)
-                ApplyPenalty(newPenalty, request.LegNumber, request.EntryId, newAffectedResults, fieldSize);
+                ApplyPenalty(
+                    newPenalty, request.LegNumber, request.EntryId, newAffectedResults, fieldSize, newRaceTotalLegs);
 
             var action = penaltyChanged
                 ? ReviewAction.PenaltyChanged
@@ -328,18 +344,19 @@ public sealed class UpdateViolationCommandHandler
     }
 
     private static void ApplyPenalty(
-        string penalty,
-        int legNumber,
-        int entryId,
-        IReadOnlyList<LegOfficialResult> affectedResults,
-        int fieldSize)
+         string penalty,
+         int legNumber,
+         int entryId,
+         IReadOnlyList<LegOfficialResult> affectedResults,
+         int fieldSize,
+         int totalLegs)
     {
         switch (penalty)
         {
             case "Demote":
                 // Giống ApproveViolation: hoán đổi với entry ngay dưới; không áp được thì báo
                 // lỗi, không im lặng bỏ qua.
-                ViolationPenaltyGuard.ApplyDemote(affectedResults, entryId, legNumber, fieldSize);
+                ViolationPenaltyGuard.ApplyDemote(affectedResults, entryId, legNumber, fieldSize, totalLegs);
                 break;
 
             case "DQ":
@@ -347,7 +364,7 @@ public sealed class UpdateViolationCommandHandler
                 {
                     result.ResultStatus = RaceExecutionConstants.ResultDq;
                     result.FinishPosition = null;
-                    result.LegPoints = 0;
+                    result.LegPoints = 0m;
                 }
                 break;
         }
@@ -359,14 +376,15 @@ public sealed class UpdateViolationCommandHandler
         int legNumber,
         int entryId,
         IReadOnlyList<LegOfficialResult> affectedResults,
-        int fieldSize)
+        int fieldSize,
+        int totalLegs)
     {
         switch (penalty)
         {
             case "Demote":
                 // Hoán đổi ngược với entry ngay trên — đối xứng với ApplyDemote. Kết quả leg đã
                 // bị ghi đè (DQ/DNF/override) thì báo lỗi thay vì im lặng để lại standings sai.
-                ViolationPenaltyGuard.ReverseDemote(affectedResults, entryId, legNumber, fieldSize);
+                ViolationPenaltyGuard.ReverseDemote(affectedResults, entryId, legNumber, fieldSize, totalLegs);
                 break;
 
             case "DQ":
@@ -376,6 +394,5 @@ public sealed class UpdateViolationCommandHandler
                     "Please adjust the leg result via the resolve/override flow " +
                     "instead of editing the violation.");
         }
-
     }
 }

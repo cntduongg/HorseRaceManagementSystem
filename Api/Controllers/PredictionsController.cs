@@ -27,16 +27,14 @@ public sealed class PredictionsController : ControllerBase
     // Spectator xem locked odds của từng Entry trong Race đang Scheduled.
     [HttpGet("races/{raceId:int}/odds")]
     [Authorize(Roles = "SPECTATOR,ADMIN,REFEREE,HORSE_OWNER")]
-    // ?betAmount= (tùy chọn): mỗi entry trả thêm effectiveOdds = giá SẼ KHÓA nếu đặt số tiền đó
-    // vào entry ấy. FE phải dùng số này cho "Est. Payout"; currentOdds × betAmount luôn cao hơn
-    // số thực nhận. Tham số thuần tính toán — không ghi DB, không giữ chỗ trong pool.
+    // Mỗi entry trả về đúng MỘT giá (`odds` = odds công bố Admin đã duyệt) — cũng chính là giá
+    // sẽ khóa vào lệnh cược, nên Est. Payout = betAmount × odds. Không còn tham số ?betAmount=.
     public async Task<ActionResult<RacePredictionOddsResponse>> GetRaceOdds(
         [FromRoute] int raceId,
-        [FromQuery] decimal? betAmount,
         CancellationToken cancellationToken)
     {
         var result = await _sender.Send(
-            new GetRacePredictionOddsQuery(raceId, betAmount),
+            new GetRacePredictionOddsQuery(raceId),
             cancellationToken);
         return Ok(result);
     }

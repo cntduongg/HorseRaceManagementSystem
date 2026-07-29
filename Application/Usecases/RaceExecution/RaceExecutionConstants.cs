@@ -37,26 +37,33 @@ public static class RaceExecutionConstants
     public const int PositionDnf = -1;
     public const int PositionDq = -2;
 
+    /// <summary>Hệ số bonus tie-break ở leg cuối cùng — điểm thường × 1.1 (5→5.5, 4→4.4, 3→3.3...).</summary>
+    public const decimal LastLegBonusMultiplier = 1.1m;
+
     /// <summary>
     /// Leg Points TUYẾN TÍNH theo sĩ số: hạng p trong N ngựa → (N - p + 1) điểm.
     /// VD N=8 → 1st=8, 2nd=7 … 8th=1; N=4 → 1st=4 … 4th=1. DNF/DQ = 0.
     /// fieldSize = số Entry Approved của race (không phải cả giải).
-    /// Thay cho thang cứng 6/5/4/3/2/1 cũ: race đông ngựa thì hạng chót không còn bị 0 điểm oan.
+    /// Ở LEG CUỐI (legNumber == totalLegs): nhân thêm ×1.1 làm tie-break — 5→5.5, 4→4.4, 3→3.3...
     /// </summary>
-    public static int LegPointsFor(int? finishPosition, string resultStatus, int fieldSize)
+    public static decimal LegPointsFor(
+        int? finishPosition, string resultStatus, int fieldSize, int legNumber, int totalLegs)
     {
         if (resultStatus != ResultFinished || finishPosition is null or < 1)
-            return 0;
+            return 0m;
         if (fieldSize <= 0)
-            return 0;
+            return 0m;
 
         var position = finishPosition.Value;
         if (position > fieldSize)
-            return 0; // phòng thủ: hạng vượt sĩ số là dữ liệu hỏng → không tính điểm
+            return 0m; // phòng thủ: hạng vượt sĩ số là dữ liệu hỏng → không tính điểm
 
-        return fieldSize - position + 1;
+        decimal basePoints = fieldSize - position + 1;
+
+        return legNumber == totalLegs && totalLegs > 0
+            ? basePoints * LastLegBonusMultiplier
+            : basePoints;
     }
-
     /// <summary>
     /// Đơn giá Prize Points cho mỗi bậc hạng. Neo với thang cũ: race 5 ngựa → nhất được
     /// 5 × 200 = 1000 điểm, đúng bằng mức 1st của thang cứng trước đây.

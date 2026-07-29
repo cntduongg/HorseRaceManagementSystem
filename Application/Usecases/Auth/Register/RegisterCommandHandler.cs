@@ -113,6 +113,22 @@ public sealed class RegisterCommandHandler : IRequestHandler<RegisterCommand, Re
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
+        else if (roleCode == "JOCKEY")
+        {
+            // Bootstrap JockeyProfile ngay khi đăng ký — Profile page (GET /api/jockey-profiles/{userId})
+            // và tìm kiếm nài của Owner (GET /api/jockeys/search) đều đọc từ bảng này, không đọc User,
+            // nên nếu không tạo row thì License/Weight/Bio nhập lúc đăng ký sẽ "biến mất" khỏi 2 luồng đó.
+            _context.JockeyProfiles.Add(new JockeyProfile
+            {
+                UserId = user.UserId,
+                LicenseNumber = user.LicenseNumber,
+                Weight = user.Weight,
+                Bio = user.Bio,
+                CreatedAt = DateTime.UtcNow
+            });
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
 
         return new RegisterResponse(
             UserId:          user.UserId,

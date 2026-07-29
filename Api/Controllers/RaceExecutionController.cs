@@ -32,6 +32,16 @@ public sealed class RaceExecutionController : ControllerBase
     public async Task<IActionResult> CloseRegistration(int raceId, CancellationToken ct)
         => Ok(await _sender.Send(new CloseRegistrationCommand(raceId), ct));
 
+    // ── Odds (Flow 3 + 7) ────────────────────────────────────────────
+    // Đóng đăng ký sinh ra odds — MỘT con số duy nhất cho mỗi Entry, tính từ lịch sử thắng,
+    // và từ đó không đổi nữa. Không có bước công bố/khóa/sửa: cửa cược mở ngay khi đóng
+    // đăng ký và tự đóng khi race xuất phát. Board dưới đây chỉ để Admin XEM.
+
+    [HttpGet("{raceId:int}/odds-board")]
+    [Authorize(Roles = "ADMIN")]
+    public async Task<IActionResult> OddsBoard(int raceId, CancellationToken ct)
+        => Ok(await _sender.Send(new GetRaceOddsBoardQuery(raceId), ct));
+
     // ── Race lifecycle ───────────────────────────────────────────────
 
     [HttpPost("{raceId:int}/start")]
